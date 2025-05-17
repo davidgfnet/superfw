@@ -96,8 +96,8 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./superfw-sd.fw
-          asset_name: superfw-sd-${{ steps.tagversion.outputs.tagversion }}.zip
-          asset_content_type: application/zip
+          asset_name: superfw-sd-${{ steps.tagversion.outputs.tagversion }}.gba
+          asset_content_type: application/x-gba-rom
       - name: Upload Release Asset (Lite)
         uses: actions/upload-release-asset@v1
         if: startsWith(github.ref, 'refs/tags/')
@@ -106,6 +106,6 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./superfw-lite.fw
-          asset_name: superfw-lite-${{ steps.tagversion.outputs.tagversion }}.zip
-          asset_content_type: application/zip
+          asset_name: superfw-lite-${{ steps.tagversion.outputs.tagversion }}.gba
+          asset_content_type: application/x-gba-rom
 
