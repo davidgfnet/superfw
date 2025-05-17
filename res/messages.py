@@ -80,6 +80,7 @@ en_strings = {
   "MSG_UIS_SPD2":  "< Regular >",
   "MSG_UIS_SPD3":  "< Fast >",
   "MSG_UIS_SPD4":  "< Very fast >",
+  "MSG_UIS_SPD6":  "< Ludicrous >",
 
   "MSG_GBALOAD_MINFO":  "ROM information",
   "MSG_GBALOAD_MSAVE":  "Savegame options",

@@ -70,6 +70,9 @@ extern bool slowsd;
 #define BROWSER_ROWS                 8
 #define RECENT_ROWS                  9
 
+#define FAST_ANIM 16           // The threshold for an animation to be considered fast
+#define FAST_ANIM_FRAME_SKIP 8 // The number of frames to skip when rendering fast animations
+
 // First entries reserved for the logo palette.
 #define FG_COLOR         16
 #define BG_COLOR         17
@@ -195,6 +198,7 @@ static struct {
   uint8_t menu_tab;
 
   unsigned anim_state;            // Animation (text rotation) status.
+  unsigned anim_skip;             // Animation skip counter to reduce ghosting.
 
   // Recent ROMs state
   struct {
@@ -262,6 +266,7 @@ static struct {
       int submenu;                        // Which submenu tab we are in
       int selector;                       // Option selector
       unsigned anim;
+      unsigned anim_skip;                 // Animation skip counter to reduce ghosting.
       char romfn[MAX_FN_LEN];             // File to launch
       uint32_t romfs;                     // File ROM size
       bool write_config;                  // Update the per-game config file.
@@ -1020,6 +1025,7 @@ static void recent_reload() {
   smenu.recent.maxentries = 0;
   smenu.recent.seloff = 0;
   smenu.anim_state = 0;
+  smenu.anim_skip = 0;
 
   FIL fi;
   if (FR_OK != f_open(&fi, RECENT_FILEPATH, FA_READ))
@@ -1071,6 +1077,7 @@ static void recent_reload() {
 static void browser_reload() {
   smenu.browser.selector = 0;
   smenu.anim_state = 0;
+  smenu.anim_skip = 0;
 
   unsigned fcount = 0;
   DIR d;
@@ -1346,11 +1353,23 @@ void render_sav_menu_popup(volatile uint8_t *frame) {
   draw_central_text(msgs[lang_id][MSG_CANCEL], frame, 120, 126);
 }
 
+static void calculate_animation_step(unsigned fcnt, unsigned *anim_state, unsigned *anim_skip) {
+  if (animspd_lut[anim_speed] < FAST_ANIM) {
+    *anim_state += fcnt * animspd_lut[anim_speed];
+  } else {
+    *anim_skip += fcnt;
+    while (*anim_skip >= FAST_ANIM_FRAME_SKIP) {
+      *anim_state += FAST_ANIM_FRAME_SKIP* animspd_lut[anim_speed];
+      *anim_skip -= FAST_ANIM_FRAME_SKIP;
+    }
+  }
+}
+
 void render_gba_load_popup(volatile uint8_t *frame, unsigned fcnt) {
   char tmp[64];
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
-  spop.p.load.anim += fcnt * animspd_lut[anim_speed];
+  calculate_animation_step(fcnt, &spop.p.load.anim, &spop.p.load.anim_skip);
 
   draw_text_ovf("⯇", frame, 10, 24, 64);
   draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 24);
@@ -1781,7 +1800,7 @@ void menu_render(unsigned fcnt) {
         break;
       };
     } else {
-      smenu.anim_state += fcnt * animspd_lut[anim_speed];
+      calculate_animation_step(fcnt, &smenu.anim_state, &smenu.anim_skip);
 
       static const t_mrender_fn renderfns[] = {
         render_recent,
@@ -2256,8 +2275,10 @@ void menu_keypress(unsigned newkeys) {
     else if (newkeys & KEY_BUTTR)
       smenu.menu_tab = MIN(smenu.menu_tab + 1, MENUTAB_MAX - 1);
 
-    if (newkeys & (KEY_BUTTL | KEY_BUTTR | KEY_BUTTUP | KEY_BUTTDOWN))
+    if (newkeys & (KEY_BUTTL | KEY_BUTTR | KEY_BUTTUP | KEY_BUTTDOWN)) {
       smenu.anim_state = 0;
+      smenu.anim_skip = 0;
+    }
 
     switch (smenu.menu_tab) {
     case MENUTAB_RECENT:

@@ -50,6 +50,7 @@ const uint8_t animspd_lut[] = {
   6,    // 24 pix/second
   8,    // 32 pix/second
   12,   // 48 pix/second
+  48,   // 192 pix/second
 };
 
 // Menu settings
