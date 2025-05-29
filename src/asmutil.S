@@ -146,10 +146,20 @@ ewram_test_zone:
 rom_copy_checked32:
   push {r4-r11}
 
-  // Copy 16 bytes and check whether they got copied correctly.
+  // Copy quickly in 64 byte blocks first.
+  push {r0-r2}
+1:
+  //ldmia r1!, {r4-r11}
+  //stmia r0!, {r4-r11}
+  //ldmia r1!, {r4-r11}
+  //stmia r0!, {r4-r11}
+  subs r2, $64
+  bhi 1b
+  pop {r0-r2}
+
+  // Go ahead and read the data and compare it.
 1:
   ldmia r1!, {r4-r7}
-  stmia r0,  {r4-r7}
   ldmia r0!, {r8-r11}
   cmp   r4, r8
   cmpne r5, r9
@@ -164,20 +174,20 @@ rom_copy_checked32:
   bx lr
 
 2:
-  // Copy failed, retry at a slower pace.
+  // Copy failed, copy again very slowly.
   strh r4, [r0, #-16]
   lsr r3, r4, #16; nop; nop;
   strh r3, [r0, #-14]
 
-  str r5, [r0, #-12]
+  strh r5, [r0, #-12]
   lsr r3, r5, #16; nop; nop;
   strh r3, [r0, #-10]
 
-  str r6, [r0, # -8]
+  strh r6, [r0, # -8]
   lsr r3, r6, #16; nop; nop;
   strh r3, [r0, #-6]
 
-  str r7, [r0, # -4]
+  strh r7, [r0, # -4]
   lsr r3, r7, #16; nop; nop;
   strh r3, [r0, #-2]
 
