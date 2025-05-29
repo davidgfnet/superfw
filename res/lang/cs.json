@@ -136,7 +136,7 @@
     "MSG_ERR_SAVEIT": "Chyba: Neznámá chyba!",
     "MSG_BAD_SDRAM": "SDRAM (Úložiště ROM) Chyba!",
     "MSG_BAD_SRAM": "Vyskytla se chyba testu SRAM!",
-    "MSG_GOOD_RAM": "SRAM test úspěšný!",
+    "MSG_GOOD_RAM": "SDRAM test úspěšný!",
     "IMENU_QC0_NO": "Ne",
     "IMENU_QC1_YES": "Ano",
     "IMENU_MAIN0_BACK_GAME": "Zpět do hry",

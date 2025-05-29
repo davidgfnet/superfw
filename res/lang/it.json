@@ -204,5 +204,5 @@
     "MSG_SETT_FASTSD": "Caricamento rapido",
     "MSG_FASTSD_I": "Usa il caricamento rapido per le ROM. Potrebbe causare crash e problemi di lettura in certi dispositivi",
     "MSG_SETT_FASTEW": "EWRAM overclock",
-    "MSG_FASTEW_I": "Overclock EWRAM for some extra performance. Not available on NDS or GBA Micro"
+    "MSG_FASTEW_I": "Overclock EWRAM per migliorare le performance. Non disponibile per NDS o GBA Micro"
 }

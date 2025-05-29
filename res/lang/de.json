@@ -204,5 +204,5 @@
     "MSG_SETT_FASTSD": "ROM schnell laden",
     "MSG_FASTSD_I": "Benutzt einen Mechanismus, um Spiele schnell zu laden. Kann bei einigen Geräten zu einem Crash oder Spielkorruption führen",
     "MSG_SETT_FASTEW": "EWRAM Übertakten",
-    "MSG_FASTEW_I": "Übertakten Sie EWRAM für zusätzliche Leistung. Nicht verfügbar für NDS oder GBA Micro"
+    "MSG_FASTEW_I": "Übertaktet EWRAM für zusätzliche Leistung. Nicht kompatibel mit NDS oder GBA Micro"
 }
