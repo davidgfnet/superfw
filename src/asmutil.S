@@ -141,6 +141,54 @@ ewram_test_zone:
 .balign 4
 .arm
 
+// Slower copy to ROM routine. Performs checks on the written data.
+.global rom_copy_write16
+rom_copy_write16:
+  push {r4-r11}
+
+  // Copy using non-SEQ accesses.
+1:
+  ldmia r1!, {r4-r11}
+
+  strh r4, [r0], #2
+  lsr r4, #16
+  strh r4, [r0], #2
+
+  strh r5, [r0], #2
+  lsr r5, #16
+  strh r5, [r0], #2
+
+  strh r6, [r0], #2
+  lsr r6, #16
+  strh r6, [r0], #2
+
+  strh r7, [r0], #2
+  lsr r7, #16
+  strh r7, [r0], #2
+
+  strh r8, [r0], #2
+  lsr r8, #16
+  strh r8, [r0], #2
+
+  strh r9, [r0], #2
+  lsr r9, #16
+  strh r9, [r0], #2
+
+  strh r10, [r0], #2
+  lsr r10, #16
+  strh r10, [r0], #2
+
+  strh r11, [r0], #2
+  lsr r11, #16
+  strh r11, [r0], #2
+
+  subs r2, $32
+  bhi 1b
+
+  pop {r4-r11}
+  bx lr
+
+
 .global test_fast_ewram
 test_fast_ewram:
   push {r4-r9}

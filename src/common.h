@@ -151,6 +151,7 @@ bool test_fast_ewram();
 void nds_launch();
 void gba_irq_handler();
 void set_irq_enable(bool enable);
+void rom_copy_write16(void *dst, const void *src, unsigned cnt);
 
 // Decompress (WRAM version), returns written bytes
 unsigned apunpack8(const uint8_t *src, uint8_t *dst);

@@ -47,7 +47,7 @@ extern uint32_t anim_speed;
 // Defaults/Settings
 extern t_patch_policy patcher_default;
 extern uint32_t boot_bios_splash;
-extern uint32_t use_slowsd;
+extern uint32_t use_slowld;
 extern uint32_t use_fastew;
 extern uint32_t save_path_default;
 extern uint32_t state_path_default;
