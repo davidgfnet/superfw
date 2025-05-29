@@ -149,10 +149,10 @@ rom_copy_checked32:
   // Copy quickly in 64 byte blocks first.
   push {r0-r2}
 1:
-  //ldmia r1!, {r4-r11}
-  //stmia r0!, {r4-r11}
-  //ldmia r1!, {r4-r11}
-  //stmia r0!, {r4-r11}
+  ldmia r1!, {r4-r11}
+  stmia r0!, {r4-r11}
+  ldmia r1!, {r4-r11}
+  stmia r0!, {r4-r11}
   subs r2, $64
   bhi 1b
   pop {r0-r2}
