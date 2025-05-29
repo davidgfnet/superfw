@@ -62,7 +62,7 @@ uint32_t anim_speed = animspd_cnt / 2;
 t_patch_policy patcher_default = PatchAuto;
 
 uint32_t boot_bios_splash = 0;   // Whether the BIOS boots to the splash screen
-uint32_t use_slowsd = 0;         // Use slow mirrors for ROM loading.
+uint32_t use_slowld = 0;         // Use slow mirrors for ROM loading, check loaded data.
 uint32_t use_fastew = 0;         // Overclock EWRAM while playing.
 
 uint32_t save_path_default = SaveSavegameDir;
@@ -129,7 +129,7 @@ bool save_settings() {
     "state_path_policy=%lu\n"
     "sram_backup_count=%lu\n"
     "enable_cheats=%lu\n"
-    "enable_slowsd=%lu\n"
+    "enable_slowld=%lu\n"
     "enable_fastewram=%lu\n"
     "default_patcher=%u\n"
     "default_igmenu=%lu\n"
@@ -139,7 +139,7 @@ bool save_settings() {
     "default_savegame=%lu\n"
     "prefer_directsave=%lu\n",
     hotkey_combo, boot_bios_splash, save_path_default, state_path_default,
-    backup_sram_default, enable_cheats, use_slowsd, use_fastew,
+    backup_sram_default, enable_cheats, use_slowld, use_fastew,
     (unsigned int)patcher_default, ingamemenu_default, rtcpatch_default,
     rtcvalue_default.hour, rtcvalue_default.mins,
     rtcvalue_default.day + 1, rtcvalue_default.month + 1, rtcvalue_default.year,
@@ -178,7 +178,7 @@ static void parse_settings(void *usr, const char *var, const char *value) {
       { "boot_to_bios",      &boot_bios_splash },
       { "enable_cheats",     &enable_cheats },
       { "default_igmenu",    &ingamemenu_default },
-      { "enable_slowsd",     &use_slowsd },
+      { "enable_slowsd",     &use_slowld },
       { "enable_fastewram",  &use_fastew },
       { "default_rtcpatch",  &rtcpatch_default },
       { "default_loadgame",  &autoload_default },
