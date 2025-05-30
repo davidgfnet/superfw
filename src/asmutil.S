@@ -142,63 +142,51 @@ ewram_test_zone:
 .arm
 
 // Slower copy to ROM routine. Performs checks on the written data.
-.global rom_copy_checked32
-rom_copy_checked32:
+.global rom_copy_write16
+rom_copy_write16:
   push {r4-r11}
 
-  // Copy quickly in 64 byte blocks first.
-  push {r0-r2}
+  // Copy using non-SEQ accesses.
 1:
   ldmia r1!, {r4-r11}
-  stmia r0!, {r4-r11}
-  ldmia r1!, {r4-r11}
-  stmia r0!, {r4-r11}
-  subs r2, $64
-  bhi 1b
-  pop {r0-r2}
 
-  // Go ahead and read the data and compare it.
-1:
-  ldmia r1!, {r4-r7}
-  ldmia r0!, {r8-r11}
-  cmp   r4, r8
-  cmpne r5, r9
-  cmpne r6, r10
-  cmpne r7, r11
-  bne 2f
-3:
-  subs r2, $16
+  strh r4, [r0], #2
+  lsr r4, #16
+  strh r4, [r0], #2
+
+  strh r5, [r0], #2
+  lsr r5, #16
+  strh r5, [r0], #2
+
+  strh r6, [r0], #2
+  lsr r6, #16
+  strh r6, [r0], #2
+
+  strh r7, [r0], #2
+  lsr r7, #16
+  strh r7, [r0], #2
+
+  strh r8, [r0], #2
+  lsr r8, #16
+  strh r8, [r0], #2
+
+  strh r9, [r0], #2
+  lsr r9, #16
+  strh r9, [r0], #2
+
+  strh r10, [r0], #2
+  lsr r10, #16
+  strh r10, [r0], #2
+
+  strh r11, [r0], #2
+  lsr r11, #16
+  strh r11, [r0], #2
+
+  subs r2, $32
   bhi 1b
 
   pop {r4-r11}
   bx lr
-
-2:
-  // Copy failed, copy again very slowly.
-  strh r4, [r0, #-16]
-  lsr r3, r4, #16; nop; nop;
-  strh r3, [r0, #-14]
-
-  strh r5, [r0, #-12]
-  lsr r3, r5, #16; nop; nop;
-  strh r3, [r0, #-10]
-
-  strh r6, [r0, # -8]
-  lsr r3, r6, #16; nop; nop;
-  strh r3, [r0, #-6]
-
-  strh r7, [r0, # -4]
-  lsr r3, r7, #16; nop; nop;
-  strh r3, [r0, #-2]
-
-  ldmdb r0, {r8-r11}
-
-  cmp   r4, r8
-  cmpne r5, r9
-  cmpne r6, r10
-  cmpne r7, r11
-  bne 2b
-  b 3b
 
 
 .global test_fast_ewram

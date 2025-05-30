@@ -282,7 +282,7 @@ unsigned load_gba_rom(
 
     set_supercard_mode(MAPPED_SDRAM, true, false);
     if (use_slowld)
-      rom_copy_checked32(&ptr[offset], tmp, toread);
+      rom_copy_write16(&ptr[offset], tmp, toread);
     else
       dma_memcpy32(&ptr[offset], tmp, toread/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
@@ -302,7 +302,7 @@ unsigned load_gba_rom(
 
     set_supercard_mode(MAPPED_SDRAM, true, false);
     if (use_slowld)
-      rom_copy_checked32(&ptr[offset], tmp, toread);
+      rom_copy_write16(&ptr[offset], tmp, toread);
     else
       dma_memcpy32(&ptr[offset], tmp, toread/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
@@ -376,7 +376,7 @@ void load_gbc_rom(const char *fn, uint32_t fs, progress_fn progress) {
     // Copy data into the ROM (disable SD interface to avoid collisions!)
     set_supercard_mode(MAPPED_SDRAM, true, false);
     if (use_slowld)
-      rom_copy_checked32(ptr, tmp, LOAD_BS);
+      rom_copy_write16(ptr, tmp, LOAD_BS);
     else
       dma_memcpy32(ptr, tmp, LOAD_BS/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
@@ -424,7 +424,7 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
     // Copy data into the ROM (disable SD interface to avoid collisions!)
     set_supercard_mode(MAPPED_SDRAM, true, false);
     if (use_slowld)
-      rom_copy_checked32(ptr, tmp, rdbytes);
+      rom_copy_write16(ptr, tmp, rdbytes);
     else
       dma_memcpy32(ptr, tmp, rdbytes/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
@@ -454,7 +454,7 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
     // Copy data into the ROM (disable SD interface to avoid collisions!)
     set_supercard_mode(MAPPED_SDRAM, true, false);
     if (use_slowld)
-      rom_copy_checked32(ptr, tmp, LOAD_BS);
+      rom_copy_write16(ptr, tmp, LOAD_BS);
     else
       dma_memcpy32(ptr, tmp, LOAD_BS/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
