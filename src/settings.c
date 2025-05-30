@@ -178,7 +178,7 @@ static void parse_settings(void *usr, const char *var, const char *value) {
       { "boot_to_bios",      &boot_bios_splash },
       { "enable_cheats",     &enable_cheats },
       { "default_igmenu",    &ingamemenu_default },
-      { "enable_slowsd",     &use_slowld },
+      { "enable_slowld",     &use_slowld },
       { "enable_fastewram",  &use_fastew },
       { "default_rtcpatch",  &rtcpatch_default },
       { "default_loadgame",  &autoload_default },
