@@ -239,7 +239,7 @@ hard_reset:
   mov r1, $0
   strh r1, [r0]
 
-  swi 0x26                 // Resets through the BIOS opening animation
+  swi 0x260000             // Resets through the BIOS opening animation
 
 
 .global running_on_nds
