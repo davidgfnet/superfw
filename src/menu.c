@@ -791,142 +791,6 @@ unsigned guess_file_type(const uint8_t *header) {
   return FileTypeUnknown;
 }
 
-void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
-  // Load: Sav/Reset Save: Reboot/Disable
-  sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
-  t_sram_load_policy lp = check_file_exists(spop.p.load.savefn) ? SaveLoadSav : SaveLoadReset;
-  unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.savefn);
-  if (errsave) {
-    unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
-                                                        MSG_ERR_SAVEWR;
-    spop.alert_msg = msgs[lang_id][errmsg];
-  }
-  else {
-    // Try to load the emu and ROM, keep trying if there's more than one emulatior option.
-    unsigned errcode = ERR_LOAD_NOEMU;
-    while (ldinfo->emu_name) {
-      unsigned errcode = load_extemu_rom(fn, fs, ldinfo, loadrom_progress);
-      if (errcode && errcode != ERR_LOAD_NOEMU)
-        break;
-      ldinfo++;
-    }
-    unsigned errmsg = (errcode == ERR_LOAD_NOEMU) ? MSG_ERR_NOEMU :
-                                                    MSG_ERR_READ;
-    spop.alert_msg = msgs[lang_id][errmsg];
-  }
-}
-
-static void gbc_launch(const char *fn, uint32_t fs) {
-  // GB or GBA roms. See if we have a custom emulator.
-  if (check_file_exists(GBC_EMULATOR_PATH)) {
-    const t_emu_loader *ldinfo = get_emu_info("gbc");
-    start_emu_game(ldinfo, fn, fs);
-  }
-  else {
-    // Load: Sav/Reset Save: Reboot/Disable
-    sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
-    t_sram_load_policy lp = check_file_exists(spop.p.load.savefn) ? SaveLoadSav : SaveLoadReset;
-    unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.savefn);
-    if (errsave) {
-      unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
-                                                          MSG_ERR_SAVEWR;
-      spop.alert_msg = msgs[lang_id][errmsg];
-    }
-    else {
-      load_gbc_rom(fn, fs, loadrom_progress);
-      spop.alert_msg = msgs[lang_id][MSG_ERR_NOEMU];
-    }
-  }
-}
-
-__attribute__((noinline))
-static void browser_open(const char *fn, uint32_t fs) {
-  unsigned l = strlen(fn);
-  if (!strcasecmp(&fn[l-4], ".gba"))
-    // GBA ROMs (most likely)
-    browser_open_gba(fn, fs, true);
-  else if (!strcasecmp(&fn[l-4], ".gbc") || !strcasecmp(&fn[l-3], ".gb"))
-    gbc_launch(fn, fs);
-  else if (!strcasecmp(&fn[l-4], ".sav")) {
-    spop.pop_num = POPUP_SAVFILE;
-    spop.p.savopt.selector = SavMAX;
-    strcpy(spop.p.savopt.savfn, fn);
-  }
-  else if (!strcasecmp(&fn[l-3], ".fw")) {
-    // A SuperFW firmware update is selected!
-    if (!enable_flashing)
-      spop.alert_msg = msgs[lang_id][MSG_FWUP_DISABLED];
-    else if (fs > FW_MAX_SIZE)
-      spop.alert_msg = msgs[lang_id][MSG_FWUP_ERRSZ];
-    else {
-      // Read the header and perform some more basic checks!
-      FIL fd;
-      FRESULT res = f_open(&fd, fn, FA_READ);
-      if (res != FR_OK)
-        spop.alert_msg = msgs[lang_id][MSG_FWUP_ERRRD];
-      else {
-        UINT rdbytes;
-        uint8_t tmp[512];
-        if (FR_OK != f_read(&fd, tmp, sizeof(tmp), &rdbytes) || rdbytes != sizeof(tmp))
-          spop.alert_msg = msgs[lang_id][MSG_FWUP_ERRRD];
-        else if (!validate_gba_header(tmp))  // Is it a valid GBA ROM header?
-          spop.alert_msg = msgs[lang_id][MSG_FWUP_BADHD];
-        else {
-          spop.p.update.issfw = check_superfw(tmp, &spop.p.update.superfw_ver);
-          spop.p.update.fw_size = fs;
-          spop.p.update.curr_state = FlashingReady;
-          spop.pop_num = POPUP_FWFLASH;
-          strcpy(spop.p.update.fn, fn);
-          f_close(&fd);
-        }
-      }
-    }
-  }
-  else {
-    // Any emulator-based console supported
-    const char *ext = find_extension(fn);
-    if (ext) {
-      const t_emu_loader *ldinfo = get_emu_info(&ext[1]);
-      if (ldinfo) {
-        start_emu_game(ldinfo, fn, fs);
-        return;
-      }
-    }
-
-    // Attempt to load the file magic and detect what kind of file this is.
-    if (fs >= 512) {
-      FIL fi;
-      if (FR_OK == f_open(&fi, fn, FA_READ)) {
-        uint32_t tmphdr[512 / 4];
-        UINT rdbytes;
-        if (FR_OK == f_read(&fi, tmphdr, sizeof(tmphdr), &rdbytes) && rdbytes == sizeof(tmphdr)) {
-          unsigned guesstype = guess_file_type((uint8_t*)tmphdr);
-          switch (guesstype) {
-          case FileTypeGBA:
-            browser_open_gba(fn, fs, true); break;
-          case FileTypeGB:
-            gbc_launch(fn, fs); break;
-          case FileTypePatchDB:
-            strcpy(spop.p.pdb_ld.fn, fn);
-            spop.p.pdb_ld.fs = fs;
-            spop.qpop.message = msgs[lang_id][MSG_Q3_LOADPDB];
-            spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
-            spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
-            spop.qpop.option = 0;
-            spop.qpop.callback = load_patchdb_action;
-            spop.qpop.clear_popup_ok = false;
-            break;
-          default:
-            spop.alert_msg = msgs[lang_id][MSG_ERR_UNKTYP];
-            break;
-          };
-        }
-        f_close(&fi);
-      }
-    }
-  }
-}
-
 static void insert_recent_fn(const char *fn) {
   for (unsigned i = 0; i < smenu.recent.maxentries; i++) {
     if (!strcmp(sdr_state->rentries[i].fpath, fn)) {
@@ -1063,6 +927,148 @@ static void recent_reload() {
   }
 
   f_close(&fi);
+}
+
+void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
+  // Load: Sav/Reset Save: Reboot/Disable
+  sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
+  t_sram_load_policy lp = check_file_exists(spop.p.load.savefn) ? SaveLoadSav : SaveLoadReset;
+  unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.savefn);
+  if (errsave) {
+    unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
+                                                        MSG_ERR_SAVEWR;
+    spop.alert_msg = msgs[lang_id][errmsg];
+  }
+  else {
+    // Try to load the emu and ROM, keep trying if there's more than one emulatior option.
+    unsigned errcode = ERR_LOAD_NOEMU;
+    while (ldinfo->emu_name) {
+      if (recent_menu)
+        insert_recent_flush(fn);
+
+      unsigned errcode = load_extemu_rom(fn, fs, ldinfo, loadrom_progress);
+      if (errcode && errcode != ERR_LOAD_NOEMU)
+        break;
+      ldinfo++;
+    }
+    unsigned errmsg = (errcode == ERR_LOAD_NOEMU) ? MSG_ERR_NOEMU :
+                                                    MSG_ERR_READ;
+    spop.alert_msg = msgs[lang_id][errmsg];
+  }
+}
+
+static void gbc_launch(const char *fn, uint32_t fs) {
+  // GB or GBA roms. See if we have a custom emulator.
+  if (check_file_exists(GBC_EMULATOR_PATH)) {
+    const t_emu_loader *ldinfo = get_emu_info("gbc");
+    start_emu_game(ldinfo, fn, fs);
+  }
+  else {
+    // Load: Sav/Reset Save: Reboot/Disable
+    sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
+    t_sram_load_policy lp = check_file_exists(spop.p.load.savefn) ? SaveLoadSav : SaveLoadReset;
+    unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.savefn);
+    if (errsave) {
+      unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
+                                                          MSG_ERR_SAVEWR;
+      spop.alert_msg = msgs[lang_id][errmsg];
+    }
+    else {
+      if (recent_menu)
+        insert_recent_flush(fn);
+
+      load_gbc_rom(fn, fs, loadrom_progress);
+      spop.alert_msg = msgs[lang_id][MSG_ERR_NOEMU];
+    }
+  }
+}
+
+__attribute__((noinline))
+static void browser_open(const char *fn, uint32_t fs) {
+  unsigned l = strlen(fn);
+  if (!strcasecmp(&fn[l-4], ".gba"))
+    // GBA ROMs (most likely)
+    browser_open_gba(fn, fs, true);
+  else if (!strcasecmp(&fn[l-4], ".gbc") || !strcasecmp(&fn[l-3], ".gb"))
+    gbc_launch(fn, fs);
+  else if (!strcasecmp(&fn[l-4], ".sav")) {
+    spop.pop_num = POPUP_SAVFILE;
+    spop.p.savopt.selector = SavMAX;
+    strcpy(spop.p.savopt.savfn, fn);
+  }
+  else if (!strcasecmp(&fn[l-3], ".fw")) {
+    // A SuperFW firmware update is selected!
+    if (!enable_flashing)
+      spop.alert_msg = msgs[lang_id][MSG_FWUP_DISABLED];
+    else if (fs > FW_MAX_SIZE)
+      spop.alert_msg = msgs[lang_id][MSG_FWUP_ERRSZ];
+    else {
+      // Read the header and perform some more basic checks!
+      FIL fd;
+      FRESULT res = f_open(&fd, fn, FA_READ);
+      if (res != FR_OK)
+        spop.alert_msg = msgs[lang_id][MSG_FWUP_ERRRD];
+      else {
+        UINT rdbytes;
+        uint8_t tmp[512];
+        if (FR_OK != f_read(&fd, tmp, sizeof(tmp), &rdbytes) || rdbytes != sizeof(tmp))
+          spop.alert_msg = msgs[lang_id][MSG_FWUP_ERRRD];
+        else if (!validate_gba_header(tmp))  // Is it a valid GBA ROM header?
+          spop.alert_msg = msgs[lang_id][MSG_FWUP_BADHD];
+        else {
+          spop.p.update.issfw = check_superfw(tmp, &spop.p.update.superfw_ver);
+          spop.p.update.fw_size = fs;
+          spop.p.update.curr_state = FlashingReady;
+          spop.pop_num = POPUP_FWFLASH;
+          strcpy(spop.p.update.fn, fn);
+          f_close(&fd);
+        }
+      }
+    }
+  }
+  else {
+    // Any emulator-based console supported
+    const char *ext = find_extension(fn);
+    if (ext) {
+      const t_emu_loader *ldinfo = get_emu_info(&ext[1]);
+      if (ldinfo) {
+        start_emu_game(ldinfo, fn, fs);
+        return;
+      }
+    }
+
+    // Attempt to load the file magic and detect what kind of file this is.
+    if (fs >= 512) {
+      FIL fi;
+      if (FR_OK == f_open(&fi, fn, FA_READ)) {
+        uint32_t tmphdr[512 / 4];
+        UINT rdbytes;
+        if (FR_OK == f_read(&fi, tmphdr, sizeof(tmphdr), &rdbytes) && rdbytes == sizeof(tmphdr)) {
+          unsigned guesstype = guess_file_type((uint8_t*)tmphdr);
+          switch (guesstype) {
+          case FileTypeGBA:
+            browser_open_gba(fn, fs, true); break;
+          case FileTypeGB:
+            gbc_launch(fn, fs); break;
+          case FileTypePatchDB:
+            strcpy(spop.p.pdb_ld.fn, fn);
+            spop.p.pdb_ld.fs = fs;
+            spop.qpop.message = msgs[lang_id][MSG_Q3_LOADPDB];
+            spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+            spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+            spop.qpop.option = 0;
+            spop.qpop.callback = load_patchdb_action;
+            spop.qpop.clear_popup_ok = false;
+            break;
+          default:
+            spop.alert_msg = msgs[lang_id][MSG_ERR_UNKTYP];
+            break;
+          };
+        }
+        f_close(&fi);
+      }
+    }
+  }
 }
 
 // Loads a new directory list in the ROM browser.
