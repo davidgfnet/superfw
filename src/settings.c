@@ -56,6 +56,7 @@ const uint8_t animspd_lut[] = {
 uint32_t menu_theme = 0;
 uint32_t lang_id = 0;
 uint32_t recent_menu = 1;
+uint32_t show_hidden_files = 1;
 uint32_t anim_speed = animspd_cnt / 2;
 
 // Default settings
@@ -99,8 +100,9 @@ bool save_ui_settings() {
     "menu_theme=%lu\n"
     "langcode=%c%c\n"
     "recent_menu=%lu\n"
+    "show_hidden_files=%lu\n"
     "anim_speed=%lu\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed);
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, show_hidden_files, anim_speed);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -199,6 +201,8 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
     menu_theme = valu;
   else if (!strcmp(var, "recent_menu"))
     recent_menu = valu;
+  else if (!strcmp(var, "show_hidden_files"))
+    show_hidden_files = valu;
   else if (!strcmp(var, "anim_speed"))
     anim_speed = valu;
   else if (!strcmp(var, "langcode")) {

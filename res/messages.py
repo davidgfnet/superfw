@@ -69,11 +69,12 @@ en_strings = {
 
   "MSG_DEFS_PATCH":  "Patching",
 
-  "MSG_UIS_THEME": "Theme color",
-  "MSG_UIS_LANG":  "Language",
-  "MSG_UIS_RECNT": "Recent ROMs",
-  "MSG_UIS_ANSPD": "Text speed",
-  "MSG_UIS_SAVE":  "Save to SD card",
+  "MSG_UIS_THEME":      "Theme color",
+  "MSG_UIS_LANG":       "Language",
+  "MSG_UIS_RECNT":      "Recent ROMs",
+  "MSG_UIS_SHOWHIDDEN": "Show Hidden files",
+  "MSG_UIS_ANSPD":      "Text speed",
+  "MSG_UIS_SAVE":       "Save to SD card",
 
   "MSG_UIS_SPD0":  "< Very slow >",
   "MSG_UIS_SPD1":  "< Slow >",
