@@ -957,40 +957,12 @@ void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
   }
 }
 
-static void gbc_launch(const char *fn, uint32_t fs) {
-  // GB or GBA roms. See if we have a custom emulator.
-  if (check_file_exists(GBC_EMULATOR_PATH)) {
-    const t_emu_loader *ldinfo = get_emu_info("gbc");
-    start_emu_game(ldinfo, fn, fs);
-  }
-  else {
-    // Load: Sav/Reset Save: Reboot/Disable
-    sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
-    t_sram_load_policy lp = check_file_exists(spop.p.load.savefn) ? SaveLoadSav : SaveLoadReset;
-    unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.savefn);
-    if (errsave) {
-      unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
-                                                          MSG_ERR_SAVEWR;
-      spop.alert_msg = msgs[lang_id][errmsg];
-    }
-    else {
-      if (recent_menu)
-        insert_recent_flush(fn);
-
-      load_gbc_rom(fn, fs, loadrom_progress);
-      spop.alert_msg = msgs[lang_id][MSG_ERR_NOEMU];
-    }
-  }
-}
-
 __attribute__((noinline))
 static void browser_open(const char *fn, uint32_t fs) {
   unsigned l = strlen(fn);
   if (!strcasecmp(&fn[l-4], ".gba"))
     // GBA ROMs (most likely)
     browser_open_gba(fn, fs, true);
-  else if (!strcasecmp(&fn[l-4], ".gbc") || !strcasecmp(&fn[l-3], ".gb"))
-    gbc_launch(fn, fs);
   else if (!strcasecmp(&fn[l-4], ".sav")) {
     spop.pop_num = POPUP_SAVFILE;
     spop.p.savopt.selector = SavMAX;
@@ -1049,7 +1021,8 @@ static void browser_open(const char *fn, uint32_t fs) {
           case FileTypeGBA:
             browser_open_gba(fn, fs, true); break;
           case FileTypeGB:
-            gbc_launch(fn, fs); break;
+            start_emu_game(get_emu_info("gbc"), fn, fs);
+            break;
           case FileTypePatchDB:
             strcpy(spop.p.pdb_ld.fn, fn);
             spop.p.pdb_ld.fs = fs;

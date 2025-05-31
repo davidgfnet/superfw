@@ -336,105 +336,63 @@ unsigned load_gba_rom(
   return 0;
 }
 
-
-// GBC (Goombacolor) loader
-__attribute__((noinline))
-void load_gbc_rom(const char *fn, uint32_t fs, progress_fn progress) {
-  uint8_t *ptr = (uint8_t*)(GBA_ROM_ADDR);
-  if (fs > 8*1024*1024)
-    return;
-
-  // Uncompress the emulator code ROM first
-  // Map the full SDRAM address space
-  set_supercard_mode(MAPPED_SDRAM, true, false);
-  const void *emupload = get_vfile_ptr("GCEM");
-  if (!emupload) {
-    // In case the emulator is not bundled in.
-    set_supercard_mode(MAPPED_SDRAM, true, true);
-    return;
-  }
-  ptr += apunpack16(emupload, ptr);
-  set_supercard_mode(MAPPED_SDRAM, true, true);
-
-  // Load the GB/GBC rom immediately after the GBA emulator binary.
-  FIL fd;
-  FRESULT res = f_open(&fd, fn, FA_READ);
-  if (res != FR_OK)
-    return;
-
-  for (uint32_t offset = 0; offset < fs; offset += LOAD_BS) {
-    if (progress && (offset & (64*1024-1)) == 0)
-      progress(offset, fs);
-
-    UINT rdbytes;
-    uint32_t tmp[LOAD_BS/4];
-    if (FR_OK != f_read(&fd, tmp, LOAD_BS, &rdbytes)) {
-      f_close(&fd);
-      return;
-    }
-
-    // Copy data into the ROM (disable SD interface to avoid collisions!)
-    set_supercard_mode(MAPPED_SDRAM, true, false);
-    if (use_slowld)
-      rom_copy_write16(ptr, tmp, LOAD_BS);
-    else
-      dma_memcpy32(ptr, tmp, LOAD_BS/4);
-    set_supercard_mode(MAPPED_SDRAM, true, true);
-    ptr += LOAD_BS;
-  }
-
-  // Close the file, not super necessary really :P
-  f_close(&fd);
-
-  // Set the ROM into read only mode, disable SD card reader as well.
-  set_supercard_mode(MAPPED_SDRAM, false, false);
-
-  launch_reset(false, use_fastew);
-}
-
-
 // Generic-emulator (ie. NES, SMS, ...) loader
 __attribute__((noinline))
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress) {
+  FIL fd;
   uint8_t *ptr = (uint8_t*)(GBA_ROM_ADDR);
   if (fs > 8*1024*1024)
     return ERR_LOAD_BADROM;
 
   // Try to find a valid and existing emulator.
-  char emupath[64];
-  strcpy(emupath, EMULATORS_PATH);
-  strcat(emupath, ldinfo->emu_name);
-  strcat(emupath, ".gba");
+  if (!memcmp(ldinfo->emu_name, "vfs:", 4)) {
+    // Look the emulator up in the VFS
 
-  // Load the emulator from disk, check whether it exists tho.
-  FIL fd;
-  if (FR_OK != f_open(&fd, emupath, FA_READ))
-    return ERR_LOAD_NOEMU;
-
-  while (1) {
-    UINT rdbytes;
-    uint32_t tmp[LOAD_BS/4];
-    if (FR_OK != f_read(&fd, tmp, LOAD_BS, &rdbytes)) {
-      f_close(&fd);
+    set_supercard_mode(MAPPED_SDRAM, true, false);
+    const void *emupload = get_vfile_ptr(&ldinfo->emu_name[4]);
+    if (!emupload) {
+      // In case the emulator is not bundled in.
+      set_supercard_mode(MAPPED_SDRAM, true, true);
       return ERR_LOAD_NOEMU;
     }
-    if (!rdbytes)
-      break;
-
-    // Copy data into the ROM (disable SD interface to avoid collisions!)
-    set_supercard_mode(MAPPED_SDRAM, true, false);
-    if (use_slowld)
-      rom_copy_write16(ptr, tmp, rdbytes);
-    else
-      dma_memcpy32(ptr, tmp, rdbytes/4);
+    ptr += apunpack16(emupload, ptr);
     set_supercard_mode(MAPPED_SDRAM, true, true);
-    ptr += rdbytes;
   }
-  f_close(&fd);
+  else {
+    char emupath[64];
+    strcpy(emupath, EMULATORS_PATH);
+    strcat(emupath, ldinfo->emu_name);
+    strcat(emupath, ".gba");
 
-  // Generate rom header and what not.
-  if (ldinfo->hndlr)
-    ptr += ldinfo->hndlr(ptr, fn, fs);
+    // Load the emulator from disk, check whether it exists tho.
+    if (FR_OK != f_open(&fd, emupath, FA_READ))
+      return ERR_LOAD_NOEMU;
+
+    while (1) {
+      UINT rdbytes;
+      uint32_t tmp[LOAD_BS/4];
+      if (FR_OK != f_read(&fd, tmp, LOAD_BS, &rdbytes)) {
+        f_close(&fd);
+        return ERR_LOAD_NOEMU;
+      }
+      if (!rdbytes)
+        break;
+
+      // Copy data into the ROM (disable SD interface to avoid collisions!)
+      set_supercard_mode(MAPPED_SDRAM, true, false);
+      if (use_slowld)
+        rom_copy_write16(ptr, tmp, rdbytes);
+      else
+        dma_memcpy32(ptr, tmp, rdbytes/4);
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      ptr += rdbytes;
+    }
+    f_close(&fd);
+
+    // Generate rom header and what not.
+    if (ldinfo->hndlr)
+      ptr += ldinfo->hndlr(ptr, fn, fs);
+  }
 
   // Proceed to load the ROM now.
   if (FR_OK != f_open(&fd, fn, FA_READ))
@@ -467,7 +425,7 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
   // Set the ROM into read only mode, disable SD card reader as well.
   set_supercard_mode(MAPPED_SDRAM, false, false);
 
-  REG_WAITCNT = 0x0;
+  REG_WAITCNT = 0x4000;   // Default timings + prefetch
   launch_reset(false, use_fastew);
 
   return 0;

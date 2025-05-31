@@ -221,6 +221,7 @@ const t_emu_loader pce_loaders[] = {
 
 const t_emu_loader gbc_loaders[] = {
   { "gbc-emu", NULL },
+  { "vfs:GCEM", NULL },
   { NULL, NULL },
 };
 

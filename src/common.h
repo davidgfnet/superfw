@@ -246,7 +246,6 @@ unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh);
 unsigned load_gba_rom(const char *fn, uint32_t fs, const t_rom_header *rom_header, const struct struct_t_patch *ptch,
                       const t_dirsave_info *dsinfo, bool ingame_menu,
                       const t_rtc_state *rtc_clock, unsigned cheats, progress_fn progress);
-void load_gbc_rom(const char *fn, uint32_t fs, progress_fn progress);
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress);
 bool validate_gba_header(const uint8_t *header);
 bool validate_gb_header(const uint8_t *header);
