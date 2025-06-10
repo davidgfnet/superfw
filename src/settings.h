@@ -38,6 +38,9 @@ extern const uint8_t animspd_lut[5];
 enum { SaveSavegameDir = 0, SaveSavesDir = 1, SaveRomName = 2, SaveDirCNT = 3 };
 enum { StateSavestateDir = 0, StateRomName = 1, StateDirCNT = 2 };
 
+extern const char *save_paths[2];
+extern const char *savestates_paths[1];
+
 // Menu settings
 extern uint32_t menu_theme;
 extern uint32_t lang_id;

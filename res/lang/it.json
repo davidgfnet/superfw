@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Auto >",
     "MSG_BOOT_TYPE0": "< Salta BIOS >",
     "MSG_BOOT_TYPE1": "< Avvia BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< Perc. ROM >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/ >",
-    "MSG_STTE_TYPE1": "< Perc. ROM  >",
     "MSG_PATCH_TYPE_I2": "Nessuna patch (funziona bene con la maggior parte degli homebrew)",
     "MSG_BOOT_TYPE_I0": "Salta il BIOS e la sua schermata iniziale",
     "MSG_BOOT_TYPE_I1": "Avvia il BIOS (GBA reset)",
-    "MSG_SAVE_TYPE_I0": "I salvataggi sono in /SAVEGAME/",
-    "MSG_SAVE_TYPE_I1": "I salvataggi sono in /SAVES/",
-    "MSG_SAVE_TYPE_I2": ".sav nello stesso perc. della ROM",
     "MSG_BACKUP_I": "Mantieni gli ultimi N file di salvataggio",
     "MSG_INGAME_I": "Mostra menu premendo la combinazione di tasti",
     "MSG_LOADER_SAVET": "Tipo salv.",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "Caricamento rapido",
     "MSG_FASTSD_I": "Usa il caricamento rapido per le ROM. Potrebbe causare crash e problemi di lettura in certi dispositivi",
     "MSG_SETT_FASTEW": "EWRAM overclock",
-    "MSG_FASTEW_I": "Overclock EWRAM per migliorare le performance. Non disponibile per NDS o GBA Micro"
+    "MSG_FASTEW_I": "Overclock EWRAM per migliorare le performance. Non disponibile per NDS o GBA Micro",
+    "MSG_NEXTTO_ROM": "< Perc. ROM >",
+    "MSG_SAVE_TYPE_NR": ".sav nello stesso perc. della ROM",
+    "MSG_SAVE_TYPE_PT": "I salvataggi sono in %s"
 }

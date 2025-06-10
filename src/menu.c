@@ -1506,7 +1506,7 @@ void render_rtcpop(volatile uint8_t *frame) {
 }
 
 void render_settings(volatile uint8_t *frame) {
-  char tmp[32];
+  char tmp[80];
   unsigned baseopt = smenu.set.selector <= 1  ? 0 :
                      smenu.set.selector >= SettMAX - 3 ? SettMAX - 4 :
                      smenu.set.selector - 1;
@@ -1541,7 +1541,13 @@ void render_settings(volatile uint8_t *frame) {
 
   if (msk & 0x00020) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_SAVET], frame, 8, 22 + 20*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_SAVE_TYPE0 + save_path_default], frame, colx, 22 + 20*optcnt++);
+
+    if (save_path_default == SaveRomName)
+      draw_central_text(msgs[lang_id][MSG_NEXTTO_ROM], frame, colx, 22 + 20*optcnt++);
+    else {
+      npf_snprintf(tmp, sizeof(tmp), "< %s >", save_paths[save_path_default]);
+      draw_central_text(tmp, frame, colx, 22 + 20*optcnt++);
+    }
   }
 
   if (msk & 0x00040) {
@@ -1552,7 +1558,12 @@ void render_settings(volatile uint8_t *frame) {
 
   if (msk & 0x00080) {
     draw_text_ovf(msgs[lang_id][MSG_SETT_STATET], frame, 8, 22 + 20*optcnt, 224);
-    draw_central_text(msgs[lang_id][MSG_STTE_TYPE0 + state_path_default], frame, colx, 22 + 20*optcnt++);
+    if (state_path_default == StateRomName)
+      draw_central_text(msgs[lang_id][MSG_NEXTTO_ROM], frame, colx, 22 + 20*optcnt++);
+    else {
+      npf_snprintf(tmp, sizeof(tmp), "< %s >", savestates_paths[state_path_default]);
+      draw_central_text(tmp, frame, colx, 22 + 20*optcnt++);
+    }
   }
 
   if (msk & 0x00100) {
@@ -1604,17 +1615,25 @@ void render_settings(volatile uint8_t *frame) {
   // Render bar below for help messge
   dma_memset16(&frame[240*140], dup8(FG_COLOR), 240*20/2);
 
-  unsigned help_msg = smenu.set.selector == SettBootType ? MSG_BOOT_TYPE_I0 + boot_bios_splash :
-                      smenu.set.selector == SettSaveLoc  ? MSG_SAVE_TYPE_I0 + save_path_default :
-                      smenu.set.selector == SettSaveBkp  ? MSG_BACKUP_I :
-                      smenu.set.selector == SettFastSD   ? MSG_FASTSD_I :
-                      smenu.set.selector == SettFastEWRAM? MSG_FASTEW_I :
-                      smenu.set.selector == DefsPatchEng ? MSG_PATCH_TYPE_I0 + patcher_default :
-                      smenu.set.selector == DefsLoadPol  ? MSG_DEF_LOADP_I0 + (autoload_default ^ 1) :
-                      smenu.set.selector == DefsSavePol  ? MSG_DEF_SAVEP_I0 + (autosave_default ^ 1) :
-                      smenu.set.selector == DefsPrefDS   ? MSG_LOADER_PREFDSI :
-                      MSG_EMPTY;
-  draw_text_ovf_rotate(msgs[lang_id][help_msg], frame, 4, SCREEN_HEIGHT - 18, 232, &smenu.anim_state);
+  if (smenu.set.selector == SettSaveLoc) {
+    if (save_path_default == SaveRomName)
+      draw_text_ovf_rotate(msgs[lang_id][MSG_SAVE_TYPE_NR], frame, 4, SCREEN_HEIGHT - 18, 232, &smenu.anim_state);
+    else {
+      npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_SAVE_TYPE_PT], save_paths[save_path_default]);
+      draw_text_ovf_rotate(tmp, frame, 4, SCREEN_HEIGHT - 18, 232, &smenu.anim_state);
+    }
+  } else {
+    unsigned help_msg = smenu.set.selector == SettBootType ? MSG_BOOT_TYPE_I0 + boot_bios_splash :
+                        smenu.set.selector == SettSaveBkp  ? MSG_BACKUP_I :
+                        smenu.set.selector == SettFastSD   ? MSG_FASTSD_I :
+                        smenu.set.selector == SettFastEWRAM? MSG_FASTEW_I :
+                        smenu.set.selector == DefsPatchEng ? MSG_PATCH_TYPE_I0 + patcher_default :
+                        smenu.set.selector == DefsLoadPol  ? MSG_DEF_LOADP_I0 + (autoload_default ^ 1) :
+                        smenu.set.selector == DefsSavePol  ? MSG_DEF_SAVEP_I0 + (autosave_default ^ 1) :
+                        smenu.set.selector == DefsPrefDS   ? MSG_LOADER_PREFDSI :
+                        MSG_EMPTY;
+    draw_text_ovf_rotate(msgs[lang_id][help_msg], frame, 4, SCREEN_HEIGHT - 18, 232, &smenu.anim_state);
+  }
 
 
   if (smenu.set.selector != SettSave) {

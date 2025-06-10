@@ -44,6 +44,15 @@ const t_combo_key hotkey_list[] = {
   {"A+B+Start+Sel", 0x03F0},
 };
 
+const char *save_paths[] = {
+  "/SAVEGAME/",
+  "/SAVES/",
+};
+
+const char *savestates_paths[] = {
+  "/SAVESTATE/",
+};
+
 const uint8_t animspd_lut[] = {
   2,    //  8 pix/second
   3,    // 12 pix/second
@@ -253,7 +262,7 @@ void sram_template_filename_calc(const char *rom, const char * extension, char *
   }
   else {
     const char *p = file_basename(rom);
-    const char *path = save_path_default == SaveSavesDir ? "/SAVES/" : "/SAVEGAME/";
+    const char *path = save_paths[save_path_default];;
     strcpy(savefn, path);   // Add the base path
     strcat(savefn, p);      // Append just the basename
   }
@@ -267,7 +276,7 @@ void savestate_filename_calc(const char *rom, char *statefn) {
   }
   else {
     const char *p = file_basename(rom);
-    strcpy(statefn, "/SAVESTATE/");   // Add the base path
+    strcpy(statefn, savestates_paths[state_path_default]);   // Add the base path
     strcat(statefn, p);               // Append just the basename
   }
   replace_extension(statefn, "");

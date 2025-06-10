@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Automaticky >",
     "MSG_BOOT_TYPE0": "< Přeskočit BIOS >",
     "MSG_BOOT_TYPE1": "< GBA BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< Včetně ROM >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/ >",
-    "MSG_STTE_TYPE1": "< Včetně ROM >",
     "MSG_PATCH_TYPE_I2": "Bez Patchů (vhodné pro homebrew)",
     "MSG_BOOT_TYPE_I0": "Přeskočí BIOS a GBA intro",
     "MSG_BOOT_TYPE_I1": "Spustí BIOS (restartuje GBA)",
-    "MSG_SAVE_TYPE_I0": "uložená hra je ve složce /SAVEGAME/",
-    "MSG_SAVE_TYPE_I1": "uložená hra je ve složce /SAVES/",
-    "MSG_SAVE_TYPE_I2": ".sav je ve stejné složce jako ROM",
     "MSG_BACKUP_I": "Zachovat posledních N uložených pozic",
     "MSG_INGAME_I": "Zobrazit menu tlačítkovou zkratkou",
     "MSG_LOADER_SAVET": "Režim ukládání",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "Rychlé načítání ROM",
     "MSG_FASTSD_I": "Používá mechanismus pro co nejrychlejší načítání ROM. Může způsobit crashe nebo porušení hry na některých zařízeních.",
     "MSG_SETT_FASTEW": "Přetaktování EWRAM",
-    "MSG_FASTEW_I": "Přetaktuje EWRAM pro zvýšení výkonu. Není k dispozici na NDS nebo GBA Micro!"
+    "MSG_FASTEW_I": "Přetaktuje EWRAM pro zvýšení výkonu. Není k dispozici na NDS nebo GBA Micro!",
+    "MSG_NEXTTO_ROM": "< Včetně ROM >",
+    "MSG_SAVE_TYPE_NR": ".sav je ve stejné složce jako ROM",
+    "MSG_SAVE_TYPE_PT": "uložená hra je ve složce %s"
 }

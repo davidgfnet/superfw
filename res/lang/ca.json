@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Automàtic >",
     "MSG_BOOT_TYPE0": "< Salta la BIOS >",
     "MSG_BOOT_TYPE1": "< Inici BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< Amb el ROM >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/ >",
-    "MSG_STTE_TYPE1": "< Amb el ROM >",
     "MSG_PATCH_TYPE_I2": "No es fa servir patching (funciona bé amb la majoria de Homebrew)",
     "MSG_BOOT_TYPE_I0": "Salta l'arrencada de la BIOS i la seva pantalla d'inici (inicia directament el joc)",
     "MSG_BOOT_TYPE_I1": "Arrenca el joc des de la BIOS (fa un reset complet)",
-    "MSG_SAVE_TYPE_I0": "El fitxer de partida (savegame) es guarda al directori /SAVEGAME/",
-    "MSG_SAVE_TYPE_I1": "El fitxer de partida (savegame) es guarda al directori /SAVES/",
-    "MSG_SAVE_TYPE_I2": "Guarda el .sav al mateix directori que la ROM",
     "MSG_BACKUP_I": "Conserva les últimes N partides guardades",
     "MSG_INGAME_I": "Mostra el menú en prémer la combinació de botons",
     "MSG_LOADER_SAVET": "Mode guardat",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "Càrrega ràpida",
     "MSG_FASTSD_I": "Carrega els ROMs de forma més ràpida. Pot causar errors i inestabilitat en algunes consoles.",
     "MSG_SETT_FASTEW": "Overclock EWRAM",
-    "MSG_FASTEW_I": "Realitza overclock a la EWRAM, millorant el rendiment d'alguns jocs. No funciona en NDS o GBA Micro"
+    "MSG_FASTEW_I": "Realitza overclock a la EWRAM, millorant el rendiment d'alguns jocs. No funciona en NDS o GBA Micro",
+    "MSG_NEXTTO_ROM": "< Amb el ROM >",
+    "MSG_SAVE_TYPE_NR": "Guarda el .sav al mateix directori que la ROM",
+    "MSG_SAVE_TYPE_PT": "El fitxer de partida (savegame) es guarda al directori %s"
 }

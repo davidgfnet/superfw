@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Otomatis >",
     "MSG_BOOT_TYPE0": "< Lewati BIOS >",
     "MSG_BOOT_TYPE1": "< Ke BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< Bersama ROM >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/ >",
-    "MSG_STTE_TYPE1": "< Bersama ROM >",
     "MSG_PATCH_TYPE_I2": "Tidak ditambal sama sekali (cocok untuk homebrew)",
     "MSG_BOOT_TYPE_I0": "Melewati BIOS dan splash GBA",
     "MSG_BOOT_TYPE_I1": "Mulai ke BIOS (mengulang GBA)",
-    "MSG_SAVE_TYPE_I0": "Simpanan akan ada di /SAVEGAME/",
-    "MSG_SAVE_TYPE_I1": "Simpanan akan ada di /SAVES/",
-    "MSG_SAVE_TYPE_I2": ".sav akan sefolder dengan ROM",
     "MSG_BACKUP_I": "Menyimpan .sav sesuai nomor",
     "MSG_INGAME_I": "Ke menu dengan tombol pintasan",
     "MSG_LOADER_SAVET": "Mode simpan",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "Muat ROM cepat",
     "MSG_FASTSD_I": "Memuat ROM dengan cara cepat. Bisa mogok atau gagal baca di beberapa konsol",
     "MSG_SETT_FASTEW": "Overclock EWRAM",
-    "MSG_FASTEW_I": "Meng-overclock EWRAM untuk kinerja lebih. Tidak bisa di NDS atau GBA Micro"
+    "MSG_FASTEW_I": "Meng-overclock EWRAM untuk kinerja lebih. Tidak bisa di NDS atau GBA Micro",
+    "MSG_NEXTTO_ROM": "< Bersama ROM >",
+    "MSG_SAVE_TYPE_NR": ".sav akan sefolder dengan ROM",
+    "MSG_SAVE_TYPE_PT": "Simpanan akan ada di %s"
 }

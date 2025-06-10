@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Автоматично >",
     "MSG_BOOT_TYPE0": "< Без BIOS >",
     "MSG_BOOT_TYPE1": "< З BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< / SAVES / >",
-    "MSG_SAVE_TYPE2": "< Біля файлу >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/ >",
-    "MSG_STTE_TYPE1": "< Біля файлу >",
     "MSG_PATCH_TYPE_I2": "Без патчингу (добре працює з більшістю homebrew)",
     "MSG_BOOT_TYPE_I0": "Пропустити BIOS та екран завантаження",
     "MSG_BOOT_TYPE_I1": "Завантажуватись з BIOS (перезавантаження GBA)",
-    "MSG_SAVE_TYPE_I0": "Зберегти файли в теку /SAVEGAME/",
-    "MSG_SAVE_TYPE_I1": "Зберегти файли в теку /SAVES/",
-    "MSG_SAVE_TYPE_I2": "Зберегти у ту ж теку де знаходиться файл",
     "MSG_BACKUP_I": "Кількість файлів для збереження",
     "MSG_INGAME_I": "Показувати меню при натисканні на комбінацію клавіш",
     "MSG_LOADER_SAVET": "Збереження",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "Шв. завант.",
     "MSG_FASTSD_I": "Використовується механізм швидкого завантаження, може спричинити помилки або некоректне зчитування",
     "MSG_SETT_FASTEW": "Розгін EWRAM",
-    "MSG_FASTEW_I": "Розгін EWRAM для збільшення продуктивності. Не доступно для NDS та GB Micro"
+    "MSG_FASTEW_I": "Розгін EWRAM для збільшення продуктивності. Не доступно для NDS та GB Micro",
+    "MSG_NEXTTO_ROM": "< Біля файлу >",
+    "MSG_SAVE_TYPE_NR": "Зберегти у ту ж теку де знаходиться файл",
+    "MSG_SAVE_TYPE_PT": "Зберегти файли в теку %s"
 }

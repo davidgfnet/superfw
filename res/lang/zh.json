@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< 自动 >",
     "MSG_BOOT_TYPE0": "< 跳过 BIOS >",
     "MSG_BOOT_TYPE1": "< 通过 BIOS 启动 >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< 与ROM目录相同 >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/>",
-    "MSG_STTE_TYPE1": "< 与ROM目录相同 >",
     "MSG_PATCH_TYPE_I2": "不使用补丁(适合大部分自制程序)",
     "MSG_BOOT_TYPE_I0": "跳过BIOS及开机画面",
     "MSG_BOOT_TYPE_I1": "通过BIOS启动 (GBA软复位)",
-    "MSG_SAVE_TYPE_I0": "将存档放置在/SAVEGAME/目录",
-    "MSG_SAVE_TYPE_I1": "将存档放置在/SAVES/目录",
-    "MSG_SAVE_TYPE_I2": ".sav与ROM放在同一目录",
     "MSG_BACKUP_I": "备份最近使用的若干个存档",
     "MSG_INGAME_I": "按住组合键时显示菜单",
     "MSG_LOADER_SAVET": "存档方式",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "快速ROM读取",
     "MSG_FASTSD_I": "启用快速的ROM读取机制, 在部分设备上可能引发问题",
     "MSG_SETT_FASTEW": "EWRAM超频",
-    "MSG_FASTEW_I": "对EWRAM超频, 略微提升性能. 不支持NDS及GBM."
+    "MSG_FASTEW_I": "对EWRAM超频, 略微提升性能. 不支持NDS及GBM.",
+    "MSG_NEXTTO_ROM": "< 与ROM目录相同 >",
+    "MSG_SAVE_TYPE_NR": ".sav与ROM放在同一目录",
+    "MSG_SAVE_TYPE_PT": "将存档放置在%s目录"
 }

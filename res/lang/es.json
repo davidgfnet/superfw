@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Auto >",
     "MSG_BOOT_TYPE0": "< Saltar BIOS >",
     "MSG_BOOT_TYPE1": "< Inicio BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< Junto al ROM >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE / >",
-    "MSG_STTE_TYPE1": "< Junto al ROM >",
     "MSG_PATCH_TYPE_I2": "Sin parcheo (funciona bien con la mayoría de Homebrew)",
     "MSG_BOOT_TYPE_I0": "Saltar la BIOS y su pantalla de carga",
     "MSG_BOOT_TYPE_I1": "Arranca usando la BIOS (reinicia la GBA)",
-    "MSG_SAVE_TYPE_I0": "El archivo de guardado se ubica en el directorio /SAVEGAME/",
-    "MSG_SAVE_TYPE_I1": "El archivo de guardado se ubica en el directorio /SAVES/",
-    "MSG_SAVE_TYPE_I2": ".sav en el mismo directorio que la ROM",
     "MSG_BACKUP_I": "Conservar las últimas N copias del archivo de guardado",
     "MSG_INGAME_I": "Mostrar menú al pulsar el combo de botones",
     "MSG_LOADER_SAVET": "Tipo guardado",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "Carga ROM rápida",
     "MSG_FASTSD_I": "Carga más rápidamente los ROMs. Puede resultar en inestabilidad en algunas consolas.",
     "MSG_SETT_FASTEW": "Overclock EWRAM",
-    "MSG_FASTEW_I": "Realiza overclock en la memoria EWRAM, mejora el rendimiento de algunos juegos. No funciona en NDS o GBA Micro"
+    "MSG_FASTEW_I": "Realiza overclock en la memoria EWRAM, mejora el rendimiento de algunos juegos. No funciona en NDS o GBA Micro",
+    "MSG_NEXTTO_ROM": "< Junto al ROM >",
+    "MSG_SAVE_TYPE_NR": "El archivo .sav se ubica en el mismo directorio que la ROM",
+    "MSG_SAVE_TYPE_PT": "El archivo de guardado se ubica en el directorio %s"
 }

@@ -49,17 +49,9 @@
     "MSG_PATCH_TYPE3": "< Automatisch >",
     "MSG_BOOT_TYPE0": "< Überspringe BIOS >",
     "MSG_BOOT_TYPE1": "< GBA BIOS >",
-    "MSG_SAVE_TYPE0": "< /SAVEGAME/ >",
-    "MSG_SAVE_TYPE1": "< /SAVES/ >",
-    "MSG_SAVE_TYPE2": "< Bei ROM >",
-    "MSG_STTE_TYPE0": "< /SAVESTATE/ >",
-    "MSG_STTE_TYPE1": "< Bei ROM >",
     "MSG_PATCH_TYPE_I2": "Keine Patches (gut für viele Homebrew)",
     "MSG_BOOT_TYPE_I0": "Überspringt BIOS und GBA-Intro",
     "MSG_BOOT_TYPE_I1": "Startet das BIOS (setzt GBA zurück)",
-    "MSG_SAVE_TYPE_I0": "Spielstand liegt im /SAVEGAME/-Ordner",
-    "MSG_SAVE_TYPE_I1": "Spielstand liegt im /SAVES/-Ordner",
-    "MSG_SAVE_TYPE_I2": ".sav im gleichen Ordner wie ROM",
     "MSG_BACKUP_I": "Behalte die letzten N Spielstände",
     "MSG_INGAME_I": "Menü bei Tasten-Kombination anzeigen",
     "MSG_LOADER_SAVET": "Speichermodus",
@@ -204,5 +196,8 @@
     "MSG_SETT_FASTSD": "ROM schnell laden",
     "MSG_FASTSD_I": "Benutzt einen Mechanismus, um Spiele schnell zu laden. Kann bei einigen Geräten zu einem Crash oder Spielkorruption führen",
     "MSG_SETT_FASTEW": "EWRAM Übertakten",
-    "MSG_FASTEW_I": "Übertaktet EWRAM für zusätzliche Leistung. Nicht kompatibel mit NDS oder GBA Micro"
+    "MSG_FASTEW_I": "Übertaktet EWRAM für zusätzliche Leistung. Nicht kompatibel mit NDS oder GBA Micro",
+    "MSG_NEXTTO_ROM": "< Bei ROM >",
+    "MSG_SAVE_TYPE_NR": ".sav im gleichen Ordner wie ROM",
+    "MSG_SAVE_TYPE_PT": "Spielstand liegt im %s-Ordner"
 }
