@@ -15,6 +15,8 @@ OTHER_LANGS = [
   "zh",
   "uk",
   "ru",
+  "id",
+  "ms",
 ]
 
 en_strings = {
