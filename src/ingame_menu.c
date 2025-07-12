@@ -838,6 +838,9 @@ void create_paths(const char *fn) {
 }
 
 bool action_save_overw() {
+
+  set_supercard_mode(MAPPED_SDRAM, true, true); // So we can write to the SD card
+
   // Just overwrites the .sav file with our data.
   char finalfn[256];
   strcpy(finalfn, savefile_pattern);
@@ -848,6 +851,9 @@ bool action_save_overw() {
   else
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
   submenu = MenuMain;
+
+  set_supercard_mode(MAPPED_SDRAM, false, false); // Set to read-only as we are ingame and disable SD interface
+
   return false;
 }
 
