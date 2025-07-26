@@ -140,6 +140,7 @@
     "IMENU_GOBACK": "Назад",
     "IMENU_UPDAT_RTC": "Обновить часы",
     "IMENU_RST0_GAME": "Сбросить игру",
+    "IMENU_RST0_GAME_LOAD_SAVE": "Сбросить игру и загрузить сохранение",
     "IMENU_RST2_DEVSKIP": "Вернуться в меню (не сохранять)",
     "IMENU_SAVE0_OW": "Сохранить (перезаписать)",
     "IMENU_SAVE1_BKP": "Сохранить (с рез. копией)",
