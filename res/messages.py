@@ -232,9 +232,10 @@ en_menu_strings = {
   "IMENU_GOBACK":           "Go back",
   "IMENU_UPDAT_RTC":        "Update RTC clock",
 
-  "IMENU_RST0_GAME":        "Reset game",
-  "IMENU_RST1_DEVICE":      "Reset to menu",
-  "IMENU_RST2_DEVSKIP":     "Back to menu (skip save)",
+  "IMENU_RST0_GAME":          "Reset game",
+  "IMENU_RST0_GAME_LOAD_SAVE":"Reset game and load save",
+  "IMENU_RST1_DEVICE":        "Reset to menu",
+  "IMENU_RST2_DEVSKIP":       "Back to menu (skip save)",
 
   "IMENU_SAVE0_OW":         "Save to SD (overwrite)",
   "IMENU_SAVE1_BKP":        "Save to SD (with backup)",

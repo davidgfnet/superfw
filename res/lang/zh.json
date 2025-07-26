@@ -140,6 +140,7 @@
     "IMENU_GOBACK": "返回",
     "IMENU_UPDAT_RTC": "更新时钟设定",
     "IMENU_RST0_GAME": "重启游戏",
+    "IMENU_RST0_GAME_LOAD_SAVE": "重启游戏并加载存档",
     "IMENU_RST2_DEVSKIP": "返回主界面(跳过存档流程)",
     "IMENU_SAVE0_OW": "覆盖SD卡现有存档",
     "IMENU_SAVE1_BKP": "写入存档至SD卡并备份",

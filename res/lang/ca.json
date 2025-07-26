@@ -140,6 +140,7 @@
     "IMENU_GOBACK": "Enrere",
     "IMENU_UPDAT_RTC": "Actualitza el rellotge RTC",
     "IMENU_RST0_GAME": "Reinicia el joc",
+    "IMENU_RST0_GAME_LOAD_SAVE": "Reinicia el joc i carrega la partida",
     "IMENU_RST2_DEVSKIP": "Torna al menú (sense guardar)",
     "IMENU_SAVE0_OW": "Guarda a la SD (sobreescriu)",
     "IMENU_SAVE1_BKP": "Guarda (amb còpia de seguretat)",

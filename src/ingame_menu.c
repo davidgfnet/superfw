@@ -607,7 +607,7 @@ void draw_main_menu(uint8_t *fb, unsigned framen) {
 void draw_reset_menu(uint8_t *fb, unsigned framen) {
   for (unsigned i = 0; i <= IMENU_RST2_DEVSKIP - IMENU_RST0_GAME; i++)
     draw_text(msgs[ingame_menu_lang][IMENU_RST0_GAME + i],  fb, 30, 36 + 19*i, copt == i ? HI_COLOR : FG_COLOR);
-  draw_text(msgs[ingame_menu_lang][IMENU_GOBACK], fb, 30, 95, copt == 3 ? HI_COLOR : FG_COLOR);
+  draw_text(msgs[ingame_menu_lang][IMENU_GOBACK], fb, 30, 115, copt == 4 ? HI_COLOR : FG_COLOR);
 
   draw_text("⯈", fb, 11, 36 + 19*copt, HI_COLOR);
 }
@@ -767,10 +767,35 @@ bool action_reset_game() {
   reset_game();
   return false;
 }
+
+bool action_reset_game_and_load_save() {
+  // Load save file to sram
+  char finalfn[256];
+  strcpy(finalfn, savefile_pattern);
+  strcat(finalfn, ".sav");
+  
+  FIL fd;
+  if (FR_OK == f_open(&fd, finalfn, FA_READ)) {
+    if (load_save_sram(finalfn)) {
+      popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEC];
+    } else {  
+      popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
+    }
+    f_close(&fd);
+  } else {
+    popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];  
+  }
+
+  // Reset the game
+  reset_game();
+  return false;
+}
+
 bool action_reset_fw() {
   reset_fw();
   return false;
 }
+
 bool action_reset_fw_nosave() {
   // Skip saving on reboot!
   program_sram_dump(NULL, 0);
@@ -1062,6 +1087,7 @@ const menu_action_fn mainacts[] = {
 };
 const menu_action_fn resetacts[] = {
   action_reset_game,
+  action_reset_game_and_load_save,
   action_reset_fw,
   action_reset_fw_nosave,
   action_menu_back,
@@ -1105,7 +1131,7 @@ typedef struct {
 
 const t_menu_def menudata [] = {
   { draw_main_menu,   mainacts,   NULL,   6, NULL,  true },
-  { draw_reset_menu,  resetacts,  NULL,   4, NULL,  true },
+  { draw_reset_menu,  resetacts,  NULL,   5, NULL,  true },
   { draw_save_menu,   saveacts,   NULL,   4, NULL,  true },
   { draw_states_menu, statesacts, sstkey, 3, NULL,  true },
   { draw_rtc_menu,    rtcacts,    rtckey, 6, NULL, false },
