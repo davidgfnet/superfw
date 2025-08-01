@@ -54,9 +54,9 @@
 // This code starts an already loaded NDS rom. The memory map at this point:
 // Main RAM:
 //  - [0x02000000, 0x023BFE00)   - Loaded ARM9 payload
-//  - [0x023C0000, 0x023FF000)   - Current superFW ewram payload (this code, 252KiB)
-//  - [0x023FF000, 0x023FFC00)   - Bootloader reloc mirror (max 3KiB)
-//  - [0x023FFC00, 0x023FFD80)   - ARM9 stack (only during boot, 3*128 bytes)
+//  - [0x023C0000, 0x023FEC00)   - Current superFW ewram payload (this code, 251KiB)
+//  - [0x023FEC00, 0x023FF800)   - Bootloader reloc mirror (max 3KiB)
+//  - [0x023FF800, 0x023FFD80)   - ARM9 stack (only during boot, ~1.4KiB bytes, SVC+IRQ+SYS stacks)
 //  - [0x023FFD80, 0x023FFE00)   - ARM7 stack (in bootloader, max 128 bytes)
 //  - [0x023FFE00, 0x02400000)   - NDS header (already loaded)
 .global nds_launch

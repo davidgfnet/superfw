@@ -37,12 +37,12 @@
 #define NDS_SHEIGHT   192
 
 #define NDS_WRAM_MIRROR  0x06000000     /* Temp WRAM storage area (using VRAM-D) */
-#define BOOTMIRROR_ADDR  0x023FF000     /* Bootloader relocation (NDS mode) */
+#define BOOTMIRROR_ADDR  0x023FEC00     /* Bootloader relocation (NDS mode) */
 
 #define BOOTNDS_SP7_SVC  0x023FFE00     /* From 0x023FFD80 to 0x023FFE00 */
 #define BOOTNDS_SP9_SVC  0x023FFD80     /* From 0x023FFD00 to 0x023FFD80 */
 #define BOOTNDS_SP9_IRQ  0x023FFD00     /* From 0x023FFC80 to 0x023FFD00 */
-#define BOOTNDS_SP9_SYS  0x023FFC80     /* From 0x023FFC00 to 0x023FFC80 */
+#define BOOTNDS_SP9_SYS  0x023FFC80     /* From 0x023FF800 to 0x023FFC80 */
 
 #define FWPAYLOAD_ADDR   0x027C0000
 
