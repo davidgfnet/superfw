@@ -40,9 +40,10 @@
 #define BOOTMIRROR_ADDR  0x023FEC00     /* Bootloader relocation (NDS mode) */
 
 #define BOOTNDS_SP7_SVC  0x023FFE00     /* From 0x023FFD80 to 0x023FFE00 */
-#define BOOTNDS_SP9_SVC  0x023FFD80     /* From 0x023FFD00 to 0x023FFD80 */
-#define BOOTNDS_SP9_IRQ  0x023FFD00     /* From 0x023FFC80 to 0x023FFD00 */
-#define BOOTNDS_SP9_SYS  0x023FFC80     /* From 0x023FF800 to 0x023FFC80 */
+#define BOOTNDS_SP7_SYS  0x023FFD80     /* From 0x023FFD00 to 0x023FFD80 */
+#define BOOTNDS_SP9_SVC  0x023FFD00     /* From 0x023FFC80 to 0x023FFD00 */
+#define BOOTNDS_SP9_IRQ  0x023FFC80     /* From 0x023FFC00 to 0x023FFC80 */
+#define BOOTNDS_SP9_SYS  0x023FFC80     /* From 0x023FF800 to 0x023FFC00 */
 
 #define FWPAYLOAD_ADDR   0x027C0000
 
@@ -166,8 +167,12 @@ main:
   @ Do not use pool loads in this first KiB!
   mov r0, $GAMEPAK_BASEADDR
   mov r1, $WRAM_BOOTM_ADDR
-  mov r2, $(1024 / 4)
-  swi 0x0C0000
+  mov r2, $(1024 / 4 / 4)
+  1:
+    ldmia r0!, {r4, r5, r6, r7}
+    stmia r1!, {r4, r5, r6, r7}
+    subs r2, $1
+    bne 1b
 
   @ Resume execution at IWRAM, do the re-offset trick.
   mov r1, $(GAMEPAK_BASEADDR - WRAM_BOOTM_ADDR)
@@ -208,9 +213,15 @@ main:
   @ Now proceed to copy the full bootloader into IWRAM, not just the first KB.
   mov r0, $GAMEPAK_BASEADDR
   mov r1, $WRAM_BOOTM_ADDR
-  mov r2, $(((_end_bootloader - _start + 15) / 16) * 4)   @ Round it up to fit
-  swi 0x0C0000
-  nop; nop; nop; nop
+  mov r2, $(2048 / 4 / 4)     @ Fixed 3KB bootloader size.
+  @ Skip the already copied 1024 bytes
+  add r0, $1024
+  add r1, $1024
+  1:
+    ldmia r0!, {r4, r5, r6, r7}
+    stmia r1!, {r4, r5, r6, r7}
+    subs r2, $1
+    bne 1b
 
 _main_end:
 
@@ -414,6 +425,7 @@ nds_boot_detected:
   msr cpsr, #0x13          @ SVC Mode
   ldr sp, =(BOOTNDS_SP7_SVC)
   msr cpsr, #0x1F          @ System Mode
+  ldr sp, =(BOOTNDS_SP7_SYS)
 
   @ We are currently running on the ARM7 on ARM7-WRAM, prepare to enable ARM9.
   @ Copy the boot rom to main ram (only place where ARM9 can boot).
@@ -478,6 +490,13 @@ arm9_bootaddr:
   ldr r0, =REG_IPCSYNC     @ Clear SYNC reg
   mov r1, $0
   str r1, [r0]
+
+  @ Disable MMU and DTCM
+  mrc 15, 0, r0, cr1, cr0, 0
+  bic r0, r0, #1
+  mcr 15, 0, r0, cr1, cr0, 0
+  mov r0, $0
+  mcr 15, 0, r0, cr9, cr1, 0
 
   // Setup IRQ, SVC and System stack pointers
   // We use stack, and the passme setup is quite inconsistent.
