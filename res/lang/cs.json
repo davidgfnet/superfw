@@ -140,6 +140,7 @@
     "IMENU_GOBACK": "Zpět",
     "IMENU_UPDAT_RTC": "Aktualizovat hodiny (RTC)",
     "IMENU_RST0_GAME": "Resetovat hru",
+    "IMENU_RST0_GAME_LOAD_SAVE": "Resetovat hru a načíst uloženou pozici",
     "IMENU_RST2_DEVSKIP": "Zpět do menu (neukládat)",
     "IMENU_SAVE0_OW": "Uložit na SD (přepsat)",
     "IMENU_SAVE1_BKP": "Uložit na SD (se zálohou)",
