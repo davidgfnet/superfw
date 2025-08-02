@@ -38,6 +38,7 @@
 
 #define NDS_WRAM_MIRROR  0x06000000     /* Temp WRAM storage area (using VRAM-D) */
 #define BOOTMIRROR_ADDR  0x023FEC00     /* Bootloader relocation (NDS mode) */
+#define BOOTMIRROR_ITCM  0x00000000     /* Bootloader relocation for the ARM9 */
 
 #define BOOTNDS_SP7_SVC  0x023FFE00     /* From 0x023FFD80 to 0x023FFE00 */
 #define BOOTNDS_SP7_SYS  0x023FFD80     /* From 0x023FFD00 to 0x023FFD80 */
@@ -487,16 +488,24 @@ arm7_bootaddr:
 arm9_bootaddr:
   @ Here is where the arm9 execution begins! Running from main RAM.
 
-  ldr r0, =REG_IPCSYNC     @ Clear SYNC reg
+  @ Disable interrupts
+  mov r1, $0x04000000
+  strb r1, [r1, #0x208]
+
+  ldr r0, =REG_IPCSYNC         @ Clear SYNC reg
   mov r1, $0
   str r1, [r0]
 
-  @ Disable MMU and DTCM
-  mrc 15, 0, r0, cr1, cr0, 0
-  bic r0, r0, #1
-  mcr 15, 0, r0, cr1, cr0, 0
+  @ Setup ITCM as 16KB memory at 0x0
+  mov r0, $0x0A
+  mcr p15, 0, r0, c9, c1, 1
+  @ Disable DTCM
   mov r0, $0
   mcr 15, 0, r0, cr9, cr1, 0
+
+  @ Disable MMU and DTCM, enable ITCM
+  ldr r0, =0x00042070
+  mcr 15, 0, r0, cr1, cr0, 0
 
   // Setup IRQ, SVC and System stack pointers
   // We use stack, and the passme setup is quite inconsistent.
@@ -507,6 +516,18 @@ arm9_bootaddr:
   msr cpsr, #0x1F          @ System Mode
   ldr sp, =(BOOTNDS_SP9_SYS)
 
+  @ Copy and resume from ITCM
+  ldr r0, =BOOTMIRROR_ADDR
+  mov r1, $BOOTMIRROR_ITCM
+  mov r2, $(((_end_bootloader - _start + 15) / 16) * 4)   @ Round it up to fit
+  swi 0x0C0000
+
+  adr r0, arm9_bootaddr_itcm
+  ldr r1, =(BOOTMIRROR_ADDR - BOOTMIRROR_ITCM)
+  sub r0, r0, r1
+  bx r0
+
+arm9_bootaddr_itcm:
   ldr r0, =REG_WRAMCNT     @ Ensure we map all the shared-WRAM to ARM9
   mov r1, $0
   strb r1, [r0]
