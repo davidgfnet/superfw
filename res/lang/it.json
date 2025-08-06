@@ -144,7 +144,7 @@
     "IMENU_SAVE0_OW": "Salva su SD (sovrascrivi)",
     "IMENU_SAVE1_BKP": "Salva su SD (con backup)",
     "IMENU_SSTATEQ0_SAVE": "Salvataggio rapido",
-    "IMENU_SSTATEQ1_LOAD": "Caricamento rapido",
+    "IMENU_SSTATEQ1_LOAD": "Caricam. rapido",
     "IMENU_SSTATEQ2_WRITE": "Rendi persistente",
     "IMENU_SSTATEP0_SAVE": "Salva stato",
     "IMENU_SSTATEP1_LOAD": "Carica stato",
