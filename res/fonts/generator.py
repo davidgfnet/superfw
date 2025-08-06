@@ -32,7 +32,9 @@
 # Block index entry:
 #  int32: start character unicode point
 #  int32: end character unicode point
-#  int32: flags (bit0: set if font is 16pixel fixed width, 0 if it's variable)
+#  int32: flags
+#      bit0: set if font is 16pixel fixed width, 0 if it's variable
+#      bit31: requires multi-char composition (for now only hangul supported)
 #  int32: offset (bytes, after the index)
 #
 # Pixel data is represented as a succession of uint16 that represent a 1bpp
@@ -52,6 +54,7 @@ DEF_BLOCKS = "ascii,latin,latin-a,latin-b,greek,cyrilic"
 SPACE_PIXELS = 4    # Must be at least 1!
 
 parser = argparse.ArgumentParser(prog='efontgen')
+parser.add_argument('--font-files', dest='fontfiles', nargs='+', help='List of font files, order matters')
 parser.add_argument('--font-blocks', dest='blocks', type=str, default=DEF_BLOCKS, help='Comma separated list of font blocks')
 parser.add_argument('--output', dest='out', required=True, help='Output header file that contains font data')
 parser.add_argument('--debug-png', dest='dbgpng', type=str, default=None, help='Debug font PNG file')
@@ -87,6 +90,9 @@ blocks = {
   "hangul":   (0xAC00, 0xD7A3, 16),   # Hangul Syllables (pre-composed)
   "cjk-uni":  (0x4E00, 0x9FEF, 16),   # Unified CJK Ideographs
   "fixwidth": (0xFF01, 0xFF20, 16),   # Full-width characters
+
+  # Composable char blocks
+  "hangul-part": (0x20000, 0x200CC, 16, ["hangul"]),   # Full-width hangul composite syllable.
 }
 
 def convchars(hexc):
@@ -97,25 +103,28 @@ def convchars(hexc):
   return ret
 
 # Load all characters, guess their sizes and map them into a proper format
-fonthex = [x.split(":") for x in open("unscii-16-full.hex", "r").read().strip().split("\n")]
+fonthex = []
+for f in args.fontfiles:
+  fonthex += [x.split(":") for x in open(f, "r").read().strip().split("\n")]
 charshp = {int(x[0], 16):len(x[1]) // 4 for x in fonthex}
 fontmap = {int(x[0], 16):convchars(x[1]) for x in fonthex}
 
 
 # Calculate the block sizes and ranges, total character count, etc.
-allblocks = sorted([ blocks[x] for x in args.blocks.split(",") ])
+pickedblks = set(args.blocks.split(","))
+allblocks = sorted([ blocks[x] for x in pickedblks ])
 
 # Merge consecutive blocks, optimization
 charblocks = []
 for b in allblocks:
-  if charblocks and charblocks[-1][1] + 1 == b[0] and charblocks[-1][2] == b[2]:
-    charblocks[-1] = (charblocks[-1][0], b[1], b[2])
+  if charblocks and len(charblocks) < 4 and charblocks[-1][1] + 1 == b[0] and charblocks[-1][2] == b[2]:
+    charblocks[-1] = (charblocks[-1][0], b[1], b[2], b[3] if len(b) >= 4 else None)
   else:
-    charblocks.append(b)
+    charblocks.append((b[0], b[1], b[2], b[3] if len(b) >= 4 else None))
 
 # Force/Override sizes as specified in blocks. We do this since we do not support
 # mixing 8-wide and 16-wide chars. It seems only some charsets like Hiragana have issues really.
-for bs, be, bsize in blocks.values():
+for bs, be, bsize, *_ in blocks.values():
   for cn in range(bs, be+1):
     charshp[cn] = bsize
 
@@ -134,7 +143,7 @@ print("Total number of characters in database", len(vfontmap))
 
 
 oblocks = []
-for startchar, endchar, charwidth in charblocks:
+for startchar, endchar, charwidth, _ in charblocks:
   numchrs = endchar - startchar + 1
   print("Character block", hex(startchar), "-", hex(endchar), charwidth, "wide")
   charws = [len(vfontmap[cn]) for cn in range(startchar, endchar + 1) if cn in vfontmap]
@@ -190,15 +199,37 @@ for startchar, endchar, charwidth in charblocks:
     print(len(data16) // 32, "characters created for 16x16 char block", len(data16), "bytes")
 
 with open(args.out, "wb") as ofd:
+  # Expand dependant blocks
+  extrasets = {}
+  for startchar, endchar, charwidth, compblk in charblocks:
+    if compblk:
+      for dset in compblk:
+        extrasets[dset] = None
+    assert not (set(extrasets.keys()) & pickedblks)
+
   # Header plus charblock index
+  numhdrs = len(oblocks) + len(extrasets)
   i, off = 0, 0
-  blksize = sum(len(b) for b in oblocks) + 16*len(oblocks) + 8
-  ofd.write(struct.pack("<ccBBI", b"F", b"O", 1, len(charblocks), blksize))
-  for startchar, endchar, charwidth in charblocks:
+  blksize = sum(len(b) for b in oblocks) + 16*numhdrs + 8
+  ofd.write(struct.pack("<ccBBI", b"F", b"O", 1, numhdrs, blksize))
+  for startchar, endchar, charwidth, compblk in charblocks:
     flags = 1 if charwidth == 16 else 0
+
+    if compblk:
+      for dset in compblk:
+        assert extrasets[dset] is None
+        extrasets[dset] = off
+
     ofd.write(struct.pack("<IIII", startchar, endchar, flags, off))
     off += len(oblocks[i])
     i += 1
+
+  # Pulls extra blocks from composite blocks
+  for eblk, baseoff in extrasets.items():
+    startchar, endchar, charwidth = blocks[eblk]
+    flags = 1 if charwidth == 16 else 0
+    flags |= 0x80000000
+    ofd.write(struct.pack("<IIII", startchar, endchar, flags, baseoff))
 
   # Write data for each block type!
   for blk in oblocks:

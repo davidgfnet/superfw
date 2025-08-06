@@ -13,6 +13,7 @@ OTHER_LANGS = [
   "ca",
   "cs",
   "zh",
+  "ko",
   "uk",
   "ru",
   "id",

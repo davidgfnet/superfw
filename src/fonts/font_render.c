@@ -21,12 +21,14 @@
 
 #include "utf_util.h"
 #include "font_embed.h"
+#include "hangul.h"
 
 extern void *font_base_addr;
 
 // Memory structures that describe character/font data.
 
-#define FLAG_FW16     0x0001
+#define FLAG_FW16     0x00000001
+#define FLAG_COMP     0x80000000
 
 typedef struct {
   uint32_t start_char;   // First unicode char represented in this block
@@ -46,7 +48,8 @@ typedef struct {
 typedef struct {
   unsigned char_width;         // Width of the glyph
   unsigned spacing_cols;       // Number of spacing columns required after.
-  const uint16_t *data;        // Actual rendering data (column data).
+  unsigned nchars;             // Number of glyphs to overimpose.
+  const uint16_t *data[3];     // Actual rendering data (column data).
 } t_char_render_info;
 
 #define MISSING_CHAR    26   // "?" char, should find a better one though
@@ -75,10 +78,18 @@ static bool lookup_chptr(uint32_t code, t_char_render_info *chinfo) {
         const uint16_t *chptr = (uint16_t*)&baseptr[chdat->charblks[i].block_off];
 
         // Fill the render info struct
-        if (chdat->charblks[i].flags & FLAG_FW16) {
+        if (chdat->charblks[i].flags & FLAG_COMP) {
+          unsigned glyphs[3];
+          chinfo->char_width = 16;
+          chinfo->spacing_cols = 0;
+          chinfo->nchars = hangul_glyphs(code_offset, &glyphs[0], &glyphs[1], &glyphs[2]);
+          for (unsigned j = 0; j < chinfo->nchars; j++)
+            chinfo->data[j] = &chptr[16 * glyphs[j]];
+        } else if (chdat->charblks[i].flags & FLAG_FW16) {
           chinfo->char_width = 16;
           chinfo->spacing_cols = 0;   // No spacing for fixed width chars.
-          chinfo->data = &chptr[16 * code_offset];
+          chinfo->nchars = 1;
+          chinfo->data[0] = &chptr[16 * code_offset];
         } else {
           // Lookup the second index (contains widths and offsets)
           uint16_t ientry = chptr[code_offset];
@@ -86,7 +97,8 @@ static bool lookup_chptr(uint32_t code, t_char_render_info *chinfo) {
 
           chinfo->char_width = (ientry >> 13) + 1;
           chinfo->spacing_cols = CHAR_SPACING;
-          chinfo->data = &chdata[ientry & 0x1FFF];
+          chinfo->nchars = 1;
+          chinfo->data[0] = &chdata[ientry & 0x1FFF];
         }
         return true;
       }
@@ -182,7 +194,6 @@ void draw_text_idx8_bus16_range(const char *s, uint8_t *buffer, unsigned skip, u
 
     unsigned ncols = chinfo.char_width;
     unsigned totalcols = ncols + chinfo.spacing_cols;
-    const uint16_t *pixdata = chinfo.data;
 
     if (skip && skip >= totalcols) {
       skip -= totalcols;
@@ -194,7 +205,11 @@ void draw_text_idx8_bus16_range(const char *s, uint8_t *buffer, unsigned skip, u
           skip--;
           continue;
         }
-        uint16_t ch = pixdata[i];
+
+        uint16_t ch = chinfo.data[0][i];
+        for (unsigned c = 1; c < chinfo.nchars; c++)
+          ch |= chinfo.data[c][i];
+
         #pragma GCC unroll 16
         for (unsigned j = 0; j < 16; j++)
           if (ch & (1 << j))
@@ -220,19 +235,19 @@ void draw_text_idx8_bus16(const char *s, uint8_t *buffer, unsigned pitch, uint8_
       lookup_chptr(MISSING_CHAR, &chinfo);
 
     unsigned ncols = chinfo.char_width;
-    const uint16_t *pixdata = chinfo.data;
-
     for (unsigned i = 0; i < ncols; i++) {
-      uint16_t ch = pixdata[i];
+      uint16_t ch = chinfo.data[0][i];
+      for (unsigned c = 1; c < chinfo.nchars; c++)
+        ch |= chinfo.data[c][i];
+
       #pragma GCC unroll 16
       for (unsigned j = 0; j < 16; j++)
         if (ch & (1 << j))
-          vram_write(&buffer[pitch * j], color);
-      buffer++;
+          vram_write(&buffer[pitch * j + i], color);
     }
 
     // Add optional columns of empty space
-    buffer += chinfo.spacing_cols;
+    buffer += ncols + chinfo.spacing_cols;
 
     s += utf8_chlen(s);
   }
@@ -246,19 +261,19 @@ void draw_text_idx8_bus16_count(const char *s, uint8_t *buffer, unsigned count, 
       lookup_chptr(MISSING_CHAR, &chinfo);
 
     unsigned ncols = chinfo.char_width;
-    const uint16_t *pixdata = chinfo.data;
-
     for (unsigned i = 0; i < ncols; i++) {
-      uint16_t ch = pixdata[i];
+      uint16_t ch = chinfo.data[0][i];
+      for (unsigned c = 1; c < chinfo.nchars; c++)
+        ch |= chinfo.data[c][i];
+
       #pragma GCC unroll 16
       for (unsigned j = 0; j < 16; j++)
         if (ch & (1 << j))
-          vram_write(&buffer[pitch * j], color);
-      buffer++;
+          vram_write(&buffer[pitch * j + i], color);
     }
 
     // Add optional columns of empty space
-    buffer += chinfo.spacing_cols;
+    buffer += ncols + chinfo.spacing_cols;
   }
 }
 
