@@ -40,7 +40,6 @@ void draw_text_idx8(const char *s, uint8_t *buffer, unsigned pitch, uint8_t colo
 // Same as above but with 16bit bus support (for GBA VRAM-like buffers)
 void draw_text_idx8_bus16(const char *s, uint8_t *buffer, unsigned pitch, uint8_t color);
 void draw_text_idx8_bus16_range(const char *s, uint8_t *buffer, unsigned skip, unsigned maxcols, unsigned pitch, uint8_t color);
-void draw_text_idx8_bus16_count(const char *s, uint8_t *buffer, unsigned count, unsigned pitch, uint8_t color);
 
 #endif
 

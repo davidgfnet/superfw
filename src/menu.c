@@ -1209,11 +1209,15 @@ static void draw_central_text_ovf(const char *t, volatile uint8_t *frame, unsign
 
 static void draw_central_text_wrapped(const char *t, volatile uint8_t *frame, unsigned x, unsigned y, unsigned maxw) {
   while (*t) {
+    char tmp[128];
     unsigned outw;
     unsigned linechars = font_width_cap_space(t, maxw, &outw);
     unsigned charcnt = linechars ?: utf8_strlen(t);
     uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + x - outw / 2];
-    draw_text_idx8_bus16_count(t, basept, charcnt, SCREEN_WIDTH, FT_COLOR);
+
+    memcpy(tmp, t, charcnt);
+    tmp[charcnt] = 0;
+    draw_text_idx8_bus16(tmp, basept, SCREEN_WIDTH, FT_COLOR);
 
     t += charcnt;      // Advance text
     y += 16;           // Move down in the buffer

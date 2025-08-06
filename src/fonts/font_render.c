@@ -17,8 +17,10 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 #include <stdbool.h>
 
+#include "compiler.h"
 #include "utf_util.h"
 #include "font_embed.h"
 #include "hangul.h"
@@ -227,6 +229,7 @@ void draw_text_idx8_bus16_range(const char *s, uint8_t *buffer, unsigned skip, u
   }
 }
 
+ARM_CODE IWRAM_CODE NOINLINE
 void draw_text_idx8_bus16(const char *s, uint8_t *buffer, unsigned pitch, uint8_t color) {
   while (*s) {
     t_char_render_info chinfo;
@@ -250,30 +253,6 @@ void draw_text_idx8_bus16(const char *s, uint8_t *buffer, unsigned pitch, uint8_
     buffer += ncols + chinfo.spacing_cols;
 
     s += utf8_chlen(s);
-  }
-}
-
-void draw_text_idx8_bus16_count(const char *s, uint8_t *buffer, unsigned count, unsigned pitch, uint8_t color) {
-  for (unsigned n = 0; n < count; n += utf8_chlen(&s[n])) {
-    t_char_render_info chinfo;
-    uint32_t code = utf8_decode(&s[n]);
-    if (!lookup_chptr(code, &chinfo))
-      lookup_chptr(MISSING_CHAR, &chinfo);
-
-    unsigned ncols = chinfo.char_width;
-    for (unsigned i = 0; i < ncols; i++) {
-      uint16_t ch = chinfo.data[0][i];
-      for (unsigned c = 1; c < chinfo.nchars; c++)
-        ch |= chinfo.data[c][i];
-
-      #pragma GCC unroll 16
-      for (unsigned j = 0; j < 16; j++)
-        if (ch & (1 << j))
-          vram_write(&buffer[pitch * j + i], color);
-    }
-
-    // Add optional columns of empty space
-    buffer += ncols + chinfo.spacing_cols;
   }
 }
 
