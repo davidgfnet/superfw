@@ -1233,8 +1233,11 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
         void (*cb)() = popup.opt ? popup.callback : NULL;
         memset(&popup, 0, sizeof(popup));
 
-        if ((pressed & KEY_BUTTA) && cb)
+        if ((pressed & KEY_BUTTA) && cb) {
+          set_supercard_mode(MAPPED_SDRAM, true, true);
           cb();
+          set_supercard_mode(MAPPED_SDRAM, true, false);
+        }
       }
       else if (pressed & (KEY_BUTTLEFT | KEY_BUTTRIGHT))
         popup.opt ^= 1;
