@@ -45,6 +45,7 @@ extern const char *savestates_paths[1];
 extern uint32_t menu_theme;
 extern uint32_t lang_id;
 extern uint32_t recent_menu;
+extern uint32_t show_hidden_files;
 extern uint32_t anim_speed;
 
 // Defaults/Settings
