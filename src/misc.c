@@ -25,34 +25,58 @@
 #include "supercard_driver.h"
 #include "fatfs/ff.h"
 
+static const uint32_t start_seed = 0xdeadbeef;
+static uint32_t lcg32(uint32_t s) {
+  return s * 1664525U + 1013904223U;
+}
+
 // Tests the SDRAM, to ensure it actually holds data correctly.
 ARM_CODE IWRAM_CODE NOINLINE
 int sdram_test(progress_abort_fn progcb) {
   // Write stuff to SDRAM and check that it indeed was properly written.
-  // To avoid losing data, we backup the current word into a register.
-  volatile uint16_t *sdram_ptr  = (uint16_t*)GBA_ROM_BASE;
-  const static uint16_t tseq[] = { 0xABCD, 0xAAAA, 0x5555 };
+  uint32_t tmp[2][512];
+  volatile uint32_t *sdram_ptr  = (uint32_t*)GBA_ROM_BASE;
+  uint32_t rndgen = start_seed;
+  uint32_t pos = 0;
+  int ret = 0;
 
-  // Skip the last word (I suppose!) since it's the SC control reg.
-  for (unsigned i = 0; i < 16*1024*1024 - 1; i++) {
-    uint16_t oval = sdram_ptr[i];
-    for (unsigned j = 0; j < sizeof(tseq)/sizeof(tseq[0]); j++) {
-      sdram_ptr[i] = tseq[j];
-      if (sdram_ptr[i] != tseq[j]) {
-        sdram_ptr[i] = oval;
-        return -i;
+  for (unsigned i = 0; i < 8*1024*1024; i++) {
+    // Validate the previously written position
+    if (i >= 512) {
+      uint32_t prevpos = (pos - 22541U * 512U) & (8*1024*1024U - 1U);
+      if (tmp[1][i & 511] != sdram_ptr[prevpos]) {
+        ret = -i;
+        break;
       }
+      sdram_ptr[prevpos] = tmp[0][i & 511];
     }
-    sdram_ptr[i] = oval;
+
+    // Store the current SDRAM value and the random value we are writing.
+    tmp[0][i & 511] = sdram_ptr[pos];
+    tmp[1][i & 511] = rndgen;
+
+    // Write to SDRAM
+    sdram_ptr[pos] = rndgen;
+
+    // Advance pointers
+    pos = (pos + 22541) & (8*1024*1024U - 1U);
+    rndgen = lcg32(rndgen);
 
     // Update progress every now and then.
-    if (!(i & 0xFFFF)) {
-      if (progcb(i >> 16, 256))
-        return 0;
+    if (!((i+1) & 0xFFFF)) {
+      if (progcb(i >> 16, 128))
+        break;
     }
   }
 
-  return 0;
+  // Restore tmp data
+  for (unsigned i = 0; i < 512; i++) {
+    uint32_t prevpos = (pos - 22541U * 512U) & (8*1024*1024U - 1U);
+    sdram_ptr[prevpos] = tmp[0][i & 511];
+    pos = (pos + 22541) & (8*1024*1024U - 1U);
+  }
+
+  return ret;
 }
 
 // Tests the SRAM, to ensure it actually holds data correctly.
