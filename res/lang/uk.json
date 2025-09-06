@@ -56,7 +56,7 @@
     "MSG_INGAME_I": "Показувати меню при натисканні на комбінацію клавіш",
     "MSG_LOADER_SAVET": "Збереження",
     "MSG_LOADER_ST0": "< Пряме >",
-    "MSG_LOADER_ST1": "< SRAM> ",
+    "MSG_LOADER_ST1": "< SRAM >",
     "MSG_LOADER_LOADP": "Завантаження",
     "MSG_LOADER_SAVEP": "Збереження",
     "MSG_LOADER_LOADP0": "< Автоматично >",

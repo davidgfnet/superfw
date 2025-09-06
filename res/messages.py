@@ -11,6 +11,7 @@ OTHER_LANGS = [
   "it",
   "de",
   "ca",
+  "pt",
   "cs",
   "zh",
   "ko",
@@ -119,7 +120,7 @@ en_strings = {
 
   "MSG_LOADER_SAVET":  "Save mode",
   "MSG_LOADER_ST0":    "< DirectSave >",
-  "MSG_LOADER_ST1":    "< SRAM> ",
+  "MSG_LOADER_ST1":    "< SRAM >",
   "MSG_LOADER_LOADP":  "Savegame load",
   "MSG_LOADER_SAVEP":  "Savegame save",
   "MSG_LOADER_LOADP0": "< Load >",

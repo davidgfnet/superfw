@@ -56,7 +56,7 @@
     "MSG_INGAME_I": "按住组合键时显示菜单",
     "MSG_LOADER_SAVET": "存档方式",
     "MSG_LOADER_ST0": "< DirectSave >",
-    "MSG_LOADER_ST1": "< SRAM> ",
+    "MSG_LOADER_ST1": "< SRAM >",
     "MSG_LOADER_LOADP": "读取存档",
     "MSG_LOADER_SAVEP": "写入存档",
     "MSG_LOADER_LOADP0": "< 读取 >",

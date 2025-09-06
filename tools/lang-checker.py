@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Generate font using
-# ./generator.py --font-blocks ascii,arrows,fixwidth,cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni --output ../fonts-full.pack
+# ./generator.py  --font-files unscii-16-full.hex  --font-blocks ascii,arrows,cjk-sym,latin,latin-a,latin-b,greek,cyrilic,hiragana,katakana,cjk-uni,hangul --output ../fonts-full.pack
 
 import json, struct, os
 

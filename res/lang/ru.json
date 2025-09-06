@@ -56,7 +56,7 @@
     "MSG_INGAME_I": "Показывать меню при нажатии комбинации клавиш",
     "MSG_LOADER_SAVET": "Сохранение",
     "MSG_LOADER_ST0": "< Прямое>",
-    "MSG_LOADER_ST1": "< SRAM> ",
+    "MSG_LOADER_ST1": "< SRAM >",
     "MSG_LOADER_LOADP": "Загрузка",
     "MSG_LOADER_SAVEP": "Сохранение",
     "MSG_LOADER_LOADP0": "< Автоматически >",

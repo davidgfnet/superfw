@@ -56,7 +56,7 @@
     "MSG_INGAME_I": "Menü bei Tasten-Kombination anzeigen",
     "MSG_LOADER_SAVET": "Speichermodus",
     "MSG_LOADER_ST0": "< Speicher direkt >",
-    "MSG_LOADER_ST1": "< SRAM> ",
+    "MSG_LOADER_ST1": "< SRAM >",
     "MSG_LOADER_LOADP": "Spielstand laden",
     "MSG_LOADER_SAVEP": "Save speichern",
     "MSG_LOADER_LOADP0": "< Laden >",
