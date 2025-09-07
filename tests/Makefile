@@ -4,6 +4,9 @@ MEMCHK_FLAGS=-fsanitize=address -lasan
 CFLAGS = -O0 -ggdb -I../src/ -Wall $(COV_FLAGS)
 
 all:
+	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o cimpl_test.bin cimpl_test.c ../src/cimpl.c -DBUILTIN_PREFIX=superfw_
+	./cimpl_test.bin
+	lcov -c -d . -o cimpl_test.info
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o util_test.bin util_test.c ../src/util.c ../src/fileutil.c -I../
 	./util_test.bin
 	lcov -c -d . -o util_test.info
@@ -20,7 +23,7 @@ all:
 	./crc_test.bin
 	lcov -c -d . -o crc_test.info
 
-	lcov -a util_test.info -a utf_util_test.info -a crc_test.info -a sha256_test.info -a cheats_test.info -o total.info
+	lcov -a cimpl_test.info -a util_test.info -a utf_util_test.info -a crc_test.info -a sha256_test.info -a cheats_test.info -o total.info
 	rm -rf coverage/
 	genhtml -o coverage/ total.info
 

@@ -66,6 +66,7 @@ DIRECTSAVEFILES=src/directsaver.S \
 
 MENUFILES=src/ingame.S \
           src/ingame_menu.c \
+          src/cimpl.c \
           src/fonts/font_render.c \
           src/save.c \
           src/util.c \
@@ -79,6 +80,7 @@ MENUFILES=src/ingame.S \
 
 INFILES=src/gba_ewram_crt0.S \
         src/main.c \
+        src/cimpl.c \
         src/settings.c \
         src/loader.c \
         src/save.c \
