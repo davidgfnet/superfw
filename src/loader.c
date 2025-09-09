@@ -31,7 +31,6 @@
 #include "directsave.h"
 #include "common.h"
 #include "util.h"
-#include "sha256.h"
 
 // Here we have the ROM loading routines.
 

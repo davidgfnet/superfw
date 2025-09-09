@@ -98,6 +98,7 @@
 
 // TODO Not use memmove32 (arm-thumb jumps)
 
+ARM_CODE IWRAM_CODE NOINLINE
 static bool match_sig_prefix(const uint32_t *p, const uint16_t *sig, unsigned sigsize) {
   const uint16_t *p16 = (uint16_t*)p;
   for (unsigned i = 0; i < sigsize / 2; i++) {
@@ -142,6 +143,7 @@ static bool find_arm_ldrpc(const uint32_t *rom, unsigned start, unsigned target)
   return true;
 }
 
+ARM_CODE IWRAM_CODE NOINLINE
 static void push_save_handler(t_patch *patch, unsigned savetype, unsigned hndltype, uint32_t addr) {
   memmove32(&patch->op[patch->wcnt_ops+patch->save_ops+1],
             &patch->op[patch->wcnt_ops+patch->save_ops], (patch->irqh_ops + patch->rtc_ops) * 4);
