@@ -66,7 +66,7 @@
 
 // Given a desired flash address, it generates the gamepak address necessary
 // to access it, taking into consideration the address permutation described.
-#ifndef SUPERCARD_LITE_IO
+#ifndef SUPERCARD_LITE_ADDR_SORT
   static uint32_t addr_perm(uint32_t addr) {
     return (addr & 0xFFFFFE02) |
            ((addr & 0x001) << 7) |
@@ -116,6 +116,7 @@ uint32_t flash_identify() {
   return ret;
 }
 
+#ifndef SUPERCHIS
 // Performs a flash full-chip erase.
 bool flash_erase() {
   FLASH_WE_MODE();
@@ -190,6 +191,127 @@ bool flash_program(const uint8_t *buf, unsigned size) {
   return true;
 }
 
+#else
+// Performs a flash sector erase for first 4MByte
+
+void flash_erase_sector(uint32_t sa) {
+    SLOT2_BASE_U16[addr_perm(sa/2)] = 0xF0;
+    SLOT2_BASE_U16[addr_perm(0xAAA/2)] = 0xAA;
+    SLOT2_BASE_U16[addr_perm(0x555/2)] = 0x55;
+    SLOT2_BASE_U16[addr_perm(0xAAA/2)] = 0x80;
+    SLOT2_BASE_U16[addr_perm(0xAAA/2)] = 0xAA;
+    SLOT2_BASE_U16[addr_perm(0x555/2)] = 0x55;
+    SLOT2_BASE_U16[addr_perm(sa/2)] = 0x30;
+}
+
+bool flash_polling_wait(uint32_t addr, uint16_t expected_data)
+{
+    while (1) {
+        uint16_t status1 = SLOT2_BASE_U16[addr_perm(addr/2)];
+        // Check Erase
+        if ((status1 & 0x80) == (expected_data & 0x80)) {
+            // DQ7 = 1
+            uint16_t status2 = SLOT2_BASE_U16[addr_perm(addr/2)];
+            if ((status2 & 0x80) == (expected_data & 0x80)) {
+                break;
+            }
+        }
+        // Check Timeout
+        if (status1 & 0x20) {
+            // Timeout Check DQ7
+            uint16_t status2 = SLOT2_BASE_U16[addr_perm(addr/2)];
+            if ((status2 & 0x80) == (expected_data & 0x80)) {
+                break;
+            } else {
+                SLOT2_BASE_U16[addr_perm(0)] = 0xF0;
+                return false;
+            }
+        }
+        __asm("nop");
+    }
+    SLOT2_BASE_U16[addr_perm(0)] = 0xF0;
+    return true;
+}
+
+static bool is_pre_erased = false;
+bool flash_program_auto(uint32_t address, const uint8_t *buffer, unsigned buffer_size, bool pre_erase) {
+    if (address == 0 || pre_erase == false) {
+        is_pre_erased = false;
+    }
+    uint32_t c = 0; // 计算偏移
+    while (c < buffer_size) {
+        uint32_t pa = address + c;
+        uint8_t tmp[WRITE_BUF_SIZE];
+        set_supercard_mode(MAPPED_SDRAM, true, true);
+        memcpy(tmp, &buffer[pa], WRITE_BUF_SIZE);
+        FLASH_WE_MODE();
+        // Reset any previous command that might be ongoing.
+        for (unsigned i = 0; i < 32; i++)
+          SLOT2_BASE_U16[0] = 0x00F0;
+        // is sector boundary
+        if ((pa % SECTOR_SIZE) == 0) {
+            if (is_pre_erased) {
+                if (!flash_polling_wait(pa, 0xFF)) {
+                  is_pre_erased = false;
+                  set_supercard_mode(MAPPED_SDRAM, true, true);
+                  return false;
+                }
+                is_pre_erased = false;
+            } else {
+                flash_erase_sector(pa);
+                if (!flash_polling_wait(pa, 0xFF)) {
+                  set_supercard_mode(MAPPED_SDRAM, true, true);
+                  return false;
+                }
+            }
+        }
+
+        SLOT2_BASE_U16[addr_perm(0xAAA/2)] = 0xAA;
+        SLOT2_BASE_U16[addr_perm(0x555/2)] = 0x55;
+        SLOT2_BASE_U16[addr_perm(pa/2)] = 0x25;
+        SLOT2_BASE_U16[addr_perm(pa/2)] = (WRITE_BUF_SIZE>>1)-1;
+        for (uint32_t i=0; i<WRITE_BUF_SIZE; i+=2) {
+            SLOT2_BASE_U16[addr_perm((pa+i)/2)] = (*((uint8_t*)tmp+i+1)) << 8 | (*((uint8_t*)tmp+i));
+        }
+        SLOT2_BASE_U16[addr_perm(pa/2)] = 0x29;
+        uint32_t last_addr = pa + WRITE_BUF_SIZE - 2;
+        uint16_t expected_data = (*((uint8_t*)tmp+WRITE_BUF_SIZE-1)) << 8 | (*((uint8_t*)tmp+WRITE_BUF_SIZE-2));
+        if (!flash_polling_wait(last_addr, expected_data)) {
+          set_supercard_mode(MAPPED_SDRAM, true, true);
+          return false;
+        }
+        c += WRITE_BUF_SIZE;
+    }
+    // pre erase
+    uint32_t next_addr = address + buffer_size;
+    if (pre_erase && ((next_addr % SECTOR_SIZE) == 0) && next_addr < 32*1024*1024) {
+        is_pre_erased = true;
+        flash_erase_sector(next_addr);
+    } else {
+        is_pre_erased = false;
+    }
+    set_supercard_mode(MAPPED_SDRAM, true, true);
+    return true;
+}
+bool flash_program(const uint8_t *buf, unsigned size) {
+  return flash_program_auto(0, buf, size, false);
+}
+bool flash_erase() {
+  FLASH_WE_MODE();
+  // Reset any previous command that might be ongoing.
+  for (unsigned i = 0; i < 32; i++)
+    SLOT2_BASE_U16[0] = 0x00F0;
+  for (uint32_t addr = 0; addr < 4 * 1024 * 1024; addr += SECTOR_SIZE) {
+    flash_erase_sector(addr);
+    if (!flash_polling_wait(addr, 0xFF)) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      return false;
+    }
+  }
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return true;
+}
+#endif
 // Programs the built-in flash memory. 
 bool flash_verify(const uint8_t *buf, unsigned size) {
   for (unsigned i = 0; i < size; i += 512) {

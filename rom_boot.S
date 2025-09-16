@@ -183,13 +183,13 @@ main:
   @ Figure out whether this payload is running on FW flash or on SDRAM.
   @ Place the mode (0x4 for flash or 0x5 for sdram) in r12
   mov r0, $GAMEPAK_BASEADDR
-  mov r1, $63
+  mov r1, $7            @ Check 8 blocks total (32MB address space = 8 * 4MB)
   mov r12, $0x4          @ Assume booting from flash
   ldmia r0, {r4-r7}
 
   1:
-    add r0, $(512*1024)
-    ldmia r0, {r8-r11}   @ Compare the first 16 bytes of each 512KB block.
+    add r0, $(4*1024*1024)
+    ldmia r0, {r8-r11}   @ Compare the first 16 bytes of each 4MB block.
     cmp   r4, r8
     cmpeq r5, r9
     cmpeq r6, r10

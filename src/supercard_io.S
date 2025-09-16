@@ -49,7 +49,7 @@
 .global sc_read_sectors_w0   // Version that uses 0x08000000-0x09FFFFFF addrs
 .global sc_read_sectors_w1   // Version that uses 0x0A000000-0x0BFFFFFF addrs
 
-#ifndef SUPERCARD_LITE_IO
+#ifndef SUPERCARD_LITE_READ
 
 // Reads N 512 byte sectors mapped via ROM mappings into the provided buffer
 // as fast as possible. Assumes that the read operation was issued and that
