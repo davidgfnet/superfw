@@ -234,11 +234,11 @@ bool flash_polling_wait(uint32_t addr, uint16_t expected_data)
 }
 
 static bool is_pre_erased = false;
-bool flash_program_auto(uint32_t address, const uint8_t *buffer, unsigned buffer_size, bool pre_erase) {
+bool flash_program_auto(uint32_t address, const uint8_t *buffer, unsigned buffer_size, bool skip_erase, bool pre_erase) {
     if (address == 0 || pre_erase == false) {
         is_pre_erased = false;
     }
-    uint32_t c = 0; // 计算偏移
+    uint32_t c = 0;
     while (c < buffer_size) {
         uint32_t pa = address + c;
         uint8_t tmp[WRITE_BUF_SIZE];
@@ -249,7 +249,7 @@ bool flash_program_auto(uint32_t address, const uint8_t *buffer, unsigned buffer
         for (unsigned i = 0; i < 32; i++)
           SLOT2_BASE_U16[0] = 0x00F0;
         // is sector boundary
-        if ((pa % SECTOR_SIZE) == 0) {
+        if (!skip_erase && (pa % SECTOR_SIZE) == 0) {
             if (is_pre_erased) {
                 if (!flash_polling_wait(pa, 0xFF)) {
                   is_pre_erased = false;
@@ -284,7 +284,7 @@ bool flash_program_auto(uint32_t address, const uint8_t *buffer, unsigned buffer
     }
     // pre erase
     uint32_t next_addr = address + buffer_size;
-    if (pre_erase && ((next_addr % SECTOR_SIZE) == 0) && next_addr < 32*1024*1024) {
+    if (!skip_erase && pre_erase && ((next_addr % SECTOR_SIZE) == 0) && next_addr < 32*1024*1024) {
         is_pre_erased = true;
         flash_erase_sector(next_addr);
     } else {
@@ -294,14 +294,14 @@ bool flash_program_auto(uint32_t address, const uint8_t *buffer, unsigned buffer
     return true;
 }
 bool flash_program(const uint8_t *buf, unsigned size) {
-  return flash_program_auto(0, buf, size, false);
+  return flash_program_auto(0, buf, size, true, false);
 }
 bool flash_erase() {
   FLASH_WE_MODE();
   // Reset any previous command that might be ongoing.
   for (unsigned i = 0; i < 32; i++)
     SLOT2_BASE_U16[0] = 0x00F0;
-  for (uint32_t addr = 0; addr < 4 * 1024 * 1024; addr += SECTOR_SIZE) {
+  for (uint32_t addr = 0; addr < 2 * 1024 * 1024; addr += SECTOR_SIZE) {
     flash_erase_sector(addr);
     if (!flash_polling_wait(addr, 0xFF)) {
       set_supercard_mode(MAPPED_SDRAM, true, true);
