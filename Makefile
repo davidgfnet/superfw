@@ -14,11 +14,39 @@ COMPRESSION_RATIO ?= 3
 BOARD ?= sd
 
 ifeq ($(BOARD),lite)
-  GLOBAL_DEFINES ?= -DSUPERCARD_LITE_IO
+  GLOBAL_DEFINES += -DSUPERCARD_LITE_IO
+  COMPRESS_FIRMWARE = 1
+  MAXFSIZE = 512
 else ifeq ($(BOARD),sd)
-  GLOBAL_DEFINES ?= -DBUNDLE_GBC_EMULATOR
+  BUNDLE_GBC_EMULATOR = 1
+  COMPRESS_FIRMWARE = 1
+  MAXFSIZE = 512
+else ifeq ($(BOARD),chis)
+  BUNDLE_GBC_EMULATOR = 1
+  BUNDLE_OTHER_EMULATORS = 1
+  MAXFSIZE = 2048
 else
   $(error No valid board specified in BOARD)
+endif
+
+FWBINFILES=firmware.ewram.gba res/patches.db res/fonts.pack
+
+ifeq ($(COMPRESS_FIRMWARE),1)
+  GLOBAL_DEFINES += -DCOMPRESS_FONTS -DCOMPRESS_PATCHES -DCOMPRESS_FIRMWARE
+  FWBINFILES := $(addsuffix .comp,$(FWBINFILES))
+endif
+
+ifeq ($(BUNDLE_GBC_EMULATOR),1)
+  GLOBAL_DEFINES += -DBUNDLE_GBC_EMULATOR
+  BIEMUFILES += emu/jagoombacolor_v0.5.gba.comp
+endif
+
+ifeq ($(BUNDLE_OTHER_EMULATORS),1)
+  GLOBAL_DEFINES += -DBUNDLE_OTHER_EMULATOR
+  BIEMUFILES += emu/pocketnes_20130701.gba.comp \
+                emu/wasabigba_v0.2.4.gba.comp \
+                emu/NGPGBA_v0.5.7.gba.comp \
+                emu/pceadvance-v7.5-scptch.gba.comp
 endif
 
 CFLAGS=-O2 -ggdb \
@@ -110,9 +138,9 @@ INFILES=src/gba_ewram_crt0.S \
         src/fonts/font_render.c \
         ${FATFSFILES}
 
-all:	firmware.ewram.gba.comp emu/jagoombacolor_v0.5.gba.comp res/patches.db.comp res/fonts.pack.comp
+all:	$(FWBINFILES) $(BIEMUFILES)
 	# Wrap the firmware around a ROM->EWRAM loader
-	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib
+	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K
 	$(OBJCOPY) --output-target=binary firmware.elf superfw.gba
 	# Fix the header/checksum.
 	./tools/fw-fixer.py superfw.gba

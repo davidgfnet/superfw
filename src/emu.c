@@ -46,6 +46,7 @@ unsigned pocket_nes_header(uint8_t *buffer, const char *fn, unsigned fs) {
 
 const t_emu_loader nes_loaders[] = {
   { "pocketnes",  pocket_nes_header },
+  { "vfs:PNES", pocket_nes_header },
   { NULL, NULL },
 };
 
@@ -151,6 +152,7 @@ unsigned wasabigba_header(uint8_t *buffer, const char *fn, unsigned fs) {
 
 const t_emu_loader sv_loaders[] = {
   { "wasabigba", wasabigba_header },
+  { "vfs:WASA", wasabigba_header },
   { NULL, NULL },
 };
 
@@ -180,6 +182,7 @@ unsigned ngpgba_header(uint8_t *buffer, const char *fn, unsigned fs) {
 
 const t_emu_loader ngc_loaders[] = {
   { "ngpgba", ngpgba_header },
+  { "vfs:NGPG", ngpgba_header },
   { NULL, NULL },
 };
 
@@ -216,6 +219,7 @@ unsigned pceadvance_header(uint8_t *buffer, const char *fn, unsigned fs) {
 
 const t_emu_loader pce_loaders[] = {
   { "pceadvance", pceadvance_header },
+  { "vfs:PCEA", pceadvance_header },
   { NULL, NULL },
 };
 

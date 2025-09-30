@@ -75,6 +75,8 @@
 
 #define REG_IPCSYNC      0x04000180
 
+#define ROUND_UP2(x, a) ( (((x) + (a) - 1) & (~(a - 1))) )
+
 @ Waits on IPCSYNC and sleeps a few microseconds every time before checking.
 #define WAIT_SYNC(value, wcnt)  \
   1:                            \
@@ -141,7 +143,7 @@ _start:
   .byte   0x00,0x00,0x00,0x00,0x00,0x00,0x00
 
   @ Software Version No (80000BCh)
-  .byte   0x00
+  .byte   0x5F
 
   @ Complement Check (80000BDh)
   .byte   0x00
@@ -183,13 +185,13 @@ main:
   @ Figure out whether this payload is running on FW flash or on SDRAM.
   @ Place the mode (0x4 for flash or 0x5 for sdram) in r12
   mov r0, $GAMEPAK_BASEADDR
-  mov r1, $63
+  mov r1, $(32 / 4 - 1)  @ Number of blocks to check
   mov r12, $0x4          @ Assume booting from flash
   ldmia r0, {r4-r7}
 
   1:
-    add r0, $(512*1024)
-    ldmia r0, {r8-r11}   @ Compare the first 16 bytes of each 512KB block.
+    add r0, $(4*1024*1024)   @ Use 4MiB blocks (compatible with bigger flash)
+    ldmia r0, {r8-r11}   @ Compare the first 16 bytes of each block block.
     cmp   r4, r8
     cmpeq r5, r9
     cmpeq r6, r10
@@ -303,30 +305,43 @@ _main_end:
   ldr r1, =0x0404    // Mode 4, BG2 enabled
   strh r1, [r8]
 
-  @ Uncompress the font glyphs. This supports any size.
+  @ Uncompress/extract the font glyphs. This supports any size.
   ldr r0, =font_start
-  mov r1, $HISCRATCH_ADDR
-  mov r2, $((font_end - font_start + 2047) / 2048)
-  bl sdram_copy                        @ Copy compressed fonts to scratch area.
-  mov r0, $0x5
-  bl set_sd_mode                       @ Map SDRAM so we can unpack it.
-  mov r0, $HISCRATCH_ADDR
-  mov r1, $FONT_BASE_ADDR
-  bl apunpack16                        @ Unpack font assets
+  #if defined(COMPRESS_FONTS)
+    mov r2, $((font_end - font_start + 2047) / 2048)
+    mov r1, $HISCRATCH_ADDR
+    bl sdram_copy                      @ Copy compressed fonts to scratch area.
+    mov r0, $0x5
+    bl set_sd_mode                     @ Map SDRAM so we can unpack it.
+    mov r0, $HISCRATCH_ADDR
+    mov r1, $FONT_BASE_ADDR
+    bl apunpack16                      @ Unpack font assets
+  #else
+    mov r2, $(((font_end - font_start + 8191) / 8192) * 4)
+    mov r1, $FONT_BASE_ADDR
+    bl sdram_copy                      @ Copy fonts directly (no unpacking)
+  #endif
 
   @ Uncompress the patch database. The uncompressed payload must be < 256KiB!
-  mov r0, r12
-  bl set_sd_mode                       @ Switch to source map
-  ldr r1, =patches_start
-  mov r0, $0x02000000
-  bl upkr_unpack                       @ Decompress to EWRAM
-  add r4, r0, $3
-  mov r0, $0x5
-  bl set_sd_mode                       @ Switch to SDRAM map
-  mov r0, $0x02000000
-  mov r1, $PATCH_DB_ADDR
-  lsr r2, r4, $2                       @ Number of words to copy
-  swi 0x0C0000                         @ Copy decompressed data to SDRAM
+  #if defined(COMPRESS_PATCHES)
+    mov r0, r12
+    bl set_sd_mode                     @ Switch to source map
+    ldr r1, =patches_start
+    mov r0, $0x02000000
+    bl upkr_unpack                     @ Decompress to EWRAM
+    add r4, r0, $3
+    mov r0, $0x5
+    bl set_sd_mode                     @ Switch to SDRAM map
+    mov r0, $0x02000000
+    mov r1, $PATCH_DB_ADDR
+    lsr r2, r4, $2                     @ Number of words to copy
+    swi 0x0C0000                       @ Copy decompressed data to SDRAM
+  #else
+    ldr r0, =patches_start
+    mov r1, $PATCH_DB_ADDR
+    mov r2, $((patches_end - patches_start + 2047) / 2048)
+    bl sdram_copy                      @ Copy patches directly
+  #endif
 
   @ Go ahead and copy assets to SDRAM locations.
   ldr r0, =assets_start
@@ -338,9 +353,16 @@ _main_end:
   mov r0, r12
   bl set_sd_mode                       @ Switch to source map
 
-  ldr r0, =FWPAYLOAD_ADDR
-  ldr r1, =payload_ewram
-  bl upkr_unpack
+  #if defined(COMPRESS_FIRMWARE)
+    ldr r0, =FWPAYLOAD_ADDR
+    ldr r1, =payload_ewram
+    bl upkr_unpack
+  #else
+    ldr r0, =payload_ewram
+    ldr r1, =FWPAYLOAD_ADDR
+    mov r2, $(ROUND_UP2(((payload_ewram_end - payload_ewram) / 4), 256))
+    swi 0x0C0000
+  #endif
 
   @ Proceed to launch/boot the actual firmware!
   @ Reset to EWRAM using SoftReset
@@ -613,9 +635,16 @@ arm9_bootaddr_itcm:
   @ Only the base ASCII font is ever used (on error)
 
   @ Proceed to unpack the EWRAM payload to main-ram.
-  ldr r0, =FWPAYLOAD_ADDR
-  ldr r1, =payload_ewram
-  bl upkr_unpack
+  #if defined(COMPRESS_FIRMWARE)
+    ldr r0, =FWPAYLOAD_ADDR
+    ldr r1, =payload_ewram
+    bl upkr_unpack
+  #else
+    ldr r0, =payload_ewram
+    ldr r1, =FWPAYLOAD_ADDR
+    mov r2, $(ROUND_UP2(((payload_ewram_end - payload_ewram) / 4), 256))
+    swi 0x0C0000
+  #endif
 
   @ NDS soft-reset to run EWRAM payload
   ldr r0, =FWPAYLOAD_ADDR
@@ -625,6 +654,7 @@ arm9_bootaddr_itcm:
 
 
 @ Include decompression routines here
+
 #define _APPACK_HWORD_VERSION
 #include "src/unpack.S"
 
@@ -637,26 +667,69 @@ _end_bootloader:
 
 @ apack compressed assets!
 payload_ewram:
-  .incbin "firmware.ewram.gba.comp"
+  #if defined(COMPRESS_FIRMWARE)
+    .incbin "firmware.ewram.gba.comp"
+  #else
+    .incbin "firmware.ewram.gba"
+  #endif
   .balign 4
+payload_ewram_end:
 
 patches_start:
-  .incbin "res/patches.db.comp"
+  #if defined(COMPRESS_PATCHES)
+    .incbin "res/patches.db.comp"
+  #else
+    .incbin "res/patches.db"
+  #endif
   .balign 4
 patches_end:
 
 font_start:
-  .incbin "res/fonts.pack.comp"
+  #if defined(COMPRESS_FONTS)
+    .incbin "res/fonts.pack.comp"
+  #else
+    .incbin "res/fonts.pack"
+  #endif
   .balign 4
 font_end:
 
 assets_start:
   #ifdef BUNDLE_GBC_EMULATOR
   .ascii "GCEM"                                        @ GB/C emulator (GoombaColor)
-  .word (comp_goomba_emu_end - comp_goomba_emu_start)  @ Payload size
-  comp_goomba_emu_start:
+  .word (goomba_emu_end - goomba_emu_start)            @ Payload size
+  goomba_emu_start:
     .incbin "emu/jagoombacolor_v0.5.gba.comp"
-  comp_goomba_emu_end:
+  goomba_emu_end:
+  .balign 4
+  #endif
+
+  #ifdef BUNDLE_OTHER_EMULATOR
+  .ascii "PNES"
+  .word (pocketnes_emu_end - pocketnes_emu_start)
+  pocketnes_emu_start:
+    .incbin "emu/pocketnes_20130701.gba.comp"
+  pocketnes_emu_end:
+  .balign 4
+
+  .ascii "WASA"
+  .word (wasabi_emu_end - wasabi_emu_start)
+  wasabi_emu_start:
+    .incbin "emu/wasabigba_v0.2.4.gba.comp"
+  wasabi_emu_end:
+  .balign 4
+
+  .ascii "NGPG"
+  .word (ngpgba_emu_end - ngpgba_emu_start)
+  ngpgba_emu_start:
+    .incbin "emu/NGPGBA_v0.5.7.gba.comp"
+  ngpgba_emu_end:
+  .balign 4
+
+  .ascii "PCEA"
+  .word (pceadv_emu_end - pceadv_emu_start)
+  pceadv_emu_start:
+    .incbin "emu/pceadvance-v7.5-scptch.gba.comp"
+  pceadv_emu_end:
   .balign 4
   #endif
 

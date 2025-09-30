@@ -23,7 +23,7 @@ OUTPUT_ARCH(arm)
 ENTRY(_start)
 
 MEMORY {
-    ROM   : ORIGIN = 0x08000000, LENGTH = 512K
+    ROM   : ORIGIN = 0x08000000, LENGTH = MAX_FLASH_SIZE
 }
 
 /* The first stage must be under 1KiB, so it is properly mapped. */
