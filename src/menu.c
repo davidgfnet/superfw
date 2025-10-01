@@ -84,14 +84,6 @@ extern bool slowsd;
 #define FLASH_UNLOCK_KEYS      (KEY_BUTTDOWN|KEY_BUTTB|KEY_BUTTSTA)
 #define FLASH_GO_KEYS          (KEY_BUTTUP|KEY_BUTTL|KEY_BUTTR)
 
-enum {
-  UiSetTheme = 0,
-  UiSetLang  = 1,
-  UiSetRect  = 2,
-  UiSetASpd  = 3,
-  UiSetSave  = 4,
-  UiSetMAX   = 4,
-};
 
 enum {
   ToolsSDRAMTest   = 0,
@@ -337,6 +329,18 @@ typedef struct {
 } t_sdram_state;
 
 _Static_assert (sizeof(t_sdram_state) <= 15*1024*1024, "scratch SDRAM doesn't exceed 15MB");
+
+typedef struct {
+  unsigned char name;
+  void (*render)(char* buf, int buflen);
+  void (*on_change)(void);
+  
+  uint32_t *from_bool;
+
+  uint32_t *from_int;
+  unsigned from_int_offset;
+  uint32_t from_int_max;
+} UiMenuItem;
 
 t_sdram_state *sdr_state = (t_sdram_state*)0x08000000;
 uint8_t *hiscratch = (uint8_t*)ROM_HISCRATCH_U8;
@@ -1061,6 +1065,13 @@ static void browser_reload() {
     if (f_readdir(&d, &info) != FR_OK || !info.fname[0])
       break;
 
+    if (!show_hidden_files) {
+      if (info.fname[0] == '.') // Skip dot files
+        continue;
+      if (info.fattrib & AM_HID) // Skip hidden files
+        continue;
+    }
+
     if (fcount >= BROWSER_MAXFN_CNT)
       break;
 
@@ -1650,28 +1661,65 @@ void render_settings(volatile uint8_t *frame) {
   draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 114);
 }
 
+void render_ui_setting_theme(char *buf, int buflen) {
+  npf_snprintf(buf, buflen, "< %lu >", menu_theme + 1U);
+}
+
+void render_ui_setting_lang(char *buf, int buflen) {
+  npf_snprintf(buf, buflen, "< %s >", msgs[lang_id][MSG_LANG_NAME]);
+}
+
+void reload_theme() {
+  // Palette 0..15 contains the main menu template colors
+  MEM_PALETTE[FG_COLOR] = themes[menu_theme].fg_color;
+  MEM_PALETTE[BG_COLOR] = themes[menu_theme].bg_color;
+  MEM_PALETTE[FT_COLOR] = themes[menu_theme].ft_color;
+  MEM_PALETTE[HI_COLOR] = themes[menu_theme].hi_color;
+  // In-game menu palette
+  MEM_PALETTE[INGMENU_PAL_FG] = themes[menu_theme].fg_color;
+  MEM_PALETTE[INGMENU_PAL_BG] = themes[menu_theme].bg_color;
+  MEM_PALETTE[INGMENU_PAL_HI] = themes[menu_theme].ft_color;
+  MEM_PALETTE[INGMENU_PAL_SH] = themes[menu_theme].sh_color;
+
+  // Palette entries for icons and other objects
+  MEM_PALETTE[256 + SEL_COLOR] = themes[menu_theme].hi_blend;
+}
+
+static const UiMenuItem ui_settings_items[] = {
+  { .name = MSG_UIS_THEME, .render = render_ui_setting_theme, .from_int = &menu_theme, .from_int_max = THEME_COUNT, .on_change = reload_theme },
+  { .name = MSG_UIS_LANG, .render = render_ui_setting_lang, .from_int = &lang_id, .from_int_max = LANG_COUNT },
+  { .name = MSG_UIS_RECNT, .from_bool = &recent_menu },
+  { .name = MSG_UIS_SHOWHIDDEN, .from_bool = &show_hidden_files, .on_change = browser_reload },
+  { .name = MSG_UIS_ANSPD, .from_int = &anim_speed, .from_int_offset = MSG_UIS_SPD0, .from_int_max = animspd_cnt },
+};
+#define UI_SETTINGS_ITEMS_COUNT (sizeof(ui_settings_items)/sizeof(UiMenuItem))
+
 void render_ui_settings(volatile uint8_t *frame) {
   const unsigned colx = 170;
   char tmpbuf[64];
-  npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %lu >", menu_theme + 1U);
-  draw_text_ovf(msgs[lang_id][MSG_UIS_THEME], frame, 8, 22, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 );
 
-  npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %s >", msgs[lang_id][MSG_LANG_NAME]);
-  draw_text_ovf(msgs[lang_id][MSG_UIS_LANG], frame, 8, 22 + 20, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 + 20 );
+  int y = 0;
+  for (unsigned i = 0; i < UI_SETTINGS_ITEMS_COUNT; i++) {
+    const UiMenuItem *item = &ui_settings_items[i];
+    if (item->render) {
+      item->render(tmpbuf, sizeof(tmpbuf));
+      draw_text_ovf(msgs[lang_id][item->name], frame, 8, 22 + y, 224);
+      draw_central_text(tmpbuf, frame, colx, 22 + y);
+    } else if (item->from_bool) {
+      draw_text_ovf(msgs[lang_id][item->name], frame, 8, 22 + y, 224);
+      draw_central_text(msgs[lang_id][*item->from_bool ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + y);
+    } else if (item->from_int) {
+      draw_text_ovf(msgs[lang_id][item->name], frame, 8, 22 + y, 224);
+      draw_central_text(msgs[lang_id][item->from_int_offset + *item->from_int], frame, colx, 22 + y);
+    }
+    y += 20;
+  }
 
-  draw_text_ovf(msgs[lang_id][MSG_UIS_RECNT], frame, 8, 22 + 40, 224);
-  draw_central_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 40 );
-
-  draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 60, 224);
-  draw_central_text(msgs[lang_id][MSG_UIS_SPD0 + anim_speed], frame, colx, 22 + 60 );
-
-  if (smenu.uiset.selector != UiSetSave)
+  if (smenu.uiset.selector != UI_SETTINGS_ITEMS_COUNT)
     for (unsigned i = 0; i < 240; i += 16)
       render_icon_trans(i, 22 + smenu.uiset.selector * 20, 63);
 
-  if (smenu.uiset.selector != UiSetSave)
+  if (smenu.uiset.selector != UI_SETTINGS_ITEMS_COUNT)
     draw_box_outline(frame, 20, 220, 132, 152, FG_COLOR);
   else
     draw_box_full(frame, 20, 220, 132, 152, FG_COLOR, HI_COLOR);
@@ -1727,22 +1775,6 @@ void render_tools(volatile uint8_t *frame) {
     draw_button_box(frame, 150, 232, 24 + 24 * i, 24 + 20 + 24 * i, smenu.tools.selector == i);
     draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 191, 24 + 2 + 24 * i);
   }
-}
-
-void reload_theme(unsigned thnum) {
-  // Palette 0..15 contains the main menu template colors
-  MEM_PALETTE[FG_COLOR] = themes[thnum].fg_color;
-  MEM_PALETTE[BG_COLOR] = themes[thnum].bg_color;
-  MEM_PALETTE[FT_COLOR] = themes[thnum].ft_color;
-  MEM_PALETTE[HI_COLOR] = themes[thnum].hi_color;
-  // In-game menu palette
-  MEM_PALETTE[INGMENU_PAL_FG] = themes[thnum].fg_color;
-  MEM_PALETTE[INGMENU_PAL_BG] = themes[thnum].bg_color;
-  MEM_PALETTE[INGMENU_PAL_HI] = themes[thnum].ft_color;
-  MEM_PALETTE[INGMENU_PAL_SH] = themes[thnum].sh_color;
-
-  // Palette entries for icons and other objects
-  MEM_PALETTE[256 + SEL_COLOR] = themes[thnum].hi_blend;
 }
 
 // Renders the menu. Arg0 represents the frame count difference with the
@@ -1832,7 +1864,7 @@ void menu_init(int sram_testres) {
   // Load recent ROMs (we could disable this for speed)
   recent_reload();
 
-  reload_theme(menu_theme);
+  reload_theme();
 
   smenu.menu_tab = (recent_menu && smenu.recent.maxentries) ? MENUTAB_RECENT : MENUTAB_ROMBROWSE;
 
@@ -2383,29 +2415,33 @@ void menu_keypress(unsigned newkeys) {
       if (newkeys & KEY_BUTTUP)
         smenu.uiset.selector = MAX(0, smenu.uiset.selector - 1);
       if (newkeys & KEY_BUTTDOWN)
-        smenu.uiset.selector = MIN(UiSetMAX, smenu.uiset.selector + 1);
-      if (newkeys & KEY_BUTTLEFT) {
-        if (smenu.uiset.selector == UiSetTheme)
-          menu_theme = menu_theme ? menu_theme - 1 : 0;
-        else if (smenu.uiset.selector == UiSetASpd)
-          anim_speed = anim_speed ? anim_speed - 1 : 0;
-        else if (smenu.uiset.selector == UiSetRect)
-          recent_menu ^= 1;
-        else if (smenu.uiset.selector == UiSetLang)
-          lang_id = (lang_id + LANG_COUNT - 1) % LANG_COUNT;
-      }
-      if (newkeys & KEY_BUTTRIGHT) {
-        if (smenu.uiset.selector == UiSetTheme)
-          menu_theme = MIN(THEME_COUNT - 1, menu_theme + 1);
-        else if (smenu.uiset.selector == UiSetASpd)
-          anim_speed = MIN(animspd_cnt - 1, anim_speed + 1);
-        else if (smenu.uiset.selector == UiSetRect)
-          recent_menu ^= 1;
-        else if (smenu.uiset.selector == UiSetLang)
-          lang_id = (lang_id + 1) % LANG_COUNT;
+        smenu.uiset.selector = MIN(UI_SETTINGS_ITEMS_COUNT, smenu.uiset.selector + 1);
+      if (smenu.uiset.selector < UI_SETTINGS_ITEMS_COUNT) {
+        if (newkeys & KEY_BUTTLEFT) {
+          const UiMenuItem *item = &ui_settings_items[smenu.uiset.selector];
+          if (item->from_bool != NULL) {
+            *item->from_bool ^= 1;
+          } else if (item->from_int != NULL && *item->from_int > 0) {
+            *item->from_int = *item->from_int - 1;
+          }
+          if (item->on_change) {
+            item->on_change();
+          }
+        }
+        if (newkeys & KEY_BUTTRIGHT) {
+          const UiMenuItem *item = &ui_settings_items[smenu.uiset.selector];
+          if (item->from_bool != NULL) {
+            *item->from_bool ^= 1;
+          } else if (item->from_int != NULL) {
+            *item->from_int = MIN(item->from_int_max - 1, *item->from_int + 1);
+          }
+          if (item->on_change) {
+            item->on_change();
+          }
+        }
       }
 
-      if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
+      if (newkeys & KEY_BUTTA && smenu.uiset.selector == UI_SETTINGS_ITEMS_COUNT) {
         smenu.uiset.selector = 0;
         if (save_ui_settings())
           spop.alert_msg = msgs[lang_id][MSG_OK_SETSAVE];
@@ -2413,7 +2449,6 @@ void menu_keypress(unsigned newkeys) {
           spop.alert_msg = msgs[lang_id][MSG_ERR_SETSAVE];
       }
 
-      reload_theme(menu_theme);
       break;
 
     case MENUTAB_TOOLS:
