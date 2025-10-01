@@ -32,7 +32,7 @@ const void *get_vfile_ptr(const char *fname) {
   while (ptr->size) {
     if (!memcmp(ptr->fn, fname, sizeof(ptr->fn)))
       return ptr->payload;
-    ptr = (vf_header*)&ptr->payload[ptr->size];
+    ptr = (vf_header*)&ptr->payload[ROUND_UP2(ptr->size, 4)];
   }
 
   return NULL;
@@ -43,7 +43,7 @@ int get_vfile_size(const char *fname) {
   while (ptr->size) {
     if (!memcmp(ptr->fn, fname, sizeof(ptr->fn)))
       return (int)ptr->size;
-    ptr = (vf_header*)&ptr->payload[ptr->size];
+    ptr = (vf_header*)&ptr->payload[ROUND_UP2(ptr->size, 4)];
   }
 
   return -1;

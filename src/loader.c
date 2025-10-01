@@ -387,11 +387,11 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
       ptr += rdbytes;
     }
     f_close(&fd);
-
-    // Generate rom header and what not.
-    if (ldinfo->hndlr)
-      ptr += ldinfo->hndlr(ptr, fn, fs);
   }
+
+  // Generate rom header and what not.
+  if (ldinfo->hndlr)
+    ptr += ldinfo->hndlr(ptr, fn, fs);
 
   // Proceed to load the ROM now.
   if (FR_OK != f_open(&fd, fn, FA_READ))
