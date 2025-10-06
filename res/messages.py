@@ -21,7 +21,8 @@ OTHER_LANGS = [
   "ms",
 ]
 
-en_strings = {
+en_strings = [
+  (None, {
   "MSG_LANG_NAME": "English",
 
   "MSG_EMPTY": "",
@@ -217,10 +218,15 @@ en_strings = {
   "MSG_BENCHSPD":  "Speed: %u KiB/s",
   "MSG_CAPACITY":  "Capacity: %s",
   "MSG_DBPINFO":   "Patch database version info",
+  }),
+  ("SUPPORT_NORGAMES", {
+  "MSG_Q5_DELNORG": "Delete this game from flash memory?",
+  "MSG_ERR_NORUPD": "Flash write failed!",                 # alertmsg
+  }),
+]
 
-}
-
-en_menu_strings = {
+en_menu_strings = [
+  (None, {
   "IMENU_QC0_NO":    "No",
   "IMENU_QC1_YES":   "Yes",
 
@@ -271,20 +277,37 @@ en_menu_strings = {
   "IMENU_PLD_ERR":          "Corrupted savestate!",      # igm-alertmsg
 
   "IMENU_SAVING_BLOCKED":   "Saving in progress!",
-}
+  }),
+]
 
 if len(sys.argv) > 1 and sys.argv[1] == "json":
   # Dump english strings for translation
-  print(json.dumps(en_strings | en_menu_strings, indent=2))
+  allentries = {}
+  for e in [en_strings, en_menu_strings]:
+    for _, d in e:
+      allentries |= d
+  print(json.dumps(allentries, indent=2))
 elif len(sys.argv) > 1 and sys.argv[1] == "h":
   todump = en_menu_strings if sys.argv[2] == "menu" else en_strings
 
-  for i, k in enumerate(sorted(todump)):
-    print("#define %s %d" % (k.ljust(20), i))
+  print("enum TranslationID {")
+  for c, entries in todump:
+    if c:
+      print("#ifdef %s" % c)
+    for k in sorted(entries):
+      print("  %s," % k)
+    if c:
+      print("#endif")
+  print("};")
 
   print("const char * const msg_en[] = {")
-  for k, v in sorted(todump.items()):
-    print('  /* %s */ "%s",' % (k.ljust(20), v))
+  for c, entries in todump:
+    if c:
+      print("#ifdef %s" % c)
+    for k, v in sorted(entries.items()):
+      print('  /* %s */ "%s",' % (k.ljust(20), v))
+    if c:
+      print("#endif")
   print("};")
 
   # Attempt to load strings for all other languages
@@ -292,9 +315,14 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
   for l in OTHER_LANGS:
     d = json.load(open(os.path.join(langdir, "%s.json" % l)))
     print("const char * const msg_%s[] = {" % l)
-    for k, en_v in sorted(todump.items()):
-      v = d[k] if k in d and d[k] else en_v
-      print('  /* %s */ "%s",' % (k.ljust(20), v))
+    for c, entries in todump:
+      if c:
+        print("#ifdef %s" % c)
+      for k, en_v in sorted(entries.items()):
+        v = d[k] if k in d and d[k] else en_v
+        print('  /* %s */ "%s",' % (k.ljust(20), v))
+      if c:
+        print("#endif")
     print("};")
 
   print("const char * const * const msgs[] = {")

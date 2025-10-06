@@ -91,6 +91,24 @@ int main() {
   assert(!strcmp(find_extension("/foo/bar.lol/test.123"), ".123"));
   assert(find_extension("/foo/bar.lol/beef") == NULL);
 
+  human_size(tmp, sizeof(tmp), 0); assert(!strcmp(tmp, "1K"));
+  human_size(tmp, sizeof(tmp), 100); assert(!strcmp(tmp, "1K"));
+  human_size(tmp, sizeof(tmp), 1000); assert(!strcmp(tmp, "1K"));
+  human_size(tmp, sizeof(tmp), 1024); assert(!strcmp(tmp, "1K"));
+  human_size(tmp, sizeof(tmp), 2047); assert(!strcmp(tmp, "1K"));
+  human_size(tmp, sizeof(tmp), 2048); assert(!strcmp(tmp, "2K"));
+  human_size(tmp, sizeof(tmp), 1023*1024); assert(!strcmp(tmp, "1023K"));
+  human_size(tmp, sizeof(tmp), 1024*1024); assert(!strcmp(tmp, "1M"));
+
+  human_size_kb(tmp, sizeof(tmp), 0); assert(!strcmp(tmp, "<1MiB"));
+  human_size_kb(tmp, sizeof(tmp), 100); assert(!strcmp(tmp, "<1MiB"));
+  human_size_kb(tmp, sizeof(tmp), 1024); assert(!strcmp(tmp, "1.0MiB"));
+  human_size_kb(tmp, sizeof(tmp), 1025); assert(!strcmp(tmp, "1.0MiB"));
+  human_size_kb(tmp, sizeof(tmp), 1125); assert(!strcmp(tmp, "1.0MiB"));
+  human_size_kb(tmp, sizeof(tmp), 1127); assert(!strcmp(tmp, "1.1MiB"));
+  human_size_kb(tmp, sizeof(tmp), 1023*1024); assert(!strcmp(tmp, "1023.0MiB"));
+  human_size_kb(tmp, sizeof(tmp), 1024*1024); assert(!strcmp(tmp, "1.0GiB"));
+
   // TODO test memcpy32 and memmove32
 }
 

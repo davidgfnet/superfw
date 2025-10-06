@@ -10,21 +10,27 @@ OBJCOPY		:= $(PREFIX)objcopy
 
 COMPRESSION_RATIO ?= 3
 
-# BOARD can be "sd" or "lite"
+# BOARD can be "sd", "lite", "chis"
 BOARD ?= sd
 
 ifeq ($(BOARD),lite)
   GLOBAL_DEFINES += -DSUPERCARD_LITE_IO
   COMPRESS_FIRMWARE = 1
-  MAXFSIZE = 512
+  MAXFSIZE = 496
+  FWFLAVOUR = "Lite"
 else ifeq ($(BOARD),sd)
+  GLOBAL_DEFINES += -DSUPERCARD_FLASH_ADDRPERM
   BUNDLE_GBC_EMULATOR = 1
   COMPRESS_FIRMWARE = 1
   MAXFSIZE = 512
+  FWFLAVOUR = "SD"
 else ifeq ($(BOARD),chis)
+  GLOBAL_DEFINES += -DSUPPORT_NORGAMES
   BUNDLE_GBC_EMULATOR = 1
   BUNDLE_OTHER_EMULATORS = 1
+  # Can't be over 2MiB (hardlimit)
   MAXFSIZE = 2048
+  FWFLAVOUR = "Chis"
 else
   $(error No valid board specified in BOARD)
 endif
@@ -51,6 +57,7 @@ endif
 
 CFLAGS=-O2 -ggdb \
        -D__GBA__ $(GLOBAL_DEFINES) \
+       -DFW_MAX_SIZE_KB=$(MAXFSIZE) -DFW_FLAVOUR="\"$(FWFLAVOUR)\"" \
        -DSC_FAST_ROM_MIRROR="use_fast_mirror()" \
        -DSD_PREERASE_BLOCKS_WRITE \
        -DVERSION_WORD="$(VERSION_WORD)" \
@@ -127,6 +134,7 @@ INFILES=src/gba_ewram_crt0.S \
         src/asmutil.S \
         src/gbahw.c \
         src/virtfs.c \
+        src/flash_mgr.c \
         src/binassets.S \
         src/crc.c \
         src/nds_loader.c \

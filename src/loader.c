@@ -335,6 +335,24 @@ unsigned load_gba_rom(
   return 0;
 }
 
+__attribute__((noinline))
+unsigned launch_gba_nor(
+  const uint8_t *normap, unsigned blkcnts
+  // TODO: Add more launching options? Patching?
+) {
+
+  // Map the game NOR blocks.
+  // TODO
+  set_supercard_normap(normap);
+
+  // Set the ROM into read only mode, disable SD card reader as well.
+  set_supercard_mode(MAPPED_FIRMWARE, false, false);
+
+  launch_reset(boot_bios_splash, use_fastew);
+
+  return 0;
+}
+
 // Generic-emulator (ie. NES, SMS, ...) loader
 __attribute__((noinline))
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress) {

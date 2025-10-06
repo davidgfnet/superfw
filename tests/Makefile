@@ -7,7 +7,7 @@ all:
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o cimpl_test.bin cimpl_test.c ../src/cimpl.c -DBUILTIN_PREFIX=superfw_
 	./cimpl_test.bin
 	lcov -c -d . -o cimpl_test.info
-	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o util_test.bin util_test.c ../src/util.c ../src/fileutil.c -I../
+	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o util_test.bin util_test.c ../src/util.c ../src/nanoprintf.c ../src/fileutil.c -I../
 	./util_test.bin
 	lcov -c -d . -o util_test.info
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o utf_util_test.bin utf_util_test.c ../src/utf_util.c -I../
@@ -16,7 +16,7 @@ all:
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o sha256_test.bin sha256_test.c ../src/sha256.c -lcrypto
 	./sha256_test.bin
 	lcov -c -d . -o sha256_test.info
-	$(CC) $(CFLAGS) -o cheats_test.bin cheats_test.c ../src/cheats.c ../src/util.c -I../
+	$(CC) $(CFLAGS) -o cheats_test.bin cheats_test.c ../src/cheats.c ../src/util.c ../src/nanoprintf.c -I../
 	./cheats_test.bin
 	lcov -c -d . -o cheats_test.info
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o crc_test.bin crc_test.c ../src/crc.c

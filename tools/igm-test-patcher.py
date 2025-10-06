@@ -13,7 +13,7 @@
 
 import os, sys, argparse, struct
 
-parser = argparse.ArgumentParser(prog='ign-test-patcher')
+parser = argparse.ArgumentParser(prog='igm-test-patcher')
 parser.add_argument('--rom', dest='rom', required=True, help='ROM path')
 parser.add_argument('--payload', dest='payload', required=True, help='payload path (to the in game menu bin)')
 parser.add_argument('--fontpack', dest='fontpack', required=True, help='FontPack file path')
