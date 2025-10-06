@@ -11,28 +11,37 @@ nicons = im.size[0] // 16
 pal = [x[1] for x in im.getcolors()]
 
 iconlst = [
-  "ICON_FOLDER",
-  "ICON_BINFILE",
-  "ICON_UPDFILE",
-  "ICON_GBCART",
-  "ICON_GBCCART",
-  "ICON_GBACART",
-  "ICON_SMSCART",
-  "ICON_NESCART",
-  "ICON_RECENT",
-  "ICON_DISK",
-  "ICON_SETTINGS",
-  "ICON_UILANG_SETTINGS",
-  "ICON_TOOLS",
-  "ICON_INFO",
+  ("ICON_FOLDER", None),
+  ("ICON_BINFILE", None),
+  ("ICON_UPDFILE", None),
+  ("ICON_GBCART", None),
+  ("ICON_GBCCART", None),
+  ("ICON_GBACART", None),
+  ("ICON_SMSCART", None),
+  ("ICON_NESCART", None),
+  ("ICON_RECENT", None),
+  ("ICON_DISK", None),
+  ("ICON_FLASH", "SUPPORT_NORGAMES"),
+  ("ICON_SETTINGS", None),
+  ("ICON_UILANG_SETTINGS", None),
+  ("ICON_TOOLS", None),
+  ("ICON_INFO", None),
 ]
 
-for i, n in enumerate(iconlst):
-  print("#define %s %d" % (n, i))
+print("enum {")
+for n, c in iconlst:
+  if c:
+    print("#ifdef %s" % c)
+  print(" %s," % n)
+  if c:
+    print("#endif")
+print("};")
 
 print("const uint8_t icons_img[][4][8][8] = {")
 
 for n in range(nicons):
+  if iconlst[n][1]:
+    print("#ifdef %s" % iconlst[n][1])
   print("  {")
   for subobj in range(4):
     sx, sy = subobj & 1, subobj >> 1
@@ -50,6 +59,8 @@ for n in range(nicons):
       print("     {" + ",".join("0x%02x" % x for x in line) + "},")
     print("    },")
   print("  },")
+  if iconlst[n][1]:
+    print("#endif")
 print("};")
 
 print("const uint16_t icons_pal[%d] = {" % (len(pal)+1))

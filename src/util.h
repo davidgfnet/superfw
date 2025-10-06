@@ -36,6 +36,8 @@ void replace_extension(char *fn, const char *newext);
 const char *find_extension(const char *s);
 
 unsigned parseuint(const char *s);
+void human_size(char *s, unsigned ml, uint32_t sz);
+void human_size_kb(char *s, unsigned ml, uint32_t sz);
 
 // Just checks that a file exists.
 bool check_file_exists(const char *fn);

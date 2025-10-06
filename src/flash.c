@@ -66,7 +66,7 @@
 
 // Given a desired flash address, it generates the gamepak address necessary
 // to access it, taking into consideration the address permutation described.
-#ifndef SUPERCARD_LITE_IO
+#ifdef SUPERCARD_FLASH_ADDRPERM
   static uint32_t addr_perm(uint32_t addr) {
     return (addr & 0xFFFFFE02) |
            ((addr & 0x001) << 7) |
@@ -91,8 +91,10 @@
   #define FLASH_WE_MODE() write_supercard_mode(0x1510)
 #endif
 
-// Returns manufacturer code in the higher bits, device id in the lower bits.
-uint32_t flash_identify() {
+// Checks flash device and extracts info about it
+bool flash_identify(t_flash_info *info) {
+  memset(info, 0, sizeof(*info));
+
   // Internal flash in write mode.
   FLASH_WE_MODE();
 
@@ -104,8 +106,33 @@ uint32_t flash_identify() {
   SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
   SLOT2_BASE_U16[addr_perm(0x555)] = 0x0090;
 
-  uint32_t ret = (SLOT2_BASE_U16[addr_perm(0x000)] << 16) |
-                  SLOT2_BASE_U16[addr_perm(0x001)];
+  info->deviceid = (SLOT2_BASE_U16[addr_perm(0x000)] << 16) |
+                    SLOT2_BASE_U16[addr_perm(0x001)];
+
+  for (unsigned i = 0; i < 32; i++)
+    SLOT2_BASE_U16[0] = 0x00F0;
+
+  // Enter CFI mode and extract flash information
+  SLOT2_BASE_U16[addr_perm(0x555)] = 0x0098;
+  uint8_t qs[3] = {
+    SLOT2_BASE_U16[addr_perm(0x010)],
+    SLOT2_BASE_U16[addr_perm(0x011)],
+    SLOT2_BASE_U16[addr_perm(0x012)],
+  };
+  if (qs[0] == 'Q' && qs[1] == 'R' && qs[2] == 'Y') {
+    info->size = 1 << SLOT2_BASE_U16[addr_perm(0x027)];
+
+    info->regioncnt = SLOT2_BASE_U16[addr_perm(0x02C)] & 0xFF;
+    info->blkcount = ((SLOT2_BASE_U16[addr_perm(0x02D)] & 0xFF) |
+                     ((SLOT2_BASE_U16[addr_perm(0x02E)] & 0xFF) << 8)) + 1;
+
+    info->blksize = ((SLOT2_BASE_U16[addr_perm(0x02F)] & 0xFF) |
+                    ((SLOT2_BASE_U16[addr_perm(0x030)] & 0xFF) << 8)) << 8;
+    info->blksize = (info->blksize ?: 128);
+
+    info->blkwrite = (SLOT2_BASE_U16[addr_perm(0x02A)] & 0xFF);
+    info->blkwrite = (info->blkwrite ? (1 << info->blkwrite) : 0);
+  }
 
   for (unsigned i = 0; i < 32; i++)
     SLOT2_BASE_U16[0] = 0x00F0;
@@ -113,11 +140,11 @@ uint32_t flash_identify() {
   // Go back to R/W SDRAM.
   set_supercard_mode(MAPPED_SDRAM, true, true);
 
-  return ret;
+  return true;
 }
 
 // Performs a flash full-chip erase.
-bool flash_erase() {
+bool flash_erase_chip() {
   FLASH_WE_MODE();
 
   // Reset any previous command that might be ongoing.
@@ -146,29 +173,85 @@ bool flash_erase() {
   return retok;
 }
 
-// Programs the built-in flash memory.
-// Uses a temporary buffer, since the buffer can (and usually is) on SDRAM.
-bool flash_program(const uint8_t *buf, unsigned size) {
+// Validate that the sector is clear.
+bool flash_check_erased(uintptr_t addr, unsigned size) {
+  FLASH_WE_MODE();
+
+  // Checks for all ones!
+  for (unsigned i = 0; i < size; i += 2) {
+    if (*(volatile uint16_t*)(addr + i) != 0xffff) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      return false;
+    }
+  }
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return true;
+}
+
+// Performs a flash sector erase.
+bool flash_erase_sector(uintptr_t addr) {
+  FLASH_WE_MODE();
+
+  // Reset any previous command that might be ongoing.
+  for (unsigned i = 0; i < 32; i++)
+    SLOT2_BASE_U16[0] = 0x00F0;
+
+  SLOT2_BASE_U16[addr_perm(0x555)] = 0x00AA;
+  SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
+  SLOT2_BASE_U16[addr_perm(0x555)] = 0x0080; // Erase command
+  SLOT2_BASE_U16[addr_perm(0x555)] = 0x00AA;
+  SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
+
+  *(volatile uint16_t*)(addr) = 0x0030; // Erase sector
+
+  // Wait for the erase operation to finish. We rely on Q6 toggling:
+  for (unsigned i = 0; i < 60*100; i++) {
+    wait_ms(10);    // Wait for a bit, erase can take a while.
+    if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
+      break;
+  }
+  bool retok = (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0]);
+
+  for (unsigned i = 0; i < 32; i++)
+    SLOT2_BASE_U16[0] = 0x00F0;            // Reset for a few cycles
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return retok;
+}
+
+// Deletes a bunch of sectors of a given size.
+bool flash_erase_sectors(uint32_t baseaddr, unsigned sectsize, unsigned sectcount) {
+  for (unsigned i = 0; i < sectcount; i++) {
+    if (!flash_erase_sector(baseaddr + i * sectsize))
+      return false;
+  }
+  return true;
+}
+
+// Programs the built-in flash memory, assumes memory was cleared.
+// Also uses temporary buffers to allow for SDRAM buffers too.
+bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
   // Reset any previous command that might be ongoing.
   FLASH_WE_MODE();
   SLOT2_BASE_U16[0] = 0x00F0;
 
   for (unsigned i = 0; i < size; i += 512) {
-    uint8_t tmp[512];
+    uint16_t tmp[256];
     set_supercard_mode(MAPPED_SDRAM, true, true);
-    memcpy(tmp, &buf[i], 512);
+    memcpy(tmp, &buf[i], sizeof(tmp));
 
     FLASH_WE_MODE();
     for (unsigned off = 0; off < 512 && i+off < size; off += 2) {
       const uint32_t addr = i + off;
-      const uint16_t value = tmp[off] | (tmp[off+1] << 8);
 
       SLOT2_BASE_U16[addr_perm(0x555)] = 0x00AA;
       SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
       SLOT2_BASE_U16[addr_perm(0x555)] = 0x00A0; // Program command
 
       // Perform the actual write operation
-      SLOT2_BASE_U16[addr / 2] = value;
+      volatile uint16_t *ptr = (uint16_t*)(baseaddr + addr);
+      *ptr = tmp[off];
 
       // It should take less than 1ms usually (in the order of us).
       for (unsigned j = 0; j < 8*1024; j++) {
@@ -179,7 +262,7 @@ bool flash_program(const uint8_t *buf, unsigned size) {
       SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
 
       // Timed out or the value programmed is wrong
-      if (notfinished || SLOT2_BASE_U16[addr / 2] != value) {
+      if (notfinished || *ptr != tmp[off]) {
         set_supercard_mode(MAPPED_SDRAM, true, true);
         return false;
       }
@@ -190,13 +273,84 @@ bool flash_program(const uint8_t *buf, unsigned size) {
   return true;
 }
 
+// Programs the built-in flash memory using the internal write buffer.
+bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize) {
+  // Reset any previous command that might be ongoing.
+  FLASH_WE_MODE();
+  SLOT2_BASE_U16[0] = 0x00F0;
+  const unsigned wrsize = MIN(bufsize, 512);
+
+  for (unsigned i = 0; i < size; i += 512) {
+    uint16_t tmp[256];
+    set_supercard_mode(MAPPED_SDRAM, true, true);
+    memcpy(tmp, &buf[i], sizeof(tmp));
+
+    FLASH_WE_MODE();
+    for (unsigned off = 0; off < 512 && i+off < size; off += wrsize) {
+      const uint32_t toff = (i + off);
+      const uint16_t bcnt = MIN(wrsize, size - toff);
+      volatile uint16_t *ptr = (uint16_t*)(baseaddr + toff);
+
+      SLOT2_BASE_U16[addr_perm(0x555)]  = 0x00AA;
+      SLOT2_BASE_U16[addr_perm(0x2AA)]  = 0x0055;
+      *ptr = 0x0025;        // Write buffer command
+      *ptr = bcnt / 2 - 1;  // Word count
+
+      for (unsigned j = 0; j < bcnt / 2; j++)
+        *ptr++ = tmp[off/2+j];
+
+      *(ptr-1) = 0x29;     // Confirm write buffer operation.
+
+      // Wait a bit for the operation to finish.
+      for (unsigned j = 0; j < 32*1024; j++) {
+        if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
+          break;
+      }
+      bool notfinished = (SLOT2_BASE_U16[0] != SLOT2_BASE_U16[0]);
+      SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
+
+      // Timed out or the value programmed is wrong
+      if (notfinished) {
+        *(volatile uint32_t*)0x04000320 = 0xdead;
+        set_supercard_mode(MAPPED_SDRAM, true, true);
+        return false;
+      }
+    }
+  }
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return true;
+}
+
+// Reads data into a buffer, even if it's on SDRAM.
+// Size must be multiple of 4 bytes!
+void flash_read(uint32_t baseaddr, uint8_t *buf, unsigned size) {
+  // Reset any previous command that might be ongoing.
+  FLASH_WE_MODE();
+  SLOT2_BASE_U16[0] = 0x00F0;
+
+  for (unsigned i = 0; i < size; i += 512) {
+    unsigned tocpy = MIN(512U, size - i);
+    uint16_t tmp[256];
+    const uint8_t *ptr = (uint8_t*)(baseaddr + i);
+    memcpy32(tmp, ptr, 512);
+
+    set_supercard_mode(MAPPED_SDRAM, true, true);
+    memcpy32(&buf[i], tmp, tocpy);
+    FLASH_WE_MODE();
+  }
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
+
 // Programs the built-in flash memory. 
-bool flash_verify(const uint8_t *buf, unsigned size) {
+bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
+  volatile uint8_t *ptr = (uint8_t*)(baseaddr);
   for (unsigned i = 0; i < size; i += 512) {
     uint8_t tmp[512];
     FLASH_WE_MODE();
     for (unsigned j = 0; j < 512; j++)
-      tmp[j] = SLOT2_BASE_U8[i + j];
+      tmp[j] = ptr[i + j];
 
     set_supercard_mode(MAPPED_SDRAM, true, true);
     unsigned tocmp = MIN(512, size - i);

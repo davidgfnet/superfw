@@ -34,7 +34,7 @@ bool isgba = true;   // Has some alternative paths for NDS.
 bool fastew = false; // EWRAM can be overclocked (from the look of it at least).
 bool slowsd = true;  // Whether we use slow SD mirrors for SD operations.
 
-uint32_t flash_deviceid;
+t_flash_info flashinfo;
 t_card_info sd_info;
 t_patchdb_info pdbinfo;
 
@@ -220,7 +220,7 @@ int main() {
   fastew = test_fast_ewram();
 
   // Take a look at what flash we have.
-  flash_deviceid = flash_identify();
+  flash_identify(&flashinfo);
 
   if (isgba)
     return main_gba();

@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "utf_util.h"
+#include "nanoprintf.h"
 
 const char *file_basename(const char *fullpath) {
   const char * ret = strrchr(fullpath, '/');
@@ -65,6 +66,24 @@ unsigned parseuint(const char *s) {
     ret = ret * 10 + (*s++ - '0');
 
   return ret;
+}
+
+void human_size(char *s, unsigned ml, uint32_t sz) {
+  if (sz < 1024)
+    memcpy(s, "1K", 3);
+  else if (sz < 1024*1024)
+    npf_snprintf(s, ml, "%uK", (unsigned int)(sz >> 10));
+  else
+    npf_snprintf(s, ml, "%uM", (unsigned int)(sz >> 20));
+}
+
+void human_size_kb(char *s, unsigned ml, uint32_t sz) {
+  if (sz < 1024)
+    memcpy(s, "<1MiB", 6);
+  else if (sz < 1024*1024)
+    npf_snprintf(s, ml, "%u.%uMiB", (unsigned int)(sz >> 10), (unsigned int)((sz & 0x3ff) * 10) >> 10);
+  else
+    npf_snprintf(s, ml, "%u.%uGiB", (unsigned int)(sz >> 20), (unsigned int)((sz & 0xfffff) * 10) >> 20);
 }
 
 void memcpy32(void *restrict dst, const void *restrict src, unsigned count) {

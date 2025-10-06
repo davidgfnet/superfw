@@ -77,6 +77,7 @@ void send_sdcard_commandbuf(const uint8_t *buffer, unsigned maxsize);
 #define REG_SD_MODE              (*(volatile uint16_t*)(REG_SC_MODE_REG_ADDR))
 
 #define MODESWITCH_MAGIC         0xA55A
+#define NORMAPPING_MAGIC         0xA558
 
 #define MAX_WRITE_RETRIES        2            // Try up to 3 times to write a block.
 #define MAX_REINIT_RETRIES       9            // Try up to 10 to re-init the card.
@@ -149,6 +150,21 @@ void write_supercard_mode(uint16_t modebits) {
        "l"(MODESWITCH_MAGIC),
        "l"(modebits)
     : "memory");
+}
+
+void set_supercard_normap(const uint8_t *blks) {
+  // Push blocks in order via magic register
+  for (unsigned i = 0; i < 8; i++) {
+    asm volatile (
+      "strh %1, [%0]\n"
+      "strh %1, [%0]\n"
+      "strh %2, [%0]\n"
+      "strh %2, [%0]\n"
+      :: "l"(REG_SC_MODE_REG_ADDR),
+         "l"(NORMAPPING_MAGIC),
+         "l"((unsigned int)blks[i])
+      : "memory");
+  }
 }
 
 void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_interface) {

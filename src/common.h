@@ -32,6 +32,7 @@
 #define ROUND_UP2(x, a) ( (((x) + (a) - 1) & (~(a - 1))) )
 
 #define MAX_FN_LEN                 256
+#define FLASHG_MAXFN_CNT           32            // No more than 32 games in NOR
 
 #define SUPERFW_DIR               "/.superfw"
 #define ROMCONFIG_PATH            "/.superfw/config/"
@@ -70,6 +71,16 @@ extern uint8_t dldi_payload[];
 #define ROM_HISCRATCH_U8        ((volatile uint8_t*)(0x08000000 + ROM_OFF_HISCRATCH))
 #define ROM_PATCHDB_U8          ((volatile uint8_t*)(0x08000000 + ROM_OFF_PATCH_DB))
 #define ROM_ASSETS_U8           ((volatile uint8_t*)(0x08000000 + ROM_OFF_ASSETS_BASE))
+
+// Memory map for flash assets
+#define ROM_OFF_FLAHFIRMW         0x00000000     // At 0x0, the ROM boot address
+#define ROM_OFF_FLASHMETA         0x00200000     // At 0x08200000, 2MiB offset
+
+#define ROM_FLASHFIRMW_ADDR     ((0x08000000 + ROM_OFF_FLAHFIRMW))
+#define ROM_FLASHMETA_ADDR      ((0x08000000 + ROM_OFF_FLASHMETA))
+
+#define FLASH_FIRMWARE_SIZE      0x00200000     // Max of 2MiB
+#define FLASH_METADATA_SIZE      0x00200000     // Max of 2MiB
 
 #define SUPERFW_COMMENT_DOFFSET         (0xF0 - 0xC0)   // Offset within the ROM header!
 
@@ -166,7 +177,6 @@ typedef struct {
   char creator[33];
 } t_patchdb_info;
 extern t_patchdb_info pdbinfo;
-extern uint32_t flash_deviceid;
 extern volatile unsigned frame_count;
 
 // Patch information for direct save mode.
@@ -246,6 +256,8 @@ unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh);
 unsigned load_gba_rom(const char *fn, uint32_t fs, const t_rom_header *rom_header, const struct struct_t_patch *ptch,
                       const t_dirsave_info *dsinfo, bool ingame_menu,
                       const t_rtc_state *rtc_clock, unsigned cheats, progress_fn progress);
+// Launch from NOR
+unsigned launch_gba_nor(const uint8_t *normap, unsigned blkcnts);
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress);
 bool validate_gba_header(const uint8_t *header);
 bool validate_gb_header(const uint8_t *header);
@@ -318,13 +330,28 @@ extern const uint32_t patch_flash_erase_device_directsave_size;
 extern const uint32_t patch_flash_write_sector_directsave_size;
 
 // Firmware update and flashing tools
+typedef struct {
+  uint32_t deviceid;
+  uint32_t size;         // Size in bytes
+  uint32_t regioncnt;    // Erase region count (ideally 1, or perhaps 0)
+  uint32_t blksize;      // Block size in bytes
+  uint32_t blkcount;     // Number of blocks
+  uint32_t blkwrite;     // Buffer writing capabilities (zero means disabled)
+} t_flash_info;
+extern t_flash_info flashinfo;
+
 bool check_superfw(const uint8_t *h, uint32_t *ver);
 bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize);
 
-bool flash_program(const uint8_t *buf, unsigned size);
-bool flash_verify(const uint8_t *buf, unsigned size);
-bool flash_erase();
-uint32_t flash_identify();
+bool flash_identify(t_flash_info *info);
+bool flash_erase_chip();
+bool flash_erase_sector(uintptr_t addr);
+bool flash_erase_sectors(uint32_t baseaddr, unsigned sectsize, unsigned sectcount);
+void flash_read(uint32_t baseaddr, uint8_t *buf, unsigned size);
+bool flash_check_erased(uintptr_t addr, unsigned size);
+bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size);
+bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize);
+bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size);
 
 // Test/validation stuff
 int sram_test();

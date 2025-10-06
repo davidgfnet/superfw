@@ -35,6 +35,7 @@ typedef struct {
 
 // Generic supercard function to change mapping mode
 void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_interface);
+void set_supercard_normap(const uint8_t *blks);
 void write_supercard_mode(uint16_t modebits);
 
 // Full SD card init
