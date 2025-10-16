@@ -27,13 +27,22 @@
 #define NOR_GAMEBLOCK_COUNT  (NOR_BLOCK_COUNT - 1)
 #define MAX_GAME_BLOCKS      (32*1024*1024 / NOR_BLOCK_SIZE)
 
+#define GATTR_SAVEDS         0x80      // Uses Direct-Saving.
+#define GATTR_IGM            0x40      // IGM is enabled.
+#define GATTR_RTC            0x20      // RTC emulation is enabled.
+#define GATTR_SAVETYPE_MSK   0x07      // Store the save type
+
+#define GATTR_SAVEM(p)       (p ? p->save_mode : 0x7)
+#define GET_GATTR_SAVEM(at)  ((((at) & 0x7) == 0x7) ? -1 : (at) & 0x7)
+
+
 // Describes a game entry in flash (aka NOR)
 typedef struct {
   uint32_t gamecode;                   // Game code ID
   uint8_t gamever;                     // Game version byte
   uint8_t numblks;                     // Number of blocks used by this game.
   uint8_t gattrs;                      // Bitfield attributes
-  uint8_t padding;
+  uint8_t bnoffset;                    // Base name offset (byte offset in game_name)
   uint8_t blkmap[MAX_GAME_BLOCKS];     // Block mapping (blocks used, in order)
   char game_name[256];                 // UTF-8 encoded file name.
 } t_flash_game_entry;
@@ -60,5 +69,6 @@ _Static_assert (sizeof(t_flash_game_entry) % 4 == 0, "t_flash_game_entry must be
 
 bool flashmgr_load(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata);
 bool flashmgr_store(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata);
+bool flashmgr_allocate_blocks(uint8_t *blockmap, unsigned nalloc, t_reg_entry *ndata);
 
 

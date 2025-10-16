@@ -336,7 +336,7 @@ bool save_rom_settings(const char *fn, const t_rom_settings *rs) {
   // Make it hidden
   f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
-  char buf[512];
+  char buf[256];
   strcpy(buf, ROMCONFIG_PATH);
   strcat(buf, file_basename(fn));
   replace_extension(buf, ".config");
@@ -348,15 +348,17 @@ bool save_rom_settings(const char *fn, const t_rom_settings *rs) {
 
   // Serialize the ROM settings
   npf_snprintf(buf, sizeof(buf),
+    "patchmode=%u\n"
     "rtc=%u\n"
-    "cheats=%u\n"
     "igm=%u\n"
     "directsaving=%u\n"
-    "patchmode=%u\n"
+    "cheats=%u\n"
     "rtcval=%02u%02u%02u%02u%02u\n",
-    rs->use_rtc ? 1 : 0, rs->use_cheats ? 1 : 0,
-    rs->use_igm ? 1 : 0, rs->use_dsaving ? 1 : 0,
     rs->patch_policy,
+    rs->use_rtc ? 1 : 0,
+    rs->use_igm ? 1 : 0,
+    rs->use_dsaving ? 1 : 0,
+    rs->use_cheats ? 1 : 0,
     rs->rtcval.hour, rs->rtcval.mins,
     rs->rtcval.day + 1, rs->rtcval.month + 1, rs->rtcval.year);
 

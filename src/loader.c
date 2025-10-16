@@ -31,12 +31,13 @@
 #include "directsave.h"
 #include "common.h"
 #include "util.h"
+#include "flash_mgr.h"
 
 // Here we have the ROM loading routines.
 
 #define LOAD_BS     (8*1024)     // Load in 8KB chunks
 
-#define GBA_ROM_ADDR                  ((volatile  uint8_t *)0x08000000)
+#define GBA_ROM_ADDR                  ((uint8_t *)0x08000000)
 #define GBA_ROM_ADDR16(addr, value)   *((volatile uint16_t *)(0x08000000 + addr)) = (value)
 #define GBA_ROM_ADDR32(addr, value)   *((volatile uint32_t *)(0x08000000 + addr)) = (value)
 
@@ -322,7 +323,8 @@ unsigned load_gba_rom(
 
   // Actually apply patches
   if (ptch)
-    patch_apply_rom(ptch, rtc_clock, ingame_menu ? igm_addr : 0, dsinfo ? ds_addr : 0);
+    patch_apply_rom(GBA_ROM_ADDR, MAX_GBA_ROM_SIZE, 0, true, ptch, rtc_clock,
+                    ingame_menu ? igm_addr : 0, dsinfo ? ds_addr : 0);
 
   // Fix header checksum unconditionally (just in case we boot to BIOS).
   fix_gba_header((uint16_t*)GBA_ROM_ADDR);
@@ -336,6 +338,80 @@ unsigned load_gba_rom(
 }
 
 __attribute__((noinline))
+unsigned flash_gba_nor(
+  const char *fn, uint32_t fs,
+  const t_rom_header *rom_header,
+  const t_patch *ptch,
+  bool ingame_menu,
+  bool rtc_patches,
+  const uint8_t *blkmap,
+  progress_fn progress,
+  uint8_t *scratch, unsigned ssize
+) {
+  // TODO: Add gap support (use the FW directly instead). Add patching
+
+  if (!flashinfo.size || !flashinfo.blksize || !flashinfo.blkcount || !flashinfo.blkwrite || !flashinfo.blksize)
+    return ERR_FLASH_OP;
+
+  FIL fd;
+  FRESULT res = f_open(&fd, fn, FA_READ);
+  if (res != FR_OK)
+    return ERR_LOAD_BADROM;
+
+  // Map the game to the base 32MiB address space.
+  set_superchis_normap(blkmap);
+
+  for (uint32_t bigoff = 0; bigoff < fs; bigoff += ssize) {
+    // Load the ROM in chunks to the scratch area. So that we can mange it.
+    for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += LOAD_BS) {
+      uint32_t absoff = offset + bigoff;
+      if (progress && (absoff & (128*1024-1)) == 0)
+        progress((bigoff + offset / 2) >> 8, fs >> 8);
+
+      unsigned toread = MIN(LOAD_BS, fs - absoff);
+      UINT rdbytes;
+      uint32_t tmp[LOAD_BS/4];
+      if (FR_OK != f_read(&fd, tmp, toread, &rdbytes)) {
+        f_close(&fd);
+        reset_superchis_normap();
+        return ERR_LOAD_BADROM;
+      }
+
+      dma_memcpy32(&scratch[offset], tmp, toread/4);
+    }
+
+    // Patch ROM, don't need WAITCNT patches
+    // TODO: Allow for DS patching (in-rom or using direct firmware mapping)
+    patch_apply_rom(scratch, ssize, bigoff, false, ptch, /* RTC clock */ 0, /* IGM */ 0, /* DS */ 0);
+
+    // Go ahead and erase the blocks, then program them.
+    for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += flashinfo.blksize) {
+      uint32_t absoff = offset + bigoff;
+      uint32_t flashaddr = GBA_ROM_BASE + absoff;
+      if (progress && (absoff & (128*1024-1)) == 0)
+        progress((bigoff + (ssize + offset) / 2) >> 8, fs >> 8);
+
+      if (!flash_check_erased(flashaddr, flashinfo.blksize))
+        if (!flash_erase_sector(flashaddr)) {
+          f_close(&fd);
+          reset_superchis_normap();
+          return ERR_FLASH_OP;
+        }
+
+      unsigned toflash = MIN(flashinfo.blksize, fs - absoff);
+      if (!flash_program_buffered(flashaddr, &scratch[offset], toflash, flashinfo.blkwrite)) {
+        f_close(&fd);
+        reset_superchis_normap();
+        return ERR_FLASH_OP;
+      }
+    }
+  }
+
+  reset_superchis_normap();
+  return 0;
+}
+
+__attribute__((noinline))
 unsigned launch_gba_nor(
   const uint8_t *normap, unsigned blkcnts
   // TODO: Add more launching options? Patching?
@@ -343,7 +419,7 @@ unsigned launch_gba_nor(
 
   // Map the game NOR blocks.
   // TODO
-  set_supercard_normap(normap);
+  set_superchis_normap(normap);
 
   // Set the ROM into read only mode, disable SD card reader as well.
   set_supercard_mode(MAPPED_FIRMWARE, false, false);

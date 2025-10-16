@@ -311,7 +311,6 @@ bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size
 
       // Timed out or the value programmed is wrong
       if (notfinished) {
-        *(volatile uint32_t*)0x04000320 = 0xdead;
         set_supercard_mode(MAPPED_SDRAM, true, true);
         return false;
       }

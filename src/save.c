@@ -33,6 +33,13 @@
 #define SRAM_BANK_SIZE      ( 64*1024)
 #define SRAM_CHIP_SIZE      (128*1024)
 
+// SuperChis maps SRAM bank separatedly (not shared with read/write bit)
+#ifdef SUPERCHIS_IO
+  #define SRAM_MAP_BANK(bank) sram_superchis_bank(bank)
+#else
+  #define SRAM_MAP_BANK(bank) set_supercard_mode(MAPPED_SDRAM, bank ? true : false, true)
+#endif
+
 bool load_save_sram(const char *savefn) {
   FIL fd;
   FRESULT res = f_open(&fd, savefn, FA_READ);
@@ -52,10 +59,10 @@ bool load_save_sram(const char *savefn) {
 
     volatile uint8_t *sram_ptr = &SRAM_BASE_U8[i % SRAM_BANK_SIZE];
     unsigned bank = i / SRAM_BANK_SIZE;
-    set_supercard_mode(MAPPED_SDRAM, bank ? true : false, false);
+    SRAM_MAP_BANK(bank);
     for (unsigned j = 0; j < rdbytes; j++)
       *sram_ptr++ = buf[j];
-    set_supercard_mode(MAPPED_SDRAM, true, true);
+    SRAM_MAP_BANK(0);
 
     if (rdbytes < sizeof(buf))
       break;   // EOF
@@ -99,10 +106,10 @@ bool write_save_sram(const char *fn) {
     // Read SRAM using byte access
     volatile uint8_t *sram_ptr = &SRAM_BASE_U8[i % SRAM_BANK_SIZE];
     unsigned bank = i / SRAM_BANK_SIZE;
-    set_supercard_mode(MAPPED_SDRAM, bank ? true : false, false);
+    SRAM_MAP_BANK(bank);
     for (unsigned j = 0; j < 1024; j++)
       tmpbuf[j] = sram_ptr[j];
-    set_supercard_mode(MAPPED_SDRAM, true, true);
+    SRAM_MAP_BANK(0);
 
     res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
     if (res != FR_OK) {
@@ -125,7 +132,6 @@ bool compare_save_sram(const char *fn) {
   for (unsigned i = 0; i < SRAM_CHIP_SIZE && !mism; i += 1024) {
     UINT rdbytes = 0;
     uint8_t tmpbuf[1024];
-    set_supercard_mode(MAPPED_SDRAM, true, true);
     res = f_read(&fd, tmpbuf, sizeof(tmpbuf), &rdbytes);
     if (res != FR_OK || rdbytes == 0) {
       f_close(&fd);
@@ -135,12 +141,12 @@ bool compare_save_sram(const char *fn) {
     // Read SRAM and compare read values
     volatile uint8_t *sram_ptr = &SRAM_BASE_U8[i % SRAM_BANK_SIZE];
     unsigned bank = i / SRAM_BANK_SIZE;
-    set_supercard_mode(MAPPED_SDRAM, bank ? true : false, false);
+    SRAM_MAP_BANK(bank);
     for (unsigned j = 0; j < 1024; j++)
       if (tmpbuf[j] != sram_ptr[j])
         mism = true;
+    SRAM_MAP_BANK(0);
   }
-  set_supercard_mode(MAPPED_SDRAM, true, true);
   f_close(&fd);
 
   return !mism;
@@ -289,14 +295,12 @@ bool program_sram_dump(const char *save_filename, unsigned backup_cnt) {
 
 // Erases the SRAM (using ones since it seems to be the most common mem type)
 void erase_sram() {
-  // Erase both 64KB banks
-  set_supercard_mode(MAPPED_SDRAM, false, false);
-  for (unsigned i = 0; i < SRAM_BANK_SIZE; i++)
-    SRAM_BASE_U8[i] = 0xFF;
-  set_supercard_mode(MAPPED_SDRAM, true, false);
-  for (unsigned i = 0; i < SRAM_BANK_SIZE; i++)
-    SRAM_BASE_U8[i] = 0xFF;
-  set_supercard_mode(MAPPED_SDRAM, true, true);
+  // Erase both 64KB banks (ensure we leave on bank 1, for write-enable)
+  for (unsigned bankn = 0; bankn < 2; bankn++) {
+    SRAM_MAP_BANK(bankn);
+    for (unsigned i = 0; i < SRAM_BANK_SIZE; i++)
+      SRAM_BASE_U8[i] = 0xFF;
+  }
 }
 
 bool file_is_contiguous(const char *fn, LBA_t *lba) {

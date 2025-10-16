@@ -30,13 +30,13 @@
 
 // RTC patches/hooks
 .global patch_rtc_probe
-.global patch_rtc_probe_end
+.global patch_rtc_probe_size
 .global patch_rtc_getstatus
-.global patch_rtc_getstatus_end
+.global patch_rtc_getstatus_size
 .global patch_rtc_gettimedate
-.global patch_rtc_gettimedate_end
+.global patch_rtc_gettimedate_size
 .global patch_rtc_reset
-.global patch_rtc_reset_end
+.global patch_rtc_reset_size
 
 // EEPROM/FLASH patches for SRAM conversion
 .global patch_eeprom_read_sram64k
@@ -82,6 +82,14 @@
 .global patch_flash_write_sector_directsave_size
 .global patch_flash_write_byte_directsave
 .global patch_flash_write_byte_directsave_size
+
+
+#ifdef SUPERCHIS_IO
+  #define SRAM_BANK(reg, bank)   ldr reg, =(0x0100 | (bank))
+#else
+  #define SRAM_BANK(reg, bank)   mov reg, $(0x0001 | ((bank) << 2))
+#endif
+
 
 
 // This function reads a byte from the emulated EEPROM
@@ -290,7 +298,7 @@ patch_flash_read_sram128k:
 
   lsl r0, #28                // Limit sector number to [0...15] + lsl #12
   bcc 2f                     // Sector num MSB is in carry flag
-    mov r6, $0x5             // Switch to bank 1, since the sector num is 16..31
+    SRAM_BANK(r6, 1)         // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r6, [r4]
@@ -311,7 +319,7 @@ patch_flash_read_sram128k:
   sub r3, #1
   bne 1b
 
-  mov r6, $0x1               // Unconditionally switch to bank 0
+  SRAM_BANK(r6, 0)           // Switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r6, [r4]
@@ -349,7 +357,7 @@ patch_flash_erase_device_sram128k:
   sub r0, #1
   bne 1b
 
-  mov r3, $0x5               // Switch to bank 1, also enables SDRAM writes (dangerous!)
+  SRAM_BANK(r3, 1)           // Switch to bank 1, might enable SDRAM writes (dangerous!)
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -367,7 +375,7 @@ patch_flash_erase_device_sram128k:
   sub r0, #1
   bne 1b
 
-  mov r3, $0x1               // Switch to bank 0
+  SRAM_BANK(r3, 0)           // Switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -391,7 +399,7 @@ patch_flash_erase_sector_sram128k:
 
   lsl r0, #28                // Limit sector number to [0...15], MSB into Carry
   bcc 2f
-    mov r3, $0x5             // Switch to bank 1, since the sector num is 16..31
+    SRAM_BANK(r3, 1)         // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r3, [r4]
@@ -417,7 +425,7 @@ patch_flash_erase_sector_sram128k:
   sub r0, #1
   bne 1b
 
-  mov r3, $0x1               // Unconditionally switch to bank 0
+  SRAM_BANK(r3, 0)           // Unconditionally switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -441,7 +449,7 @@ patch_flash_write_sector_sram128k:
 
   lsl r0, #28                // Limit sector number to [0...15] + lsl#12
   bcc 2f
-    mov r3, $0x5             // Switch to bank 1, since the sector num is 16..31
+    SRAM_BANK(r3, 1)         // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r3, [r4]
@@ -471,7 +479,7 @@ patch_flash_write_sector_sram128k:
   sub r0, #4
   bne 1b
 
-  mov r3, $0x1               // Unconditionally switch to bank 0
+  SRAM_BANK(r3, 0)           // Unconditionally switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -496,7 +504,7 @@ patch_flash_write_byte_sram128k:
 
   lsl r0, #28                // Limit sector number to [0...15] + lsl#12
   bcc 2f
-    mov r3, $0x5             // Switch to bank 1, since the sector num is 16..31
+    SRAM_BANK(r3, 1)         // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r3, [r4]
@@ -512,7 +520,7 @@ patch_flash_write_byte_sram128k:
 
   strb r2, [r0]              // Write the byte
 
-  mov r3, $0x1               // Unconditionally switch to bank 0
+  SRAM_BANK(r3, 0)           // Unconditionally switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -782,20 +790,26 @@ patch_flash_write_byte_directsave_size:
 //  u8 alarmHour;
 //  u8 alarmMinute;
 
-
+// Have around ~200 bytes of code size (~100 insts)
 patch_rtc_probe:
   mov r0, $1                 // Just return 1 (working, no errors)
   bx lr
-patch_rtc_probe_end:
+.balign 4
+patch_rtc_probe_size:
+  .word (patch_rtc_probe_size - patch_rtc_probe)
 
+// Have around ~200 bytes of code size (~100 insts)
 patch_rtc_getstatus:
   mov r1, $0x40
   add r0, r0, $7             // Overwrite status only
   strb r1, [r0]
   mov r0, $1                 // Return true
   bx lr
-patch_rtc_getstatus_end:
+.balign 4
+patch_rtc_getstatus_size:
+  .word (patch_rtc_getstatus_size - patch_rtc_getstatus)
 
+// Max size should be ~170 bytes (85 insts)
 .balign 4
 patch_rtc_gettimedate:
   ldr r3, =0x080000C4
@@ -844,10 +858,13 @@ patch_rtc_gettimedate:
   .byte 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79
 
   .pool
-patch_rtc_gettimedate_end:
+.balign 4
+patch_rtc_gettimedate_size:
+  .word (patch_rtc_gettimedate_size - patch_rtc_gettimedate)
 
 
 // Resets current time and date to Jan 1st 2000, at midnight.
+// Max size should be ~130 bytes (65 insts)
 .balign 4
 patch_rtc_reset:
   ldr r0, =0xA55A            // Enable ROM writes
@@ -871,6 +888,8 @@ patch_rtc_reset:
   mov r0, $1                 // Return true
   bx lr
   .pool
-patch_rtc_reset_end:
+.balign 4
+patch_rtc_reset_size:
+  .word (patch_rtc_reset_size - patch_rtc_reset)
 
 
