@@ -28,8 +28,20 @@
 #define MAX(a, b) ((a > b) ? (a) : (b))
 #define MIN(a, b) ((a < b) ? (a) : (b))
 
-#define ROUND_UP(x, a)  ( (((x) + (a) - 1) / (a)) * (a) )
-#define ROUND_UP2(x, a) ( (((x) + (a) - 1) & (~(a - 1))) )
+#define ARRAY_SIZE(arr)  (sizeof((arr)) / sizeof(((arr))[0]))
+
+#define ROUND_UP(x, a)      ( (((x) + (a) - 1) / (a)) * (a) )
+#define ROUND_UP2(x, a)     ( (((x) + (a) - 1) & (~(a - 1))) )
+#define DIV_ROUND_UP(x, a)  ( (((x) + (a) - 1) / (a)) )
+
+// Bitmap stuff
+#define BMSIZE(nbits, type)    (((nbits) + (sizeof(type) * 8 - 1)) / (sizeof(type) * 8))
+#define BM_IDX(bm, n)          ((n) / (sizeof((bm)[0]) * 8))
+#define BM_OFF(bm, n)          ((n) % (sizeof((bm)[0]) * 8))
+#define BMMASK(bm, n)          ((typeof((bm)[0]))1 << BM_OFF(bm, n))
+#define BM_SET(bm, n)          ((bm)[BM_IDX(bm, n)] |=  BMMASK(bm, n))
+#define BM_CLR(bm, n)          ((bm)[BM_IDX(bm, n)] &= ~BMMASK(bm, n))
+#define BM_TEST(bm, n)         ((bm)[BM_IDX(bm, n)] &   BMMASK(bm, n))
 
 #define MAX_FN_LEN                 256
 #define FLASHG_MAXFN_CNT           32            // No more than 32 games in NOR
@@ -243,8 +255,8 @@ struct struct_t_patch;
 #define ERR_LOAD_BADROM         0x1
 #define ERR_LOAD_MENU           0x2
 #define ERR_NO_PAYLOAD_SPACE    0x3
-
 #define ERR_LOAD_NOEMU          0x4
+#define ERR_FLASH_OP            0x5
 
 // Prepares the save game files, readin and writing files in some cases.
 unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, EnumSavetype stype, t_dirsave_info *dsinfo, const char *savefn);
@@ -257,6 +269,9 @@ unsigned load_gba_rom(const char *fn, uint32_t fs, const t_rom_header *rom_heade
                       const t_dirsave_info *dsinfo, bool ingame_menu,
                       const t_rtc_state *rtc_clock, unsigned cheats, progress_fn progress);
 // Launch from NOR
+unsigned  flash_gba_nor(const char *fn, uint32_t fs, const t_rom_header *rom_header,
+                        const struct struct_t_patch *ptch, bool ingame_menu, bool rtc_patches,
+                        const uint8_t *blkmap, progress_fn progress, uint8_t *scratch, unsigned ssize);
 unsigned launch_gba_nor(const uint8_t *normap, unsigned blkcnts);
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress);
 bool validate_gba_header(const uint8_t *header);
@@ -276,13 +291,13 @@ int get_vfile_size(const char *fname);
 
 // RTC patches
 extern uint16_t patch_rtc_probe[];
-extern uint16_t patch_rtc_probe_end[];
 extern uint16_t patch_rtc_getstatus[];
-extern uint16_t patch_rtc_getstatus_end[];
 extern uint16_t patch_rtc_gettimedate[];
-extern uint16_t patch_rtc_gettimedate_end[];
 extern uint16_t patch_rtc_reset[];
-extern uint16_t patch_rtc_reset_end[];
+extern const uint32_t patch_rtc_probe_size;
+extern const uint32_t patch_rtc_getstatus_size;
+extern const uint32_t patch_rtc_gettimedate_size;
+extern const uint32_t patch_rtc_reset_size;
 
 // EEPROM patches
 extern uint16_t patch_eeprom_read_sram64k[];

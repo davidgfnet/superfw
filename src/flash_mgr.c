@@ -96,17 +96,15 @@ bool flashmgr_load(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
     return false;
 
   // Now check that the game block mapping is well formed.
-  uint32_t blkm[(NOR_BLOCK_COUNT + 31) / 32];
-  memset(blkm, 0, sizeof(blkm));
+  uint32_t blkm[BMSIZE(NOR_BLOCK_COUNT, uint32_t)] = {0};
 
   for (unsigned i = 0; i < ndata->gamecnt; i++) {
     for (unsigned j = 0; j < MAX_GAME_BLOCKS; j++) {
       uint8_t n = ndata->games[i].blkmap[j];
       if (n) {
-        unsigned idx = n / 32, bitn = n & 31;
-        if (blkm[idx] & (1 << bitn))
+        if (BM_TEST(blkm, n))
           return false;      // Block is used twice!
-        blkm[idx] |= (1 << bitn);
+        BM_SET(blkm, n);
       }
     }
   }
@@ -136,7 +134,7 @@ bool flashmgr_store(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
   ndata->magic = NOR_ENTRY_MAGIC;
   ndata->crc = xorh((uint32_t*)ndata->games, (sizeof(t_flash_game_entry) * ndata->gamecnt) / 4) ^ ndata->gamecnt;
 
-  if (!flash_program_buffered(baseaddr + off, (uint8_t*)ndata, reqsz, flashinfo.blkwrite))
+  if (!flash_program(baseaddr + off, (uint8_t*)ndata, reqsz))
     return false;
 
   if (!flash_verify(baseaddr + off, (uint8_t*)ndata, reqsz))
@@ -145,4 +143,34 @@ bool flashmgr_store(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
   return true;
 }
 
+// Allocates blocks based on wear and updates write cycles information.
+bool flashmgr_allocate_blocks(uint8_t *blockmap, unsigned nalloc, t_reg_entry *ndata) {
+  // Check which blocks are free and allocate some free blocks to use.
+  uint32_t blkm[BMSIZE(NOR_BLOCK_COUNT, uint32_t)] = {0};
+  for (unsigned i = 0; i < ndata->gamecnt; i++)
+    for (unsigned j = 0; j < MAX_GAME_BLOCKS; j++)
+      BM_SET(blkm, ndata->games[i].blkmap[j]);
+
+  // Allocate blocks prioritizing blocks with less write cycles.
+  for (unsigned a = 0; a < nalloc; a++) {
+    uint8_t cand = 0;
+    uint32_t wrcyc = ~0U;
+    for (unsigned i = 1; i < NOR_BLOCK_COUNT; i++) {
+      if (!BM_TEST(blkm, i) && ndata->wr_cycles[i] < wrcyc) {
+        cand = i;
+        wrcyc = ndata->wr_cycles[i];
+      }
+    }
+
+    if (!cand)
+      return false;
+
+    // Mark the block as used, book it and increase cycle count.
+    BM_SET(blkm, cand);
+    blockmap[a] = cand;
+    ndata->wr_cycles[cand]++;
+  }
+
+  return true;
+}
 

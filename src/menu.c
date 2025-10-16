@@ -63,8 +63,8 @@ enum {
   POPUP_GBA_LOAD,              // Load a GBA ROM
   POPUP_SAVFILE,               // Load/Store a SAV file
   POPUP_FWFLASH,               // Flash a new firmware image
+  POPUP_FILE_MGR,              // Write ROM to flash, delete, hide/unhide...
 #ifdef SUPPORT_NORGAMES
-  POPUP_GBA_LOADWRITE,         // Ask whether to load or write
   POPUP_GBA_NORWRITE,          // Write a GBA ROM to NOR
   POPUP_GBA_NORLOAD,           // Launch a NOR game
 #endif
@@ -137,30 +137,34 @@ enum {
 
 enum {
   GbaLoadPopInfo  = 0,
-  GbaLoadPopSave  = 1,
+  GbaLoadPopLoadS = 1,
   GbaLoadPopPatch = 2,
-  GbaLoadPopSett  = 3,
-  GbaLoadCNT      = 4,
+  GbaLoadCNT      = 3,
+
+  GbaNorWrPatch   = 1,
+  GbaNorWrCNT     = 2,
+
+  GbaNorLoad      = 1,
+  GbaNorLoadCNT   = 2,
 };
 
 enum {
   GBAInfoCNT   = 1,
   GBALoadButt  = 0,
 
-  GBASaveCNT   = 4,
-  GBASaveMode  = 1,
-  GBASaveLoadP = 2,
-  GBASaveSaveP = 3,
+  GBALdSetCNT    = 5,
+  GBALdSetLoadP  = 0,
+  GBALdSetSaveP  = 1,
+  GBALdSetRTC    = 2,
+  GBALdSetCheats = 3,
+  GBALdRemember  = 4,
 
-  GBAPatchCNT  = 4,
-  GBALoadPatch = 1,
+  GBAPatchCNT  = 5,
+  GBALoadPatch = 0,
+  GBASavePatch = 1,
   GBAInGameMen = 2,
-  GBAPatchGen  = 3,
-
-  GBASettCNT   = 4,
-  GBASetRTCEn  = 1,
-  GBASetLdCht  = 2,
-  GBASetRememb = 3,
+  GBARTCPatch  = 3,
+  GBAPatchGen  = 4,
 };
 
 enum {
@@ -177,6 +181,15 @@ enum {
   FlashingChecking = 2,
   FlashingErasing  = 3,
   FlashingWriting  = 4,
+};
+
+enum {
+  FiMgrDelete,
+  FiMgrHide,
+#ifdef SUPPORT_NORGAMES
+  FiMgrWriteNOR,
+#endif
+  FiMgrCNT
 };
 
 const struct {
@@ -203,16 +216,32 @@ typedef struct {
   // Patching info
   t_patch patches_datab;              // Loaded patches (from DB)
   t_patch patches_cache;              // Loaded patches (from patch engine's cache)
+  bool patches_datab_found;           // Whether we had a patch match in the database
+  bool patches_cache_found;           // Same but for the patch cache
   // Patching configuration
   t_patch_policy patch_type;          // Patching type
   bool use_dsaving;                   // Whether we use direct-saving mode
   bool ingame_menu_enabled;           // Enable the in-game menu.
   bool rtc_patch_enabled;             // Patch for RTC workarounds.
-  bool patches_datab_found;           // Whether we had a patch match in the database
-  bool patches_cache_found;           // Same but for the patch cache
 } t_load_gba_info;
 
+typedef struct {
+  // Save read/write policies and info
+  t_sram_load_policy sram_load_type;  // SRAM loading policy
+  t_sram_save_policy sram_save_type;  // SRAM auto-saving policy
+  char savefn[MAX_FN_LEN];            // Save file path.
+  bool savefile_found;                // Whether there's a .sav file.
+  // RTC config
+  t_rtc_state rtcval;                 // Initial RTC value.
+  // Cheats policy
+  bool use_cheats;                    // Whether we want to load cheats to use them.
+  bool cheats_found;                  // Whether there's a cheats file (not parsed tho!)
+  unsigned cheats_size;               // Size of the cheat buffer
+  char cheatsfn[MAX_FN_LEN];          // Cheats file path.
+} t_load_gba_lcfg;
+
 typedef void (*t_mrender_fn)(volatile uint8_t *frame);
+typedef void (*t_mkeyupd_fn)(unsigned newkeys);
 
 // Info and state for the menu tab
 static struct {
@@ -233,14 +262,15 @@ static struct {
     int selector;                 // Pointed file offset
     int seloff;                   // Entry at the top of the list
     int maxentries;               // Total file/dir count in current dir
+    uint16_t selhist[16];         // History of directory offsets
   } browser;
 
   // Flash ROM browser state
   struct {
     int selector;                 // Pointed file offset
     int seloff;                   // Entry at the top of the list
-    int maxentries;               // Total file/dir count in current dir
-    unsigned usedblks, freeblks;  // NOR usage info
+    uint8_t maxentries;           // Total file/dir count in current dir
+    uint8_t usedblks, freeblks;   // NOR usage info
   } fbrowser;
 
   // UI settings
@@ -269,8 +299,10 @@ static struct {
 static struct {
   const char *alert_msg;          // Extra pop-up message
 
-  uint8_t pop_num;
-  unsigned anim;
+  uint8_t pop_num;                // Current pop-up in display
+  char submenu;                   // Which submenu tab we are in (if any)
+  char selector;                  // Option selector (if any)
+  unsigned anim;                  // Animation state
 
   // Pop up message (for whatever action). Allows returning to previous popup.
   struct {
@@ -292,31 +324,21 @@ static struct {
   union {
     // GBA launch ROM pop up menu
     struct {
-      int submenu;                        // Which submenu tab we are in
-      int selector;                       // Option selector
       t_load_gba_info i;                  // ROM/Patch info and patch policy.
-      bool write_config;                  // Update the per-game config file.
-      t_sram_load_policy sram_load_type;  // SRAM loading policy
-      t_sram_save_policy sram_save_type;  // SRAM auto-saving policy
-      t_rtc_state rtcval;                 // Initial RTC value.
-      bool use_cheats;                    // Whether we want to load cheats to use them.
-      bool cheats_found;                  // Whether there's a cheats file (not parsed tho!)
-      unsigned cheats_size;               // Size of the cheat buffer
-      char cheatsfn[MAX_FN_LEN];          // Cheats file path.
-      char savefn[MAX_FN_LEN];            // Save file path.
-      bool savefile_found;                // Whether there's a .sav file.
+      t_load_gba_lcfg l;                  // ROM loading info and settings;
     } load;
 
     // Write GBA game to NOR memory
     struct {
-      int submenu;                        // Which submenu tab we are in
-      int selector;                       // Option selector
       t_load_gba_info i;                  // ROM/Patch info and patch policy.
     } norwr;
+    // Launch GBA game from NOR memory
+    struct {
+      t_load_gba_lcfg l;                  // ROM loading info and settings;
+    } norld;
 
     // Save file menu (.sav files)
     struct {
-      int selector;                       // Selected button
       char savfn[MAX_FN_LEN];             // SAV file to load/store/mangle
     } savopt;
     // Update menu (for .fw files)
@@ -358,8 +380,9 @@ _Static_assert (sizeof(t_rentry) % 4 == 0, "t_rentry must be word-friendly");
 //  - Recently played ROMs table (~64KiB)
 //  - Font data (placed by the bootloader at the 15..16MB range)
 // At the end of the SDRAM, ro-data can be loaded by the loader.
+#define scratch_mem_size (2*1024*1024)
 typedef struct {
-  uint8_t scratch[2*1024*1024];
+  uint8_t scratch[scratch_mem_size];
   t_centry *fileorder[BROWSER_MAXFN_CNT];
   t_centry fentries[BROWSER_MAXFN_CNT];
   t_rentry rentries[RECENT_MAXFN_CNT];
@@ -428,7 +451,7 @@ int romsort(const void *a, const void *b) {
   const t_flash_game_entry *ca = (t_flash_game_entry*)a;
   const t_flash_game_entry *cb = (t_flash_game_entry*)b;
 
-  return strcasecmp(ca->game_name, cb->game_name);
+  return strcasecmp(&ca->game_name[ca->bnoffset], &cb->game_name[cb->bnoffset]);
 }
 
 static void loadrom_progress(unsigned done, unsigned total) {
@@ -563,16 +586,20 @@ void sram_battery_test_callback(bool confirm) {
   }
 }
 
-bool ingame_menu_avail() {
-  const t_patch *p = spop.p.load.i.patch_type == PatchDatabase && spop.p.load.i.patches_datab_found ? &spop.p.load.i.patches_datab :
-                     spop.p.load.i.patch_type == PatchEngine   && spop.p.load.i.patches_cache_found ? &spop.p.load.i.patches_cache : NULL;
+static const t_patch * get_game_patch(const t_load_gba_info *info) {
+  return info->patch_type == PatchDatabase && info->patches_datab_found ? &info->patches_datab :
+         info->patch_type == PatchEngine   && info->patches_cache_found ? &info->patches_cache : NULL;
+}
+
+bool ingame_menu_avail(const t_load_gba_info *info) {
+  const t_patch *p = get_game_patch(info);
   // Necessary size to load the IGM (+fonts +cheats)
-  const unsigned igm_reqsz = ROUND_UP2(ingame_menu_payload.menu_rsize + font_block_size() + spop.p.load.cheats_size, 1024);
+  const unsigned igm_reqsz = ROUND_UP2(ingame_menu_payload.menu_rsize + font_block_size() + spop.p.load.l.cheats_size, 1024);
 
   // If the ROM is too big, must use some hole to load the menu.
-  if (spop.p.load.i.romfs > MAX_GBA_ROM_SIZE - igm_reqsz) {
+  if (info->romfs > MAX_GBA_ROM_SIZE - igm_reqsz) {
     // Discard holes that are too small, or not well formed.
-    if (!p || p->hole_size < igm_reqsz || p->hole_addr + p->hole_size > spop.p.load.i.romfs)
+    if (!p || p->hole_size < igm_reqsz || p->hole_addr + p->hole_size > info->romfs)
       return false;   // Too big to fit the menu!
   }
 
@@ -580,55 +607,140 @@ bool ingame_menu_avail() {
   return p && p->irqh_ops > 0;
 }
 
-bool dirsav_avail() {
-  const t_patch *p = spop.p.load.i.patch_type == PatchDatabase && spop.p.load.i.patches_datab_found ? &spop.p.load.i.patches_datab :
-                     spop.p.load.i.patch_type == PatchEngine   && spop.p.load.i.patches_cache_found ? &spop.p.load.i.patches_cache : NULL;
+bool dirsav_avail(const t_load_gba_info *info) {
+  const t_patch *p = get_game_patch(info);
 
   // Check if there's enough space for it!
-  if (spop.p.load.i.romfs > MAX_GBA_ROM_SIZE - DIRSAVE_REQ_SPACE) {
-    if (!p || p->hole_size < DIRSAVE_REQ_SPACE || p->hole_addr + p->hole_size > spop.p.load.i.romfs)
+  if (info->romfs > MAX_GBA_ROM_SIZE - DIRSAVE_REQ_SPACE) {
+    if (!p || p->hole_size < DIRSAVE_REQ_SPACE || p->hole_addr + p->hole_size > info->romfs)
       return false;   // Too big to fit!
   }
 
   return (p && supports_directsave(p->save_mode));
 }
 
+bool rtcemu_avail(const t_load_gba_info *info) {
+  const t_patch *p = get_game_patch(info);
+  return (p && p->rtc_ops);
+}
+
+static bool prepare_gba_info(t_load_gba_info *info, const t_rom_settings *st, const char *fn, uint32_t fs) {
+  // Pre-load ROM header
+  if (preload_gba_rom(fn, fs, &info->romh))
+    return false;
+
+  // Fill/copy ROM info.
+  if (fn != info->romfn)
+    strcpy(info->romfn, fn);
+  info->romfs = fs;
+
+  // Sanitize the game code for display
+  for (unsigned i = 0; i < 4; i++)
+    info->gcode[i] = isascii(info->romh.gcode[i]) ? info->romh.gcode[i] : 0x1A;
+  info->gcode[4] = 0;
+
+  // Look up patches, have them handy.
+  uint8_t gamecode[5] = {
+    info->romh.gcode[0], info->romh.gcode[1],
+    info->romh.gcode[2], info->romh.gcode[3],
+    info->romh.version
+  };
+  set_supercard_mode(MAPPED_SDRAM, true, false);
+  info->patches_datab_found = patchmem_lookup(gamecode, (uint8_t*)ROM_PATCHDB_U8, &info->patches_datab);
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+
+  // Attempt to load any existing patch and check also the PE cache dir.
+  info->patches_cache_found = load_rom_patches(fn, &info->patches_cache);
+  if (!info->patches_cache_found)
+    info->patches_cache_found = load_cached_patches(fn, &info->patches_cache);
+
+  // If PatchAuto is selected, resolve it. Downgrade if not found.
+  if (st->patch_policy == PatchAuto) {
+    if (info->patches_cache_found)
+      info->patch_type = PatchEngine;      // Try existing patches
+    else if (info->patches_datab_found)
+      info->patch_type = PatchDatabase;    // Try the database then
+    else
+      info->patch_type = PatchNone;
+  }
+  // Downgrade to no patches if the specified was not found.
+  else if (st->patch_policy == PatchDatabase) {
+    if (!info->patches_datab_found)
+      info->patch_type = PatchNone;
+  }
+  else if (st->patch_policy == PatchEngine) {
+    if (!info->patches_cache_found)
+      info->patch_type = PatchNone;
+  }
+  else
+    info->patch_type = st->patch_policy;
+
+  // Fill defaults as requested if possible.
+  info->rtc_patch_enabled = st->use_rtc && rtcemu_avail(info);
+  info->use_dsaving = st->use_dsaving && dirsav_avail(info);
+  info->ingame_menu_enabled = st->use_igm && ingame_menu_avail(info);
+
+  return true;
+}
+
+static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *data, bool use_cheats, const char *fn) {
+  // Attempt to find a cheat file if cheats are enabled.
+  data->cheats_size = 0;
+  data->cheats_found = false;
+  if (enable_cheats) {
+    strcpy(data->cheatsfn, fn);
+    replace_extension(data->cheatsfn, ".cht");
+    data->cheats_found = check_file_exists(data->cheatsfn);
+    if (!data->cheats_found) {
+      // Create a path using the game ID and version.
+      npf_snprintf(data->cheatsfn, sizeof(data->cheatsfn), CHEATS_PATH "%c%c%c%c-%02x.cht",
+                   gcode[0], gcode[1], gcode[2], gcode[3], ver);
+      data->cheats_found = check_file_exists(data->cheatsfn);
+
+      // Load the cheats into memory if enabled.
+      if (data->cheats_found) {
+        // Load the cheats to the ROM area, just after the font pack. This is for easier relocation.
+        uint8_t *cheat_area = (uint8_t*)(ROM_FONTBASE_U8 + font_block_size());
+        unsigned max_area = 1024*1024 - font_block_size();    // 1MB is reserved at the ROM end.
+        int cheatsz = open_read_cheats(cheat_area, max_area, data->cheatsfn);
+        if (cheatsz < 0)
+          data->cheats_found = false;
+        else
+          data->cheats_size = cheatsz;
+      }
+    }
+  }
+  data->use_cheats = enable_cheats && data->cheats_found && use_cheats;
+}
+
+static void prepare_gba_settings(t_load_gba_lcfg *data, const t_rom_settings *st, bool game_no_save, const char *fn) {
+  // Calculate the .sav file name, and check its existance.
+  sram_template_filename_calc(fn, ".sav", data->savefn);
+  data->savefile_found = check_file_exists(data->savefn);
+
+  // Use default settings (and file existance) to fill in default choice.
+  // DirectSaving enabled overrides the other settings.
+  if (st->use_dsaving) {
+    data->sram_load_type = data->savefile_found ? SaveLoadSav : SaveLoadReset;
+    data->sram_save_type = SaveDirect;
+  }
+  else {
+    data->sram_load_type = game_no_save         ? SaveLoadDisable :
+                           !autoload_default    ? SaveLoadDisable :
+                           data->savefile_found ? SaveLoadSav :
+                                                  SaveLoadReset;
+    data->sram_save_type = autosave_default && !game_no_save ? SaveReboot : SaveDisable;
+  }
+
+  data->rtcval = st->rtcval;
+}
+
+
 static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) {
   if (fs > MAX_GBA_ROM_SIZE) {
     // The ROM is too big to be loaded!
     spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
-  } else if (preload_gba_rom(fn, fs, &spop.p.load.i.romh)) {
-    spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
   } else {
-    // Fill in the requested ROM info (some hacky tricks used!)
-    if (fn != spop.p.load.i.romfn)
-      strcpy(spop.p.load.i.romfn, fn);
-    spop.p.load.i.romfs = fs;
-
-    // Sanitize the game code for display
-    for (unsigned i = 0; i < 4; i++)
-      spop.p.load.i.gcode[i] = isascii(spop.p.load.i.romh.gcode[i]) ? spop.p.load.i.romh.gcode[i] : 0x1A;
-    spop.p.load.i.gcode[4] = 0;
-
-    // Look up patches, have them handy.
-    const t_rom_header *rmh = &spop.p.load.i.romh;
-    uint8_t gamecode[5] = {
-      rmh->gcode[0], rmh->gcode[1],
-      rmh->gcode[2], rmh->gcode[3],
-      rmh->version
-    };
-    set_supercard_mode(MAPPED_SDRAM, true, false);
-    spop.p.load.i.patches_datab_found = patchmem_lookup(
-            gamecode, (uint8_t*)ROM_PATCHDB_U8, &spop.p.load.i.patches_datab);
-    set_supercard_mode(MAPPED_SDRAM, true, true);
-
-    bool issfw = is_superfw(&spop.p.load.i.romh);
-
-    // Attempt to load any existing patch and check also the PE cache dir.
-    spop.p.load.i.patches_cache_found = load_rom_patches(fn, &spop.p.load.i.patches_cache);
-    if (!spop.p.load.i.patches_cache_found)
-      spop.p.load.i.patches_cache_found = load_cached_patches(fn, &spop.p.load.i.patches_cache);
-
     // Default to global settings (in case the file is not found).
     t_rom_settings savedcfg = {
       .rtcval = rtcvalue_default,
@@ -640,113 +752,48 @@ static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) 
     };
     // Check for any game-specific config file, so we don't have to guess the config.
     // The config file can be partial, hence the defaults.
-    spop.p.load.write_config = load_rom_settings(fn, &savedcfg);
+    load_rom_settings(fn, &savedcfg);
 
-    // Attempt to find a cheat file if cheats are enabled.
-    spop.p.load.cheats_size = 0;
-    spop.p.load.cheats_found = false;
-    if (enable_cheats) {
-      strcpy(spop.p.load.cheatsfn, fn);
-      replace_extension(spop.p.load.cheatsfn, ".cht");
-      spop.p.load.cheats_found = check_file_exists(spop.p.load.cheatsfn);
-      if (!spop.p.load.cheats_found) {
-        // Create a path using the game ID and version.
-        npf_snprintf(spop.p.load.cheatsfn, sizeof(spop.p.load.cheatsfn), CHEATS_PATH "%c%c%c%c-%02x.cht",
-                     rmh->gcode[0], rmh->gcode[1], rmh->gcode[2], rmh->gcode[3], rmh->version);
-        spop.p.load.cheats_found = check_file_exists(spop.p.load.cheatsfn);
-
-        // Load the cheats into memory if enabled.
-        if (spop.p.load.cheats_found) {
-          // Load the cheats to the ROM area, just after the font pack. This is for easier relocation.
-          uint8_t *cheat_area = (uint8_t*)(ROM_FONTBASE_U8 + font_block_size());
-          unsigned max_area = 1024*1024 - font_block_size();    // 1MB is reserved at the ROM end.
-          int cheatsz = open_read_cheats(cheat_area, max_area, spop.p.load.cheatsfn);
-          if (cheatsz < 0)
-            spop.p.load.cheats_found = false;
-          else
-            spop.p.load.cheats_size = cheatsz;
-        }
-      }
-    }
-    spop.p.load.use_cheats = enable_cheats && spop.p.load.cheats_found && savedcfg.use_cheats;
-
-    // If patch engine is selected but no patches found, prompt for generation.
-    // If auto is selected and no patches nor DB entries found, do prompt too.
-    bool no_patches = (savedcfg.patch_policy == PatchAuto && !spop.p.load.i.patches_datab_found && !spop.p.load.i.patches_cache_found);
-    bool no_engine  = (savedcfg.patch_policy == PatchEngine && !spop.p.load.i.patches_cache_found);
-
-    if (prompt_patchgen && !issfw && (no_patches || no_engine)) {
-      // No patches found, ask the user if they want to generate patches
-      // using the patch engine.
-      spop.qpop.message = msgs[lang_id][no_patches ? MSG_Q1_NOPATCH : MSG_Q1_PATCHENG];
-      spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
-      spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
-      spop.qpop.option = 0;
-      spop.qpop.callback = patch_gen_callback;
-      spop.qpop.clear_popup_ok = true;
-      return;
-    }
-
-    // Calculate the .sav file name, and check its existance.
-    sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
-    spop.p.load.savefile_found = check_file_exists(spop.p.load.savefn);
-
-    // If PatchAuto is selected, resolve it. Downgrade if not found.
-    if (savedcfg.patch_policy == PatchAuto) {
-      if (spop.p.load.i.patches_cache_found)
-        spop.p.load.i.patch_type = PatchEngine;      // Try existing patches
-      else if (spop.p.load.i.patches_datab_found)
-        spop.p.load.i.patch_type = PatchDatabase;    // Try the database then
-      else
-        spop.p.load.i.patch_type = PatchNone;
-    }
-    // Downgrade to no patches if the specified was not found.
-    else if (savedcfg.patch_policy == PatchDatabase) {
-      if (!spop.p.load.i.patches_datab_found)
-        spop.p.load.i.patch_type = PatchNone;
-    }
-    else if (savedcfg.patch_policy == PatchEngine) {
-      if (!spop.p.load.i.patches_cache_found)
-        spop.p.load.i.patch_type = PatchNone;
-    }
-    else
-      spop.p.load.i.patch_type = savedcfg.patch_policy;
-
-    const t_patch *p = spop.p.load.i.patch_type == PatchDatabase ? &spop.p.load.i.patches_datab :
-                       spop.p.load.i.patch_type == PatchEngine   ? &spop.p.load.i.patches_cache :
-                                                                 NULL;
-    bool ds_default = savedcfg.use_dsaving && dirsav_avail();
-
-    // What if the game doesn't have a save method?
-    bool game_no_save = (p && p->save_mode == SaveTypeNone) || issfw;
-
-    // Show load ROM menu.
-    spop.pop_num = POPUP_GBA_LOAD;
-    spop.anim = 0;
-    spop.p.load.submenu = GbaLoadPopInfo;
-    spop.p.load.selector = GBALoadButt;
-    spop.p.load.i.use_dsaving = ds_default;
-
-    // Use default settings (and file existance) to fill in default choice.
-    // DirectSaving enabled overrides the other settings.
-    if (ds_default) {
-      spop.p.load.sram_load_type = spop.p.load.savefile_found ? SaveLoadSav : SaveLoadReset;
-      spop.p.load.sram_save_type = SaveDirect;
-    }
+    if (!prepare_gba_info(&spop.p.load.i, &savedcfg, fn, fs))
+      spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
     else {
-      spop.p.load.sram_load_type = game_no_save               ? SaveLoadDisable :
-                                   !autoload_default          ? SaveLoadDisable :
-                                   spop.p.load.savefile_found ? SaveLoadSav :
-                                                                SaveLoadReset;
-      spop.p.load.sram_save_type = autosave_default && !game_no_save ? SaveReboot : SaveDisable;
-    }
+      const t_rom_header *rmh = &spop.p.load.i.romh;
 
-    spop.p.load.i.ingame_menu_enabled = ingame_menu_avail() && savedcfg.use_igm;
-    // Use default, if availabe.
-    spop.p.load.i.rtc_patch_enabled = savedcfg.use_rtc && spop.p.load.i.patches_datab.rtc_ops;
-    strcpy(spop.p.load.i.romfn, fn);
-    // This is only used if the RTC patches are available and enabled.
-    spop.p.load.rtcval = savedcfg.rtcval;
+      // If patch engine is selected but no patches found, prompt for generation.
+      // If auto is selected and no patches nor DB entries found, do prompt too.
+      bool no_patches = (savedcfg.patch_policy == PatchAuto &&
+                         !spop.p.load.i.patches_datab_found && !spop.p.load.i.patches_cache_found);
+      bool no_engine  = (savedcfg.patch_policy == PatchEngine && !spop.p.load.i.patches_cache_found);
+      bool issfw = is_superfw(rmh);
+
+      if (prompt_patchgen && !issfw && (no_patches || no_engine)) {
+        // No patches found, ask the user if they want to generate patches
+        // using the patch engine.
+        spop.qpop.message = msgs[lang_id][no_patches ? MSG_Q1_NOPATCH : MSG_Q1_PATCHENG];
+        spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+        spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+        spop.qpop.option = 0;
+        spop.qpop.callback = patch_gen_callback;
+        spop.qpop.clear_popup_ok = true;
+        return;
+      }
+
+      // What if the game doesn't have a save method? Select sane defaults.
+      const t_patch *p = get_game_patch(&spop.p.load.i);
+      bool game_no_save = (p && p->save_mode == SaveTypeNone) || issfw;
+
+      // Attempt to find a cheat file if cheats are enabled.
+      prepare_gba_cheats((char*)&rmh->gcode[0], rmh->version, &spop.p.load.l, savedcfg.use_cheats, fn);
+
+      // Load and set default and sane settings honoring defaults and preferences.
+      prepare_gba_settings(&spop.p.load.l, &savedcfg, game_no_save, fn);
+
+      // Show load ROM menu.
+      spop.pop_num = POPUP_GBA_LOAD;
+      spop.anim = 0;
+      spop.submenu = GbaLoadPopInfo;
+      spop.selector = GBALoadButt;
+    }
   }
 }
 
@@ -838,6 +885,7 @@ static void insert_recent_fn(const char *fn) {
   smenu.recent.maxentries++;
 }
 
+__attribute__((noinline))
 static bool recent_flush() {
   // Flush to disk!
   FIL fo;
@@ -952,9 +1000,9 @@ static void recent_reload() {
 
 void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
   // Load: Sav/Reset Save: Reboot/Disable
-  sram_template_filename_calc(fn, ".sav", spop.p.load.savefn);
-  t_sram_load_policy lp = check_file_exists(spop.p.load.savefn) ? SaveLoadSav : SaveLoadReset;
-  unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.savefn);
+  sram_template_filename_calc(fn, ".sav", spop.p.load.l.savefn);
+  t_sram_load_policy lp = check_file_exists(spop.p.load.l.savefn) ? SaveLoadSav : SaveLoadReset;
+  unsigned errsave = prepare_sram_based_savegame(lp, SaveReboot, spop.p.load.l.savefn);
   if (errsave) {
     unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
                                                         MSG_ERR_SAVEWR;
@@ -986,7 +1034,7 @@ static void browser_open(const char *fn, uint32_t fs) {
     browser_open_gba(fn, fs, true);
   else if (!strcasecmp(&fn[l-4], ".sav")) {
     spop.pop_num = POPUP_SAVFILE;
-    spop.p.savopt.selector = SavMAX;
+    spop.selector = SavMAX;
     strcpy(spop.p.savopt.savfn, fn);
   }
   else if (!strcasecmp(&fn[l-3], ".fw")) {
@@ -1066,10 +1114,8 @@ static void browser_open(const char *fn, uint32_t fs) {
 }
 
 // Loads a new directory list in the ROM browser.
-// Sets selector pointer at offset zero
 // TODO: Implement filtering (.gba/.rom/.bin... etc) using settings
 static void browser_reload() {
-  smenu.browser.selector = 0;
   smenu.anim_state = 0;
 
   unsigned fcount = 0;
@@ -1101,6 +1147,9 @@ static void browser_reload() {
   heapsort4(sdr_state->fileorder, fcount, sizeof(t_centry*) / sizeof(uint32_t), filesort);
 
   smenu.browser.maxentries = fcount;
+  if (smenu.browser.selector >= fcount)
+    smenu.browser.selector = fcount - 1;
+  smenu.browser.seloff = MAX(0, smenu.browser.selector - BROWSER_ROWS / 2);
 }
 
 // Loads NOR game entries so they can be browsed.
@@ -1310,11 +1359,12 @@ void render_flashbrowser(volatile uint8_t *frame) {
     draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
 
     // Animate the row entries if they are too long!
+    const char *romname = &e->game_name[e->bnoffset];
     if (i == smenu.fbrowser.selector - smenu.fbrowser.seloff)
-      draw_text_ovf_rotate(e->game_name, frame, 20, (1 + i) * 16,
+      draw_text_ovf_rotate(romname, frame, 20, (1 + i) * 16,
                            SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
     else
-      draw_text_ovf(e->game_name, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+      draw_text_ovf(romname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
   }
 
   char tmp[32], tmp1[32], tmp2[32];
@@ -1400,126 +1450,135 @@ void render_sav_menu_popup(volatile uint8_t *frame) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
   for (unsigned i = 0; i < 3; i++) {
-    if (spop.p.savopt.selector == i)
+    if (spop.selector == i)
       draw_box_full(frame, 20, 220, 32 + 28 * i, 32 + 28 * i + 20, FG_COLOR, HI_COLOR);
     else
       draw_box_outline(frame, 20, 220, 32 + 28 * i, 32 + 28 * i + 20, FG_COLOR);
     draw_central_text(msgs[lang_id][MSG_SAVOPT_OPT0 + i], frame, 120, 34 + 28 * i);
   }
-  if (spop.p.savopt.selector == SavQuit)
+  if (spop.selector == SavQuit)
       draw_box_full(frame, 20, 220, 124, 144, FG_COLOR, HI_COLOR);
   else
     draw_box_outline(frame, 20, 220, 124, 144, FG_COLOR);
   draw_central_text(msgs[lang_id][MSG_CANCEL], frame, 120, 126);
 }
 
-void render_gba_load_popup(volatile uint8_t *frame) {
+static void render_gbarom_info(volatile uint8_t *frame, const char *dispname,
+                               bool issf, const char *gcode, uint8_t ver, int save_type) {
   char tmp[64];
+  draw_central_text(msgs[lang_id][MSG_GBALOAD_MINFO], frame, SCREEN_WIDTH/2, 23);
+
+  const char *romname = file_basename(dispname);
+  unsigned twidth = font_width(romname);
+  if (twidth > SCREEN_WIDTH - 20)
+    draw_text_ovf_rotate(romname, frame, 10, 52,
+                         SCREEN_WIDTH - 20, &spop.anim);
+  else
+    draw_central_text_ovf(romname, frame, SCREEN_WIDTH/2, 52, SCREEN_WIDTH - 20);
+
+  npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_LOADINFO_GAME], gcode, ver);
+  draw_central_text_ovf(tmp, frame, SCREEN_WIDTH/2, 82, SCREEN_WIDTH - 20);
+
+  if (save_type < 0)
+    draw_central_text_ovf(msgs[lang_id][MSG_LOADINFO_UNKW], frame, SCREEN_WIDTH/2, 102, SCREEN_WIDTH - 20);
+  else if (issf)
+    draw_central_text_ovf("SuperFW firmware", frame, SCREEN_WIDTH/2, 102, SCREEN_WIDTH - 20);
+  else {
+    const char *stype[] = {
+      msgs[lang_id][MSG_SAVETYPE_NONE],       // SaveTypeNone
+      msgs[lang_id][MSG_SAVETYPE_SRAM],       // SaveTypeSRAM
+      msgs[lang_id][MSG_SAVETYPE_EEPROM],     // SaveTypeEEPROM4K
+      msgs[lang_id][MSG_SAVETYPE_EEPROM],     // SaveTypeEEPROM64K
+      msgs[lang_id][MSG_SAVETYPE_FLASH],      // SaveTypeFlash512K
+      msgs[lang_id][MSG_SAVETYPE_FLASH],      // SaveTypeFlash1024K
+    };
+    const char *ssize[] = {
+      "0KB",       // SaveTypeNone
+      "32KB",      // SaveTypeSRAM
+      "0.5KB",     // SaveTypeEEPROM4K
+      "8KB",       // SaveTypeEEPROM64K
+      "64KB",      // SaveTypeFlash512K
+      "128KB",     // SaveTypeFlash1024K
+    };
+
+    npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_LOADINFO_SAVE], stype[save_type], ssize[save_type]);
+    draw_central_text_ovf(tmp, frame, SCREEN_WIDTH/2, 102, SCREEN_WIDTH - 20);
+  }
+
+  draw_box_full(frame, 20, 220, 132, 152, FG_COLOR, HI_COLOR);
+}
+
+static const char *render_gbarom_patching(volatile uint8_t *frame, const t_load_gba_info *info, int selector) {
+  draw_central_text(msgs[lang_id][MSG_GBALOAD_MPATCH], frame, SCREEN_WIDTH/2, 23);
+  draw_text_ovf(msgs[lang_id][MSG_DEFS_PATCH], frame, 12, 44, 224);
+  draw_central_text(msgs[lang_id][MSG_PATCH_TYPE0 + info->patch_type], frame, 162, 44);
+  draw_text_ovf(msgs[lang_id][MSG_LOADER_SAVET], frame, 12, 62, 224);
+  draw_central_text(msgs[lang_id][MSG_LOADER_ST0 + (info->use_dsaving ? 0 : 1)], frame, 170, 62);
+  draw_text_ovf(msgs[lang_id][MSG_LOADER_MENU], frame, 12, 80, 224);
+  draw_central_text(msgs[lang_id][info->ingame_menu_enabled ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 80);
+  draw_text_ovf(msgs[lang_id][MSG_LOADER_RTCE], frame, 12, 98, 224);
+  draw_central_text(msgs[lang_id][info->rtc_patch_enabled ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 98);
+
+  draw_text_ovf(msgs[lang_id][MSG_LOADER_PTCH], frame, 12, 116, 224);
+  draw_box_outline(frame, 170 - 40, 170 + 40, 115, 133, FG_COLOR);
+  draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 170, 116);
+
+  return (selector == GBALoadPatch) ? msgs[lang_id][MSG_PATCH_TYPE_I0 + info->patch_type] :
+         (selector == GBASavePatch) ? msgs[lang_id][MSG_LOADER_ST_I0 + (info->use_dsaving ? 0 : 1)] :
+         (selector == GBAInGameMen) ? msgs[lang_id][MSG_INGAME_I] :
+         (selector == GBARTCPatch)  ? msgs[lang_id][MSG_PATCHRTC_I] :
+         (selector == GBAPatchGen)  ? msgs[lang_id][MSG_PATCHE_I] : NULL;
+}
+
+static const char *render_gbarom_loading(volatile uint8_t *frame, const t_load_gba_lcfg *data, bool rtc_patching, int selector) {
+  char tmp[64];
+  draw_central_text(msgs[lang_id][MSG_GBALOAD_OPTS], frame, SCREEN_WIDTH/2, 23);
+  draw_text_ovf(msgs[lang_id][MSG_LOADER_LOADP], frame, 12, 44, 224);
+  draw_central_text(msgs[lang_id][MSG_LOADER_LOADP0 + data->sram_load_type], frame, 170, 44);
+  draw_text_ovf(msgs[lang_id][MSG_LOADER_SAVEP], frame, 12, 62, 224);
+  draw_central_text(msgs[lang_id][MSG_LOADER_SAVEP0 + data->sram_save_type], frame, 170, 62);
+  draw_text_ovf(msgs[lang_id][MSG_DEF_RTCVAL], frame, 12, 80, 224);
+  if (rtc_patching) {
+    npf_snprintf(tmp, sizeof(tmp), "20%02d/%02d/%02d %02d:%02d",
+      data->rtcval.year, data->rtcval.month + 1, data->rtcval.day + 1,
+      data->rtcval.hour, data->rtcval.mins);
+    draw_central_text(tmp, frame, 170, 80);
+  }
+  else
+    draw_central_text("-", frame, 170, 80);
+  draw_text_ovf(msgs[lang_id][MSG_SETT_LDCHT], frame, 12, 98, 224);
+  draw_central_text(msgs[lang_id][data->use_cheats ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 98);
+
+  draw_box_outline(frame, 170 - 40, 170 + 40, 115, 133, FG_COLOR);
+  draw_text_ovf(msgs[lang_id][MSG_SETT_REMEMB], frame, 12, 116, 224);
+  draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 170, 116);
+
+  return (selector == GBALdSetLoadP) ? msgs[lang_id][MSG_LOADER_LOADP_I0 + data->sram_load_type] :
+         (selector == GBALdSetSaveP) ? msgs[lang_id][MSG_LOADER_SAVEP_I0 + data->sram_save_type] :
+         (selector == GBALdSetCheats && !enable_cheats) ? msgs[lang_id][MSG_CHEATSDIS_I] :
+         (selector == GBALdSetCheats && !data->cheats_found) ? msgs[lang_id][MSG_CHEATSNOA_I] :
+         (selector == GBALdRemember) ? msgs[lang_id][MSG_REMEMB_I] : NULL;
+}
+
+void render_gba_load_popup(volatile uint8_t *frame) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
+  draw_text_ovf("⯇", frame, 10, 23, 64);
+  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 23);
 
-  draw_text_ovf("⯇", frame, 10, 24, 64);
-  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 24);
-
+  const t_load_gba_info *info = &spop.p.load.i;
+  const t_patch *p = get_game_patch(info);
   const char *ht = NULL;
-
-  switch (spop.p.load.submenu) {
+  switch (spop.submenu) {
   case GbaLoadPopInfo:
-    draw_central_text(msgs[lang_id][MSG_GBALOAD_MINFO], frame, SCREEN_WIDTH/2, 24);
-    {
-      const char *romname = file_basename(spop.p.load.i.romfn);
-      unsigned twidth = font_width(romname);
-      if (twidth > SCREEN_WIDTH - 20)
-        draw_text_ovf_rotate(romname, frame, 10, 52,
-                             SCREEN_WIDTH - 20, &spop.anim);
-      else
-        draw_central_text_ovf(romname, frame, SCREEN_WIDTH/2, 52, SCREEN_WIDTH - 20);
-
-      npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_LOADINFO_GAME],
-                   spop.p.load.i.gcode, spop.p.load.i.romh.version);
-      draw_central_text_ovf(tmp, frame, SCREEN_WIDTH/2, 82, SCREEN_WIDTH - 20);
-
-      bool pfound = spop.p.load.i.patch_type == PatchDatabase ? spop.p.load.i.patches_datab_found :
-                    spop.p.load.i.patch_type == PatchEngine   ? spop.p.load.i.patches_cache_found :
-                                                              false;
-
-      if (pfound) {
-        const t_patch *p = spop.p.load.i.patch_type == PatchDatabase ? &spop.p.load.i.patches_datab :
-                           spop.p.load.i.patch_type == PatchEngine   ? &spop.p.load.i.patches_cache :
-                                                                     NULL;
-
-        const char *stype[] = {
-          msgs[lang_id][MSG_SAVETYPE_NONE],       // SaveTypeNone
-          msgs[lang_id][MSG_SAVETYPE_SRAM],       // SaveTypeSRAM
-          msgs[lang_id][MSG_SAVETYPE_EEPROM],     // SaveTypeEEPROM4K
-          msgs[lang_id][MSG_SAVETYPE_EEPROM],     // SaveTypeEEPROM64K
-          msgs[lang_id][MSG_SAVETYPE_FLASH],      // SaveTypeFlash512K
-          msgs[lang_id][MSG_SAVETYPE_FLASH],      // SaveTypeFlash1024K
-        };
-        const char *ssize[] = {
-          "0KB",       // SaveTypeNone
-          "32KB",      // SaveTypeSRAM
-          "0.5KB",     // SaveTypeEEPROM4K
-          "8KB",       // SaveTypeEEPROM64K
-          "64KB",      // SaveTypeFlash512K
-          "128KB",     // SaveTypeFlash1024K
-        };
-
-        npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_LOADINFO_SAVE],
-                     stype[p->save_mode], ssize[p->save_mode]);
-        draw_central_text_ovf(tmp, frame, SCREEN_WIDTH/2, 102, SCREEN_WIDTH - 20);
-      } else if (is_superfw(&spop.p.load.i.romh)) {
-        draw_central_text_ovf("SuperFW firmware", frame, SCREEN_WIDTH/2, 102, SCREEN_WIDTH - 20);
-      } else {
-        draw_central_text_ovf(msgs[lang_id][MSG_LOADINFO_UNKW], frame, SCREEN_WIDTH/2, 102, SCREEN_WIDTH - 20);
-      }
-    }
+    render_gbarom_info(frame, info->romfn, is_superfw(&info->romh), info->gcode,
+                       info->romh.version, p ? p->save_mode : -1);
+    draw_central_text(msgs[lang_id][MSG_LOAD_GBA], frame, 120, 134);
     break;
-  case GbaLoadPopSave:
-    draw_central_text(msgs[lang_id][MSG_GBALOAD_MSAVE], frame, SCREEN_WIDTH/2, 24);
-    draw_text_ovf(msgs[lang_id][MSG_LOADER_SAVET], frame, 12, 48, 224);
-    draw_central_text(msgs[lang_id][MSG_LOADER_ST0 + (spop.p.load.i.use_dsaving ? 0 : 1)], frame, 170, 48);
-    draw_text_ovf(msgs[lang_id][MSG_LOADER_LOADP], frame, 12, 68, 224);
-    draw_central_text(msgs[lang_id][MSG_LOADER_LOADP0 + spop.p.load.sram_load_type], frame, 170, 68);
-    draw_text_ovf(msgs[lang_id][MSG_LOADER_SAVEP], frame, 12, 88, 224);
-    draw_central_text(msgs[lang_id][MSG_LOADER_SAVEP0 + spop.p.load.sram_save_type], frame, 170, 88);
-
-    ht = (spop.p.load.selector == GBASaveLoadP) ? msgs[lang_id][MSG_LOADER_LOADP_I0 + spop.p.load.sram_load_type] :
-         (spop.p.load.selector == GBASaveSaveP) ? msgs[lang_id][MSG_LOADER_SAVEP_I0 + spop.p.load.sram_save_type] :
-         (spop.p.load.selector == GBASaveMode)  ? msgs[lang_id][MSG_LOADER_ST_I0 + (spop.p.load.i.use_dsaving ? 0 : 1)] : NULL;
+  case GbaLoadPopLoadS:
+    ht = render_gbarom_loading(frame, &spop.p.load.l, info->rtc_patch_enabled, spop.selector);
     break;
   case GbaLoadPopPatch:
-    draw_central_text(msgs[lang_id][MSG_GBALOAD_MPATCH], frame, SCREEN_WIDTH/2, 24);
-    draw_text_ovf(msgs[lang_id][MSG_DEFS_PATCH], frame, 12, 48, 224);
-    draw_central_text(msgs[lang_id][MSG_PATCH_TYPE0 + spop.p.load.i.patch_type], frame, 162, 48);
-    draw_text_ovf(msgs[lang_id][MSG_LOADER_MENU], frame, 12, 68, 224);
-    draw_central_text(msgs[lang_id][spop.p.load.i.ingame_menu_enabled ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 162, 68);
-    draw_text_ovf(msgs[lang_id][MSG_LOADER_PTCH], frame, 12, 88, 224);
-    draw_box_outline(frame, 112, 212, 86, 106, FG_COLOR);
-    draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 162, 88);
-
-    ht = (spop.p.load.selector == GBALoadPatch) ? msgs[lang_id][MSG_PATCH_TYPE_I0 + spop.p.load.i.patch_type] :
-         (spop.p.load.selector == GBAInGameMen) ? msgs[lang_id][MSG_INGAME_I] :
-         (spop.p.load.selector == GBAPatchGen)  ? msgs[lang_id][MSG_PATCHE_I] : NULL;
-
-    break;
-  case GbaLoadPopSett:
-    draw_central_text(msgs[lang_id][MSG_GBALOAD_MSETT], frame, SCREEN_WIDTH/2, 24);
-
-    npf_snprintf(tmp, sizeof(tmp), "20%02d/%02d/%02d %02d:%02d",
-      spop.p.load.rtcval.year, spop.p.load.rtcval.month + 1, spop.p.load.rtcval.day + 1,
-      spop.p.load.rtcval.hour, spop.p.load.rtcval.mins);
-
-    draw_text_ovf(msgs[lang_id][MSG_LOADER_RTCE], frame, 12, 48, 224);
-    draw_central_text(spop.p.load.i.rtc_patch_enabled ? tmp : msgs[lang_id][MSG_KNOB_DISABLED], frame, 170, 48);
-    draw_text_ovf(msgs[lang_id][MSG_SETT_LDCHT], frame, 12, 68, 224);
-    draw_central_text(msgs[lang_id][spop.p.load.use_cheats ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 68);
-    draw_text_ovf(msgs[lang_id][MSG_SETT_REMEMB], frame, 12, 88, 224);
-    draw_central_text(msgs[lang_id][spop.p.load.write_config ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 88);
-
-    ht = (spop.p.load.selector == GBASetRememb) ? msgs[lang_id][MSG_REMEMB_I] :
-         (spop.p.load.selector == GBASetLdCht && !enable_cheats) ? msgs[lang_id][MSG_CHEATSDIS_I] :
-         (spop.p.load.selector == GBASetLdCht && !spop.p.load.cheats_found) ? msgs[lang_id][MSG_CHEATSNOA_I] :
-         (spop.p.load.selector == GBASetRTCEn)  ? msgs[lang_id][MSG_PATCHRTC_I] : NULL;
+    ht = render_gbarom_patching(frame, &spop.p.load.i, spop.selector);
     break;
   };
 
@@ -1527,34 +1586,107 @@ void render_gba_load_popup(volatile uint8_t *frame) {
   if (ht) {
     unsigned twidth = font_width(ht);
     if (twidth > SCREEN_WIDTH - 20)
-      draw_text_ovf_rotate(ht, frame, 10, 110, SCREEN_WIDTH - 20, &spop.anim);
+      draw_text_ovf_rotate(ht, frame, 10, 137, SCREEN_WIDTH - 20, &spop.anim);
     else
-      draw_central_text_ovf(ht, frame, SCREEN_WIDTH/2, 110, SCREEN_WIDTH - 20);
+      draw_central_text_ovf(ht, frame, SCREEN_WIDTH/2, 137, SCREEN_WIDTH - 20);
   }
 
-  if (GBALoadButt == spop.p.load.selector) {
-    draw_box_full(frame, 20, 220, 132, 152, FG_COLOR, HI_COLOR);
-  } else {
+  if (spop.submenu != GbaLoadPopInfo) {
+    const unsigned offy = 43;
     for (unsigned i = 8; i < 232; i += 16) {
-      render_icon_trans(i, 26 + spop.p.load.selector * 20, 63);
-      render_icon_trans(i, 30 + spop.p.load.selector * 20, 63);
+      render_icon_trans(i, offy + 0 + spop.selector * 18, 63);
+      render_icon_trans(i, offy + 2 + spop.selector * 18, 63);
     }
-    draw_box_outline(frame, 20, 220, 132, 152, FG_COLOR);
   }
-  draw_central_text(msgs[lang_id][MSG_LOAD_GBA], frame, 120, 134);
 }
 
-void render_gba_loadorwrite(volatile uint8_t *frame) {
+void render_filemgr(volatile uint8_t *frame) {
+  // Draw the file name and the options available
+  draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
+  t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+  const char *bn = file_basename(e->fname);
+
+  unsigned twidth = font_width(bn);
+  if (twidth > SCREEN_WIDTH - 20)
+    draw_text_ovf_rotate(bn, frame, 10, 32, SCREEN_WIDTH - 20, &spop.anim);
+  else
+    draw_central_text_ovf(bn, frame, SCREEN_WIDTH/2, 32, SCREEN_WIDTH - 20);
+
+  for (unsigned i = 0; i < FiMgrCNT; i++)
+    if (i == spop.selector)
+      draw_box_full(frame, 20, 220, 60 + i*30, 80 + i*30, FG_COLOR, HI_COLOR);
+    else
+      draw_box_outline(frame, 20, 220, 60 + i*30, 80 + i*30, FG_COLOR);
+
+  draw_central_text(msgs[lang_id][MSG_FMGR_DEL], frame, 120, 62 + 30*FiMgrDelete);
+  draw_central_text(msgs[lang_id][(e->attr & AM_HID) ? MSG_FMGR_UNHIDE : MSG_FMGR_HIDE], frame, 120, 62 + 30*FiMgrHide);
+
+  #ifdef SUPPORT_NORGAMES
+  draw_central_text(msgs[lang_id][MSG_NOR_WRITE], frame, 120, 62 + 30*FiMgrWriteNOR);
+  #endif
 }
 
+
+#ifdef SUPPORT_NORGAMES
 void render_gba_norwrite(volatile uint8_t *frame) {
+  draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
+  draw_text_ovf("⯇", frame, 10, 23, 64);
+  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 23);
+
+  if (spop.submenu == GbaLoadPopInfo) {
+    const t_load_gba_info *info = &spop.p.norwr.i;
+    const t_patch *p = get_game_patch(info);
+    render_gbarom_info(frame, info->romfn, is_superfw(&info->romh),
+                       info->gcode, info->romh.version, p ? p->save_mode : -1);
+    draw_central_text(msgs[lang_id][MSG_NOR_WRITE], frame, 120, 134);
+  } else {
+    const char *ht = render_gbarom_patching(frame, &spop.p.norwr.i, spop.selector);
+    if (ht) {
+      unsigned twidth = font_width(ht);
+      if (twidth > SCREEN_WIDTH - 20)
+        draw_text_ovf_rotate(ht, frame, 10, 137, SCREEN_WIDTH - 20, &spop.anim);
+      else
+        draw_central_text_ovf(ht, frame, SCREEN_WIDTH/2, 137, SCREEN_WIDTH - 20);
+    }
+    const unsigned offy = 43;
+    for (unsigned i = 8; i < 232; i += 16) {
+      render_icon_trans(i, offy + 0 + spop.selector * 18, 63);
+      render_icon_trans(i, offy + 2 + spop.selector * 18, 63);
+    }
+  }
 }
 
 void render_gba_norload(volatile uint8_t *frame) {
+  draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
+  draw_text_ovf("⯇", frame, 10, 23, 64);
+  draw_rightj_text("⯈", frame, SCREEN_WIDTH - 10, 23);
+
+  t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
+  if (spop.submenu == GbaLoadPopInfo) {
+    int save_type = GET_GATTR_SAVEM(e->gattrs);
+    render_gbarom_info(frame, e->game_name, false, (const char*)&e->gamecode, e->gamever, save_type);
+    draw_central_text(msgs[lang_id][MSG_NOR_LAUNCH], frame, 120, 134);
+  } else {
+    bool rtc_patching = e->gattrs & GATTR_RTC;
+    const char *ht = render_gbarom_loading(frame, &spop.p.norld.l, rtc_patching, spop.selector);
+    if (ht) {
+      unsigned twidth = font_width(ht);
+      if (twidth > SCREEN_WIDTH - 20)
+        draw_text_ovf_rotate(ht, frame, 10, 137, SCREEN_WIDTH - 20, &spop.anim);
+      else
+        draw_central_text_ovf(ht, frame, SCREEN_WIDTH/2, 137, SCREEN_WIDTH - 20);
+    }
+    const unsigned offy = 43;
+    for (unsigned i = 8; i < 232; i += 16) {
+      render_icon_trans(i, offy + 0 + spop.selector * 18, 63);
+      render_icon_trans(i, offy + 2 + spop.selector * 18, 63);
+    }
+  }
 }
+#endif
 
 void render_popupq(volatile uint8_t *frame, unsigned fcnt) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
@@ -1861,6 +1993,20 @@ void reload_theme(unsigned thnum) {
   MEM_PALETTE[256 + SEL_COLOR] = themes[thnum].hi_blend;
 }
 
+static const struct {
+  const t_mrender_fn render;
+  const int max_submenu;
+} popup_windows[] = {
+  { render_gba_load_popup, GbaLoadCNT },
+  { render_sav_menu_popup, 1 },
+  { render_fw_flash_popup, 1 },
+  { render_filemgr,        1 },
+  #ifdef SUPPORT_NORGAMES
+  { render_gba_norwrite,   GbaNorWrCNT },
+  { render_gba_norload,    GbaNorLoadCNT },
+  #endif
+};
+
 // Renders the menu. Arg0 represents the frame count difference with the
 // previous rendered frame (for animations and similar stuff).
 void menu_render(unsigned fcnt) {
@@ -1887,18 +2033,7 @@ void menu_render(unsigned fcnt) {
     render_rtcpop(frame);
   else {
     if (spop.pop_num) {
-      static const t_mrender_fn renderfns[] = {
-        NULL,
-        render_gba_load_popup,
-        render_sav_menu_popup,
-        render_fw_flash_popup,
-        #ifdef SUPPORT_NORGAMES
-        render_gba_loadorwrite,
-        render_gba_norwrite,
-        render_gba_norload,
-        #endif
-      };
-      renderfns[spop.pop_num](frame);
+      popup_windows[spop.pop_num - 1].render(frame);
       spop.anim += fcnt * animspd_lut[anim_speed];
     } else {
       static const t_mrender_fn renderfns[] = {
@@ -2067,15 +2202,852 @@ void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) 
   }
 }
 
+static void keypress_popup_loadgba(unsigned newkeys) {
+  const unsigned maxm[] = {
+    GBAInfoCNT,
+    GBALdSetCNT,
+    GBAPatchCNT,
+  };
+  unsigned maxsel = maxm[(int)spop.submenu];
+
+  const int psel = spop.selector;
+  if (newkeys & KEY_BUTTUP)
+    spop.selector += maxsel - 1;
+  if (newkeys & KEY_BUTTDOWN)
+    spop.selector++;
+
+  // Limit selector to its max value
+  spop.selector %= maxsel;
+
+  if (newkeys & KEY_BUTTLEFT) {
+    if (spop.submenu == GbaLoadPopLoadS) {
+      if (spop.selector == GBALdSetCheats)
+        spop.p.load.l.use_cheats = !spop.p.load.l.use_cheats;
+      if (spop.p.load.i.use_dsaving) {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.load.l.sram_load_type = (spop.p.load.l.sram_load_type + SaveLoadDSCNT - 1) % SaveLoadDSCNT;
+      } else {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.load.l.sram_load_type = (spop.p.load.l.sram_load_type + SaveLoadCNT - 1) % SaveLoadCNT;
+        else if (spop.selector == GBALdSetSaveP)
+          spop.p.load.l.sram_save_type = (spop.p.load.l.sram_save_type + SaveCNT - 1) % SaveCNT;
+      }
+    }
+    else if (spop.submenu == GbaLoadPopPatch) {
+      if (spop.selector == GBALoadPatch)
+        spop.p.load.i.patch_type = (spop.p.load.i.patch_type + PatchOptCNT - 1) % PatchOptCNT;
+      else if (spop.selector == GBAInGameMen)
+        spop.p.load.i.ingame_menu_enabled = !spop.p.load.i.ingame_menu_enabled;
+      else if (spop.selector == GBASavePatch)
+        spop.p.load.i.use_dsaving = !spop.p.load.i.use_dsaving && dirsav_avail(&spop.p.load.i);
+      else if (spop.selector == GBARTCPatch)
+        spop.p.load.i.rtc_patch_enabled = !spop.p.load.i.rtc_patch_enabled;
+    }
+
+    // Handle the different cases where the user attempts to select an invalid option.
+    if (!spop.p.load.i.patches_cache_found && spop.p.load.i.patch_type == PatchEngine)
+      spop.p.load.i.patch_type = PatchDatabase;  // Might be invalid, handled below.
+    if (!spop.p.load.i.patches_datab_found && spop.p.load.i.patch_type == PatchDatabase)
+      spop.p.load.i.patch_type = PatchNone;
+
+    if (!dirsav_avail(&spop.p.load.i))
+      spop.p.load.i.use_dsaving = false;
+
+    // DirSav forces automatic saving
+    if (spop.p.load.i.use_dsaving)
+      spop.p.load.l.sram_save_type = SaveDirect;
+    else if (spop.p.load.l.sram_save_type == SaveDirect)
+      spop.p.load.l.sram_save_type = autosave_default ? SaveReboot : SaveDisable;
+
+    // If DS is selected, do not allow manual mode.
+    if (spop.p.load.l.sram_load_type == SaveLoadDisable && spop.p.load.i.use_dsaving)
+      spop.p.load.l.sram_load_type = SaveLoadSav;
+    // If no .sav is available, do not allow that option!
+    if (spop.p.load.l.sram_load_type == SaveLoadSav && !spop.p.load.l.savefile_found)
+      spop.p.load.l.sram_load_type = spop.p.load.i.use_dsaving ? SaveLoadReset : SaveLoadDisable;
+  }
+  if (newkeys & KEY_BUTTRIGHT) {
+    if (spop.submenu == GbaLoadPopLoadS) {
+      if (spop.selector == GBALdSetCheats)
+        spop.p.load.l.use_cheats = !spop.p.load.l.use_cheats;
+      if (spop.p.load.i.use_dsaving) {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.load.l.sram_load_type = (spop.p.load.l.sram_load_type + 1) % SaveLoadDSCNT;
+      } else {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.load.l.sram_load_type = (spop.p.load.l.sram_load_type + 1) % SaveLoadCNT;
+        else if (spop.selector == GBALdSetSaveP)
+          spop.p.load.l.sram_save_type = (spop.p.load.l.sram_save_type + 1) % SaveCNT;
+      }
+    }
+    else if (spop.submenu == GbaLoadPopPatch) {
+      if (spop.selector == GBALoadPatch)
+        spop.p.load.i.patch_type = (spop.p.load.i.patch_type + 1) % PatchOptCNT;
+      else if (spop.selector == GBAInGameMen)
+        spop.p.load.i.ingame_menu_enabled = !spop.p.load.i.ingame_menu_enabled;
+      else if (spop.selector == GBASavePatch)
+        spop.p.load.i.use_dsaving = !spop.p.load.i.use_dsaving && dirsav_avail(&spop.p.load.i);
+      else if (spop.selector == GBARTCPatch)
+        spop.p.load.i.rtc_patch_enabled = !spop.p.load.i.rtc_patch_enabled;
+    }
+
+    // If the database has no entry, then do not let the user select that mode.
+    if (!spop.p.load.i.patches_datab_found && spop.p.load.i.patch_type == PatchDatabase)
+      spop.p.load.i.patch_type = PatchEngine;  // Might be invalid, handled below.
+    if (!spop.p.load.i.patches_cache_found && spop.p.load.i.patch_type == PatchEngine)
+      spop.p.load.i.patch_type = PatchNone;
+
+    if (!dirsav_avail(&spop.p.load.i))
+      spop.p.load.i.use_dsaving = false;
+
+    // DirSav forces automatic saving
+    if (spop.p.load.i.use_dsaving)
+      spop.p.load.l.sram_save_type = SaveDirect;
+    else if (spop.p.load.l.sram_save_type == SaveDirect)
+      spop.p.load.l.sram_save_type = autosave_default ? SaveReboot : SaveDisable;
+
+    // If DS is selected, do not allow manual mode.
+    if (spop.p.load.l.sram_load_type == SaveLoadDisable && spop.p.load.i.use_dsaving)
+      spop.p.load.l.sram_load_type = SaveLoadSav;
+    // If no .sav is available, do not allow that option!
+    if (spop.p.load.l.sram_load_type == SaveLoadSav && !spop.p.load.l.savefile_found)
+      spop.p.load.l.sram_load_type = SaveLoadReset;
+  }
+
+  // Disable ingame-menu if not available.
+  if (!ingame_menu_avail(&spop.p.load.i))
+    spop.p.load.i.ingame_menu_enabled = false;
+
+  // If no RTC patches are available, force them to false.
+  if (!rtcemu_avail(&spop.p.load.i))
+    spop.p.load.i.rtc_patch_enabled = false;
+
+  // Disable cheat loading if no cheats are avail, or IGM is disabled
+  if (!spop.p.load.l.cheats_found || !spop.p.load.i.ingame_menu_enabled)
+    spop.p.load.l.use_cheats = false;
+
+  if (newkeys & KEY_BUTTA) {
+    if (spop.submenu == GbaLoadPopLoadS && spop.selector == GBALdSetRTC && spop.p.load.i.rtc_patch_enabled) {
+      void accept_rtc() {
+        spop.p.load.l.rtcval = spop.rtcpop.val;
+      }
+      if (spop.p.load.i.rtc_patch_enabled) {
+        spop.rtcpop.val = spop.p.load.l.rtcval;
+        spop.rtcpop.callback = accept_rtc;
+      }
+    }
+    else if (spop.submenu == GbaLoadPopPatch && spop.selector == GBAPatchGen) {
+      generate_patches_progress(spop.p.load.i.romfn, spop.p.load.i.romfs);
+      spop.alert_msg = msgs[lang_id][MSG_PATCHGEN_OK];
+      // Try/Load the just-generated patches.
+      spop.p.load.i.patches_cache_found = load_cached_patches(spop.p.load.i.romfn, &spop.p.load.i.patches_cache);
+    }
+    else if (spop.submenu == GbaLoadPopLoadS && spop.selector == GBALdRemember) {
+      // Save settings to disk now!
+      t_rom_settings savedcfg = {
+        .rtcval = spop.p.load.l.rtcval,
+        .patch_policy = spop.p.load.i.patch_type,
+        .use_dsaving = spop.p.load.i.use_dsaving,
+        .use_igm = spop.p.load.i.ingame_menu_enabled,
+        .use_cheats = spop.p.load.l.use_cheats,
+        .use_rtc = spop.p.load.i.rtc_patch_enabled
+      };
+      save_rom_settings(spop.p.load.i.romfn, &savedcfg);
+      spop.alert_msg = msgs[lang_id][MSG_REMEMB_CFG_OK];
+    }
+    else if (GbaLoadPopInfo == spop.submenu) {
+      // Insert the ROM into the recent list (or move it around). Flush to disk!
+      if (recent_menu)
+        insert_recent_flush(spop.p.load.i.romfn);
+
+      // Honor load.patch_type.
+      const t_patch *p = get_game_patch(&spop.p.load.i);
+      EnumSavetype st = p ? p->save_mode : SaveTypeNone;
+
+      // Prepare the savegame (load and store stuff, directsave...)
+      t_dirsave_info dsinfo;
+      unsigned errsave = prepare_savegame(
+        spop.p.load.l.sram_load_type, spop.p.load.l.sram_save_type,
+        st, &dsinfo, spop.p.load.l.savefn);
+      if (errsave) {
+        unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
+                          (errsave == ERR_SAVE_CANTALLOC) ? MSG_ERR_SAVEPR :
+                          (errsave == ERR_SAVE_BADARG)    ? MSG_ERR_SAVEIT :
+                                                            MSG_ERR_SAVEWR;
+        spop.alert_msg = msgs[lang_id][errmsg];
+        return;
+      }
+
+      unsigned err = load_gba_rom(
+        spop.p.load.i.romfn, spop.p.load.i.romfs,
+        &spop.p.load.i.romh, p,
+        spop.p.load.l.sram_save_type == SaveDirect ? &dsinfo : NULL,
+        spop.p.load.i.ingame_menu_enabled,
+        spop.p.load.i.rtc_patch_enabled ? &spop.p.load.l.rtcval : NULL,
+        spop.p.load.l.use_cheats ? spop.p.load.l.cheats_size : 0,
+        loadrom_progress);
+      if (err) {
+        // Show any errors that might have happened!
+        spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
+        // TODO: We cannot (in many cases) continue since we trash the SDRAM!
+      }
+    }
+  }
+
+  if (psel != spop.selector)
+    spop.anim = 0;
+}
+
+static void keypress_popup_savefile(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    spop.selector = MAX(0, spop.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    spop.selector = MIN(SavMAX, spop.selector + 1);
+
+  if (newkeys & KEY_BUTTA) {
+    switch (spop.selector) {
+    case SaveWrite:
+      if (write_save_sram(spop.p.savopt.savfn))
+        spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG0];
+      else
+        spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG_WERR];
+      break;
+    case SavLoad:
+      if (load_save_sram(spop.p.savopt.savfn))
+        spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG1];
+      else
+        spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG_RERR];
+      break;
+    case SavClear:
+      if (wipe_sav_file(spop.p.savopt.savfn))
+        spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG2];
+      else
+        spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG_WERR];
+      break;
+    case SavQuit:
+      spop.pop_num = 0;
+      break;
+    };
+  }
+}
+
+static void keypress_popup_flash(unsigned newkeys) {
+  if ((newkeys & FLASH_GO_KEYS) == FLASH_GO_KEYS)
+    start_flash_update(spop.p.update.fn, spop.p.update.fw_size, spop.p.update.issfw);
+}
+
+#ifdef SUPPORT_NORGAMES
+static void keypress_popup_norwrite(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    spop.selector = MAX(0, spop.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    spop.selector = MIN(GBAPatchCNT - 1, spop.selector + 1);
+
+  if (spop.submenu == GbaNorWrPatch) {
+    if (newkeys & (KEY_BUTTLEFT|KEY_BUTTRIGHT)) {
+      if (spop.selector == GBALoadPatch)
+        spop.p.norwr.i.patch_type = (spop.p.norwr.i.patch_type +
+                                     ((newkeys & KEY_BUTTRIGHT) ? 1 : PatchOptCNT - 1)) % PatchOptCNT;
+      else if (spop.selector == GBAInGameMen)
+        spop.p.norwr.i.ingame_menu_enabled = !spop.p.norwr.i.ingame_menu_enabled;
+      else if (spop.selector == GBASavePatch)
+        spop.p.norwr.i.use_dsaving = !spop.p.norwr.i.use_dsaving;
+      else if (spop.selector == GBARTCPatch)
+        spop.p.norwr.i.rtc_patch_enabled = !spop.p.norwr.i.rtc_patch_enabled;
+    }
+
+    if (newkeys & KEY_BUTTLEFT) {
+      // Handle the different cases where the user attempts to select an invalid option.
+      if (!spop.p.norwr.i.patches_cache_found && spop.p.norwr.i.patch_type == PatchEngine)
+        spop.p.norwr.i.patch_type = PatchDatabase;  // Might be invalid, handled below.
+      if (!spop.p.norwr.i.patches_datab_found && spop.p.norwr.i.patch_type == PatchDatabase)
+        spop.p.norwr.i.patch_type = PatchNone;
+    }
+    if (newkeys & KEY_BUTTRIGHT) {
+      // If the database has no entry, then do not let the user select that mode.
+      if (!spop.p.norwr.i.patches_datab_found && spop.p.norwr.i.patch_type == PatchDatabase)
+        spop.p.norwr.i.patch_type = PatchEngine;  // Might be invalid, handled below.
+      if (!spop.p.norwr.i.patches_cache_found && spop.p.norwr.i.patch_type == PatchEngine)
+        spop.p.norwr.i.patch_type = PatchNone;
+    }
+
+    // Disable certain features (depends on patch types)
+    if (!dirsav_avail(&spop.p.norwr.i))
+      spop.p.norwr.i.use_dsaving = false;
+    if (!ingame_menu_avail(&spop.p.norwr.i))
+      spop.p.norwr.i.ingame_menu_enabled = false;
+    if (!rtcemu_avail(&spop.p.norwr.i))
+      spop.p.norwr.i.rtc_patch_enabled = false;
+
+    if ((newkeys & KEY_BUTTA) && spop.selector == GBAPatchGen) {
+      generate_patches_progress(spop.p.norwr.i.romfn, spop.p.norwr.i.romfs);
+      spop.alert_msg = msgs[lang_id][MSG_PATCHGEN_OK];
+      // Try/Load the just-generated patches.
+      spop.p.norwr.i.patches_cache_found = load_cached_patches(spop.p.norwr.i.romfn, &spop.p.norwr.i.patches_cache);
+    }
+  } else {
+    if (newkeys & KEY_BUTTA) {
+      // Check whether we have enough space.
+      unsigned blkcnt = (spop.p.norwr.i.romfs + NOR_BLOCK_SIZE - 1) / NOR_BLOCK_SIZE;
+      if (smenu.fbrowser.freeblks < blkcnt || smenu.fbrowser.maxentries + 1 >= FLASHG_MAXFN_CNT)
+        spop.alert_msg = msgs[lang_id][MSG_ERR_NORSPC];
+      else {
+        const t_load_gba_info *info = &spop.p.norwr.i;
+        const t_patch *p = get_game_patch(info);
+
+        // Allocate the last entry for the new game.
+        t_flash_game_entry ne = {
+          .gamecode = *(uint32_t*)info->romh.gcode,
+          .gamever = info->romh.version,
+          .numblks = blkcnt,
+          .gattrs = (info->use_dsaving         ? GATTR_SAVEDS : 0) |
+                    (info->ingame_menu_enabled ? GATTR_IGM    : 0) |
+                    (info->rtc_patch_enabled   ? GATTR_RTC    : 0) |
+                    GATTR_SAVEM(p),
+          .bnoffset = (uint8_t)(file_basename(info->romfn) - info->romfn)
+        };
+        memset(&ne.blkmap, 0, sizeof(ne.blkmap));
+        strcpy(ne.game_name, info->romfn);
+
+        flashmgr_allocate_blocks(ne.blkmap, blkcnt, (t_reg_entry*)&sdr_state->nordata);
+
+        // Go ahead and start the flasher-loader with patching support.
+        unsigned errc = flash_gba_nor(info->romfn, info->romfs, &info->romh, p,
+                                      info->ingame_menu_enabled, info->rtc_patch_enabled,
+                                      ne.blkmap, loadrom_progress,
+                                      sdr_state->scratch, scratch_mem_size);
+        if (errc)
+          spop.alert_msg = msgs[lang_id][errc == ERR_LOAD_BADROM ? MSG_ERR_READ : MSG_ERR_NORUPD];
+        else {
+          // Now we can just write the metadata entry!
+          memcpy32(&sdr_state->nordata.games[smenu.fbrowser.maxentries], &ne, sizeof(ne));
+          sdr_state->nordata.gamecnt++;
+          if (!flashmgr_store(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE, (t_reg_entry*)&sdr_state->nordata))
+            spop.alert_msg = msgs[lang_id][MSG_ERR_NORUPD];
+          else {
+            spop.alert_msg = msgs[lang_id][MSG_NOR_WROK];
+            spop.pop_num = POPUP_NONE;
+          }
+        }
+
+        flashbrowser_reload();
+      }
+    }
+  }
+}
+
+static void keypress_popup_norload(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    spop.selector = MAX(0, spop.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    spop.selector = MIN(GBALdSetCNT - 1, spop.selector + 1);
+
+  const t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
+  bool uses_dsave = e->gattrs & GATTR_SAVEDS;
+  bool uses_igm   = e->gattrs & GATTR_IGM;
+  bool uses_rtc   = e->gattrs & GATTR_RTC;
+
+  if (newkeys & KEY_BUTTLEFT) {
+    if (spop.submenu == GbaNorLoad) {
+      if (spop.selector == GBALdSetCheats)
+        spop.p.norld.l.use_cheats = !spop.p.norld.l.use_cheats;
+      if (uses_dsave) {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.norld.l.sram_load_type = (spop.p.norld.l.sram_load_type + SaveLoadDSCNT - 1) % SaveLoadDSCNT;
+      } else {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.norld.l.sram_load_type = (spop.p.norld.l.sram_load_type + SaveLoadCNT - 1) % SaveLoadCNT;
+        else if (spop.selector == GBALdSetSaveP)
+          spop.p.norld.l.sram_save_type = (spop.p.norld.l.sram_save_type + SaveCNT - 1) % SaveCNT;
+      }
+    }
+
+    // DirSav forces automatic saving
+    if (uses_dsave)
+      spop.p.norld.l.sram_save_type = SaveDirect;
+    else if (spop.p.norld.l.sram_save_type == SaveDirect)
+      spop.p.norld.l.sram_save_type = autosave_default ? SaveReboot : SaveDisable;
+
+    // If DS is selected, do not allow manual mode.
+    if (spop.p.norld.l.sram_load_type == SaveLoadDisable && uses_dsave)
+      spop.p.norld.l.sram_load_type = SaveLoadSav;
+    // If no .sav is available, do not allow that option!
+    if (spop.p.norld.l.sram_load_type == SaveLoadSav && !spop.p.norld.l.savefile_found)
+      spop.p.norld.l.sram_load_type = uses_dsave ? SaveLoadReset : SaveLoadDisable;
+  }
+  if (newkeys & KEY_BUTTRIGHT) {
+    if (spop.submenu == GbaNorLoad) {
+      if (spop.selector == GBALdSetCheats)
+        spop.p.norld.l.use_cheats = !spop.p.norld.l.use_cheats;
+      if (uses_dsave) {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.norld.l.sram_load_type = (spop.p.norld.l.sram_load_type + 1) % SaveLoadDSCNT;
+      } else {
+        if (spop.selector == GBALdSetLoadP)
+          spop.p.norld.l.sram_load_type = (spop.p.norld.l.sram_load_type + 1) % SaveLoadCNT;
+        else if (spop.selector == GBALdSetSaveP)
+          spop.p.norld.l.sram_save_type = (spop.p.norld.l.sram_save_type + 1) % SaveCNT;
+      }
+    }
+
+    // DirSav forces automatic saving
+    if (uses_dsave)
+      spop.p.norld.l.sram_save_type = SaveDirect;
+    else if (spop.p.norld.l.sram_save_type == SaveDirect)
+      spop.p.norld.l.sram_save_type = autosave_default ? SaveReboot : SaveDisable;
+
+    // If DS is selected, do not allow manual mode.
+    if (spop.p.norld.l.sram_load_type == SaveLoadDisable && uses_dsave)
+      spop.p.norld.l.sram_load_type = SaveLoadSav;
+    // If no .sav is available, do not allow that option!
+    if (spop.p.norld.l.sram_load_type == SaveLoadSav && !spop.p.norld.l.savefile_found)
+      spop.p.norld.l.sram_load_type = SaveLoadReset;
+  }
+
+  // Disable cheat loading if no cheats are avail, or IGM is disabled
+  if (!spop.p.norld.l.cheats_found || !uses_igm)
+    spop.p.norld.l.use_cheats = false;
+
+  if (newkeys & KEY_BUTTA) {
+    if (spop.submenu == GbaLoadPopInfo) {
+      const t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
+      launch_gba_nor(e->blkmap, e->numblks);
+    } else if (spop.selector == GBALdSetRTC) {
+      void accept_rtc() {
+        spop.p.norld.l.rtcval = spop.rtcpop.val;
+      }
+      if (uses_rtc) {
+        spop.rtcpop.val = spop.p.norld.l.rtcval;
+        spop.rtcpop.callback = accept_rtc;
+      }
+    }
+  }
+}
+#endif
+
+static void keypress_popup_filemgr(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    spop.selector = MAX(0, spop.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    spop.selector = MIN(FiMgrCNT - 1, spop.selector + 1);
+
+  if (newkeys & KEY_BUTTA) {
+    t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+    switch (spop.selector) {
+    case FiMgrDelete:
+      {
+        void remove_file_action(bool confirm) {
+          char tmpfn[MAX_FN_LEN];
+          strcpy(tmpfn, smenu.browser.cpath);
+          strcat(tmpfn, sdr_state->fileorder[smenu.browser.selector]->fname);
+
+          if (confirm) {
+            if (FR_OK != f_unlink(tmpfn))
+              spop.alert_msg = msgs[lang_id][MSG_ERR_DELFILE];
+            else
+              spop.alert_msg = msgs[lang_id][MSG_OK_DELFILE];
+
+            browser_reload();   // Force reload so the file disappears!
+          }
+        }
+        spop.qpop.message = msgs[lang_id][MSG_Q0_DELFILE];
+        spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+        spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+        spop.qpop.option = 0;
+        spop.qpop.callback = remove_file_action;
+        spop.qpop.clear_popup_ok = true;
+      }
+      break;
+    case FiMgrHide:
+      if (FR_OK == f_chmod(SUPERFW_DIR, e->attr ^ AM_HID, AM_HID))
+        e->attr ^= AM_HID;
+      else
+        spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+
+      spop.pop_num = POPUP_NONE;
+      break;
+
+    #ifdef SUPPORT_NORGAMES
+    case FiMgrWriteNOR:
+      if (e->filesize > MAX_GBA_ROM_SIZE)
+        spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
+      else {
+        char path[MAX_FN_LEN];
+        strcpy(path, smenu.browser.cpath);
+        strcat(path, e->fname);
+        const t_rom_settings defcfg = {
+          .rtcval = rtcvalue_default,
+          .patch_policy = patcher_default,
+          .use_dsaving = autosave_prefer_ds,
+          .use_igm = ingamemenu_default,
+          .use_cheats = enable_cheats,
+          .use_rtc = rtcpatch_default
+        };
+        if (!prepare_gba_info(&spop.p.norwr.i, &defcfg, path, e->filesize))
+          spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
+        else {
+          spop.pop_num = POPUP_GBA_NORWRITE;
+          spop.submenu = GbaLoadPopInfo;
+          spop.selector = 0;
+        }
+      }
+      break;
+    #endif
+    };
+  }
+}
+
+static void keypress_menu_recent(unsigned newkeys) {
+  if (smenu.recent.maxentries) {
+    if (newkeys & KEY_BUTTUP)
+      smenu.recent.selector = MAX(0, smenu.recent.selector - 1);
+    else if (newkeys & KEY_BUTTDOWN)
+      smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + 1);
+    if (newkeys & KEY_BUTTLEFT) {
+      smenu.recent.selector = MAX(0, smenu.recent.selector - RECENT_ROWS);
+      smenu.recent.seloff   = MAX(0, smenu.recent.seloff - RECENT_ROWS);
+    }
+    else if (newkeys & KEY_BUTTRIGHT) {
+      smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + RECENT_ROWS);
+      smenu.recent.seloff   = MIN(smenu.recent.maxentries - 1, smenu.recent.seloff   + RECENT_ROWS);
+    }
+    if (newkeys & KEY_BUTTA) {
+      t_rentry *e = &sdr_state->rentries[smenu.recent.selector];
+      // stat() the file since we need the size, and validate that it exists!
+      FILINFO info;
+      FRESULT res = f_stat(e->fpath, &info);
+      if (res == FR_OK) {
+        browser_open(e->fpath, info.fsize);
+      } else {
+        spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
+      }
+    }
+    else if (newkeys & KEY_BUTTSEL) {
+      void recent_del_cb(bool confirm) {
+        if (confirm) {
+          delete_recent_flush(smenu.recent.selector);
+        }
+      }
+      spop.qpop.message = msgs[lang_id][MSG_Q4_DELREC];
+      spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+      spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+      spop.qpop.option = 0;
+      spop.qpop.callback = recent_del_cb;
+      spop.qpop.clear_popup_ok = false;
+    }
+  }
+
+  if (smenu.recent.selector < smenu.recent.seloff)
+    smenu.recent.seloff = smenu.recent.selector;
+  else if (smenu.recent.selector >= smenu.recent.seloff + RECENT_ROWS)
+    smenu.recent.seloff = smenu.recent.selector - RECENT_ROWS + 1;
+}
+
+static void keypress_menu_browse(unsigned newkeys) {
+  if (smenu.browser.maxentries) {
+    // Move menu up and down
+    if (newkeys & KEY_BUTTUP)
+      smenu.browser.selector = MAX(0, smenu.browser.selector - 1);
+    if (newkeys & KEY_BUTTDOWN)
+      smenu.browser.selector = MIN(smenu.browser.maxentries - 1, smenu.browser.selector + 1);
+    if (newkeys & KEY_BUTTLEFT) {
+      smenu.browser.selector = MAX(0, smenu.browser.selector - BROWSER_ROWS);
+      smenu.browser.seloff   = MAX(0, smenu.browser.seloff - BROWSER_ROWS);
+    }
+    if (newkeys & KEY_BUTTRIGHT) {
+      smenu.browser.selector = MIN(smenu.browser.maxentries - 1, smenu.browser.selector + BROWSER_ROWS);
+      smenu.browser.seloff   = MIN(smenu.browser.maxentries - 1, smenu.browser.seloff   + BROWSER_ROWS);
+    }
+    // Move into a new dir and/or open a file
+    if (newkeys & KEY_BUTTA) {
+      t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+      if (e->isdir) {
+        strcat(smenu.browser.cpath, e->fname);
+        strcat(smenu.browser.cpath, "/");
+        // Push selector history and reset it in the new dir
+        memmove(&smenu.browser.selhist[1], &smenu.browser.selhist[0],
+                sizeof(smenu.browser.selhist) - sizeof(smenu.browser.selhist[0]));
+        smenu.browser.selhist[0] = smenu.browser.selector;
+        smenu.browser.selector = 0;
+        browser_reload();
+      } else {
+        char path[MAX_FN_LEN];
+        strcpy(path, smenu.browser.cpath);
+        strcat(path, e->fname);
+        browser_open(path, e->filesize);
+      }
+    }
+    else if (newkeys & KEY_BUTTSEL) {
+      // Shows a file management menu.
+      spop.pop_num = POPUP_FILE_MGR;
+      spop.anim = 0;
+      spop.selector = 0;
+      const char *fn = sdr_state->fileorder[smenu.browser.selector]->fname;
+    }
+  }
+  if (newkeys & KEY_BUTTB) {
+    // Try to go up in the dir structure
+    if (movedir_up()) {
+      smenu.browser.selector = smenu.browser.selhist[0];
+      memmove(&smenu.browser.selhist[0], &smenu.browser.selhist[1],
+              sizeof(smenu.browser.selhist) - sizeof(smenu.browser.selhist[0]));
+      browser_reload();
+    }
+  }
+
+  // Selector was updated, figure out how we update the menu params so it
+  // can be rendered properly.
+  if (smenu.browser.selector < smenu.browser.seloff)
+    smenu.browser.seloff = smenu.browser.selector;
+  else if (smenu.browser.selector >= smenu.browser.seloff + BROWSER_ROWS)
+    smenu.browser.seloff = smenu.browser.selector - BROWSER_ROWS + 1;
+}
+
+#ifdef SUPPORT_NORGAMES
+static void keypress_menu_norbrowse(unsigned newkeys) {
+  if (smenu.fbrowser.maxentries) {
+    if (newkeys & KEY_BUTTUP)
+      smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - 1);
+    if (newkeys & KEY_BUTTDOWN)
+      smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + 1);
+    if (newkeys & KEY_BUTTLEFT) {
+      smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - NORGAMES_ROWS);
+      smenu.fbrowser.seloff   = MAX(0, smenu.fbrowser.seloff - NORGAMES_ROWS);
+    }
+    if (newkeys & KEY_BUTTRIGHT) {
+      smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + NORGAMES_ROWS);
+      smenu.fbrowser.seloff   = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.seloff   + NORGAMES_ROWS);
+    }
+
+    if (newkeys & KEY_BUTTA) {
+      t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
+
+      // Use attributes to determine patched save method.
+      bool game_no_save = GET_GATTR_SAVEM(e->gattrs) <= SaveTypeNone;
+
+      t_rom_settings savedcfg = {  // TODO FIX
+        //.rtcval = spop.p.load.l.rtcval,
+        .use_dsaving = (e->gattrs & GATTR_SAVEDS),
+        .use_cheats = false,
+      };
+
+      // Attempt to find a cheat file if cheats are enabled.
+      prepare_gba_cheats((char*)&e->gamecode, e->gamever, &spop.p.norld.l, savedcfg.use_cheats, e->game_name);
+
+      // Load and set default and sane settings honoring defaults and preferences.
+      prepare_gba_settings(&spop.p.norld.l, &savedcfg, game_no_save, e->game_name);
+
+      // Show load ROM menu.
+      spop.pop_num = POPUP_GBA_NORLOAD;
+      spop.submenu = GbaLoadPopInfo;
+      spop.selector = 0;
+    }
+    else if (newkeys & KEY_BUTTSEL) {
+      // Prompt NOR entry deletion.
+      void remove_nor_action(bool confirm) {
+        if (!confirm)
+          return;
+
+        // Remove game entry, just memmove the other games on top.
+        sdr_state->nordata.gamecnt--;
+        memmove32(&sdr_state->nordata.games[smenu.fbrowser.selector],
+                  &sdr_state->nordata.games[smenu.fbrowser.selector + 1],
+                  (sdr_state->nordata.gamecnt - smenu.fbrowser.selector) * sizeof(t_flash_game_entry));
+
+        // Go ahead and write a new metadata entry;
+        if (!flashmgr_store(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE, (t_reg_entry*)&sdr_state->nordata))
+          spop.alert_msg = msgs[lang_id][MSG_ERR_NORUPD];
+        flashbrowser_reload();   // Force list reload, free block calculation, etc.
+      }
+      spop.qpop.message = msgs[lang_id][MSG_Q5_DELNORG];
+      spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+      spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+      spop.qpop.option = 0;
+      spop.qpop.callback = remove_nor_action;
+      spop.qpop.clear_popup_ok = true;
+    }
+
+    if (smenu.fbrowser.selector < smenu.fbrowser.seloff)
+      smenu.fbrowser.seloff = smenu.fbrowser.selector;
+    else if (smenu.fbrowser.selector >= smenu.fbrowser.seloff + NORGAMES_ROWS)
+      smenu.fbrowser.seloff = smenu.fbrowser.selector - NORGAMES_ROWS + 1;
+  }
+}
+#endif
+
+static void keypress_menu_settings(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    smenu.set.selector = MAX(0, smenu.set.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    smenu.set.selector = MIN(SettMAX, smenu.set.selector + 1);
+  if (newkeys & KEY_BUTTLEFT) {
+    if (smenu.set.selector == SettHotkey)
+      hotkey_combo = (hotkey_combo + hotkey_listcnt - 1) % hotkey_listcnt;
+    else if (smenu.set.selector == SettSaveLoc)
+      save_path_default = (save_path_default + SaveDirCNT - 1) % SaveDirCNT;
+    else if (smenu.set.selector == SettStateLoc)
+      state_path_default = (state_path_default + StateDirCNT - 1) % StateDirCNT;
+    else if (smenu.set.selector == SettSaveBkp)
+      backup_sram_default = backup_sram_default ? backup_sram_default - 1 : 0;
+    else if (smenu.set.selector == DefsPatchEng)
+      patcher_default = (patcher_default + PatchTotalCNT - 1) % PatchTotalCNT;
+  }
+  if (newkeys & KEY_BUTTRIGHT) {
+    if (smenu.set.selector == SettHotkey)
+      hotkey_combo = (hotkey_combo + 1) % hotkey_listcnt;
+    else if (smenu.set.selector == SettSaveLoc)
+      save_path_default = (save_path_default + 1) % SaveDirCNT;
+    else if (smenu.set.selector == SettStateLoc)
+      state_path_default = (state_path_default + 1) % StateDirCNT;
+    else if (smenu.set.selector == SettSaveBkp)
+      backup_sram_default = MIN(16, backup_sram_default + 1);
+    else if (smenu.set.selector == DefsPatchEng)
+      patcher_default = (patcher_default + 1) % PatchTotalCNT;
+  }
+  if (newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) {
+    if (smenu.set.selector == SettBootType)
+      boot_bios_splash ^= 1;
+    else if (smenu.set.selector == SettCheatEn)
+      enable_cheats ^= 1;
+    else if (smenu.set.selector == DefsGamMenu)
+      ingamemenu_default ^= 1;
+    else if (smenu.set.selector == DefsRTCEnb)
+      rtcpatch_default ^= 1;
+    else if (smenu.set.selector == DefsLoadPol)
+      autoload_default ^= 1;
+    else if (smenu.set.selector == DefsSavePol)
+      autosave_default ^= 1;
+    else if (smenu.set.selector == DefsPrefDS)
+      autosave_prefer_ds ^= 1;
+    else if (smenu.set.selector == SettFastSD)
+      use_slowld ^= 1;
+    else if (smenu.set.selector == SettFastEWRAM)
+      use_fastew = fastew ? (use_fastew ^ 1) : 0;
+  }
+
+  if (newkeys & KEY_BUTTA && smenu.set.selector == DefsRTCVal) {
+    void accept_rtc() {
+      rtcvalue_default = spop.rtcpop.val;
+    }
+    spop.rtcpop.val = rtcvalue_default;
+    spop.rtcpop.callback = accept_rtc;
+  }
+  if (newkeys & KEY_BUTTA && smenu.set.selector == SettSave) {
+    smenu.set.selector = 0;
+    if (save_settings())
+      spop.alert_msg = msgs[lang_id][MSG_OK_SETSAVE];
+    else
+      spop.alert_msg = msgs[lang_id][MSG_ERR_SETSAVE];
+  }
+}
+
+static void keypress_menu_uisettings(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    smenu.uiset.selector = MAX(0, smenu.uiset.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    smenu.uiset.selector = MIN(UiSetMAX, smenu.uiset.selector + 1);
+  if (newkeys & KEY_BUTTLEFT) {
+    if (smenu.uiset.selector == UiSetTheme)
+      menu_theme = menu_theme ? menu_theme - 1 : 0;
+    else if (smenu.uiset.selector == UiSetASpd)
+      anim_speed = anim_speed ? anim_speed - 1 : 0;
+    else if (smenu.uiset.selector == UiSetRect)
+      recent_menu ^= 1;
+    else if (smenu.uiset.selector == UiSetLang)
+      lang_id = (lang_id + LANG_COUNT - 1) % LANG_COUNT;
+  }
+  if (newkeys & KEY_BUTTRIGHT) {
+    if (smenu.uiset.selector == UiSetTheme)
+      menu_theme = MIN(THEME_COUNT - 1, menu_theme + 1);
+    else if (smenu.uiset.selector == UiSetASpd)
+      anim_speed = MIN(animspd_cnt - 1, anim_speed + 1);
+    else if (smenu.uiset.selector == UiSetRect)
+      recent_menu ^= 1;
+    else if (smenu.uiset.selector == UiSetLang)
+      lang_id = (lang_id + 1) % LANG_COUNT;
+  }
+
+  if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
+    smenu.uiset.selector = 0;
+    if (save_ui_settings())
+      spop.alert_msg = msgs[lang_id][MSG_OK_SETSAVE];
+    else
+      spop.alert_msg = msgs[lang_id][MSG_ERR_SETSAVE];
+  }
+
+  reload_theme(menu_theme);
+}
+
+static void keypress_menu_tools(unsigned newkeys) {
+  if (newkeys & KEY_BUTTUP)
+    smenu.tools.selector = MAX(0, smenu.tools.selector - 1);
+  if (newkeys & KEY_BUTTDOWN)
+    smenu.tools.selector = MIN(ToolsMAX, smenu.tools.selector + 1);
+
+  if (newkeys & KEY_BUTTA) {
+    if (smenu.tools.selector == ToolsSDRAMTest) {
+      // Performs a test on the SRAM/SDRAM, ensure they are fine.
+      set_supercard_mode(MAPPED_SDRAM, true, false);
+
+      if (sdram_test(loadrom_progress_abort))
+        spop.alert_msg = msgs[lang_id][MSG_BAD_SDRAM];
+      else
+        spop.alert_msg = msgs[lang_id][MSG_GOOD_RAM];
+
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+    }
+    if (smenu.tools.selector == ToolsSRAMTest) {
+      if (sram_test())
+        spop.alert_msg = msgs[lang_id][MSG_BAD_SRAM];
+      else
+        spop.alert_msg = msgs[lang_id][MSG_GOOD_RAM];
+    }
+    else if (smenu.tools.selector == ToolsBatteryTest) {
+      // Go ahead and fill in SRAM with a pattern.
+      spop.qpop.message = msgs[lang_id][MSG_Q2_SRAMTST];
+      spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+      spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+      spop.qpop.option = 0;
+      spop.qpop.callback = sram_battery_test_callback;
+      spop.qpop.clear_popup_ok = true;
+    }
+    else if (smenu.tools.selector == ToolsSDBench) {
+      slowsd = use_slowld;
+      int ret = sdbench_read(loadrom_progress_abort);
+      slowsd = true;
+      if (ret < 0)
+        spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+      else {
+        unsigned speed = 8*1024*1024 / (unsigned)ret;
+        npf_snprintf(smenu.info.tstr, sizeof(smenu.info.tstr), msgs[lang_id][MSG_BENCHSPD], speed);
+        spop.alert_msg = smenu.info.tstr;
+      }
+    }
+    else if (smenu.tools.selector == ToolsFlashBak) {
+      // Backup the flash contents to a file.
+      if (dump_flashmem_backup())
+        spop.alert_msg = msgs[lang_id][MSG_FLASH_READOK];
+      else
+        spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+    }
+  }
+}
+
+static void keypress_menu_info(unsigned newkeys) {
+  if (newkeys & KEY_BUTTA)
+    smenu.info.selector = (smenu.info.selector + 1) % 4;
+  if ((newkeys & FLASH_UNLOCK_KEYS) == FLASH_UNLOCK_KEYS)
+    enable_flashing = true;
+}
+
+
 void menu_keypress(unsigned newkeys) {
   if (spop.alert_msg) {
     // Modal message pop up!
     if (newkeys & (KEY_BUTTA | KEY_BUTTB))
       spop.alert_msg = NULL;
-    return;
   }
-
-  if (spop.qpop.message) {
+  else if (spop.qpop.message) {
     // Modal confirm/question dialog
     if (newkeys & (KEY_BUTTUP | KEY_BUTTDOWN))
       spop.qpop.option ^= 1;
@@ -2089,10 +3061,8 @@ void menu_keypress(unsigned newkeys) {
       }
       spop.qpop.message = NULL;   // Exit the modal dialog.
     }
-    return;
   }
-
-  if (spop.rtcpop.callback) {
+  else if (spop.rtcpop.callback) {
     const uint8_t rmax[] = { 99, 11, 30, 23, 59 };
     if (newkeys & KEY_BUTTLEFT)
       spop.rtcpop.selector = MAX(0, spop.rtcpop.selector - 1);
@@ -2120,274 +3090,31 @@ void menu_keypress(unsigned newkeys) {
       spop.rtcpop.callback();
       spop.rtcpop.callback = NULL;
     }
-    return;
   }
+  else if (spop.pop_num) {
+    const int subcnt = popup_windows[spop.pop_num - 1].max_submenu;
+    if (newkeys & KEY_BUTTL)
+      spop.submenu = (spop.submenu + subcnt - 1) % subcnt;
+    if (newkeys & KEY_BUTTR)
+      spop.submenu = (spop.submenu + 1) % subcnt;
 
-  if (spop.pop_num) {
     // Close pop-up on B button
     if (newkeys & KEY_BUTTB)
       spop.pop_num = 0;
-
-    switch (spop.pop_num) {
-    case POPUP_GBA_LOAD:
-    {
-      if (newkeys & KEY_BUTTL)
-        spop.p.load.submenu = (spop.p.load.submenu + GbaLoadCNT - 1) % GbaLoadCNT;
-      if (newkeys & KEY_BUTTR)
-        spop.p.load.submenu = (spop.p.load.submenu + 1) % GbaLoadCNT;
-
-      const unsigned maxm[] = {
-        GBAInfoCNT,
-        GBASaveCNT,
-        GBAPatchCNT,
-        GBASettCNT,
+    else {
+      const t_mkeyupd_fn keyfns[] = {
+        NULL,
+        keypress_popup_loadgba,
+        keypress_popup_savefile,
+        keypress_popup_flash,
+        keypress_popup_filemgr,
+        #ifdef SUPPORT_NORGAMES
+        keypress_popup_norwrite,
+        keypress_popup_norload,
+        #endif
       };
-      unsigned maxsel = maxm[spop.p.load.submenu];
-
-      unsigned psel = spop.p.load.selector;
-      if (newkeys & KEY_BUTTUP)
-        spop.p.load.selector += maxsel - 1;
-      if (newkeys & KEY_BUTTDOWN)
-        spop.p.load.selector += 1;
-
-
-      // Limit selector to its max value
-      spop.p.load.selector %= maxsel;
-
-      if (newkeys & KEY_BUTTLEFT) {
-        if (spop.p.load.submenu == GbaLoadPopSave) {
-          if (spop.p.load.selector == GBASaveMode)
-            spop.p.load.i.use_dsaving = !spop.p.load.i.use_dsaving && dirsav_avail();
-
-          if (spop.p.load.i.use_dsaving) {
-            if (spop.p.load.selector == GBASaveLoadP)
-              spop.p.load.sram_load_type = (spop.p.load.sram_load_type + SaveLoadDSCNT - 1) % SaveLoadDSCNT;
-          } else {
-            if (spop.p.load.selector == GBASaveLoadP)
-              spop.p.load.sram_load_type = (spop.p.load.sram_load_type + SaveLoadCNT - 1) % SaveLoadCNT;
-            else if (spop.p.load.selector == GBASaveSaveP)
-              spop.p.load.sram_save_type = (spop.p.load.sram_save_type + SaveCNT - 1) % SaveCNT;
-          }
-        }
-        else if (spop.p.load.submenu == GbaLoadPopPatch) {
-          if (spop.p.load.selector == GBALoadPatch)
-            spop.p.load.i.patch_type = (spop.p.load.i.patch_type + PatchOptCNT - 1) % PatchOptCNT;
-          else if (spop.p.load.selector == GBAInGameMen)
-            spop.p.load.i.ingame_menu_enabled = !spop.p.load.i.ingame_menu_enabled;
-        }
-        else if (spop.p.load.submenu == GbaLoadPopSett) {
-          if (spop.p.load.selector == GBASetLdCht)
-            spop.p.load.use_cheats = !spop.p.load.use_cheats;
-          else if (spop.p.load.selector == GBASetRTCEn)
-            spop.p.load.i.rtc_patch_enabled = !spop.p.load.i.rtc_patch_enabled;
-          else if (spop.p.load.selector == GBASetRememb)
-            spop.p.load.write_config = !spop.p.load.write_config;
-        }
-
-        // Handle the different cases where the user attempts to select an invalid option.
-        if (!spop.p.load.i.patches_cache_found && spop.p.load.i.patch_type == PatchEngine)
-          spop.p.load.i.patch_type = PatchDatabase;  // Might be invalid, handled below.
-        if (!spop.p.load.i.patches_datab_found && spop.p.load.i.patch_type == PatchDatabase)
-          spop.p.load.i.patch_type = PatchNone;
-
-        if (!dirsav_avail())
-          spop.p.load.i.use_dsaving = false;
-
-        // DirSav forces automatic saving
-        if (spop.p.load.i.use_dsaving)
-          spop.p.load.sram_save_type = SaveDirect;
-        else if (spop.p.load.sram_save_type == SaveDirect)
-          spop.p.load.sram_save_type = autosave_default ? SaveReboot : SaveDisable;
-
-        // If DS is selected, do not allow manual mode.
-        if (spop.p.load.sram_load_type == SaveLoadDisable && spop.p.load.i.use_dsaving)
-          spop.p.load.sram_load_type = SaveLoadSav;
-        // If no .sav is available, do not allow that option!
-        if (spop.p.load.sram_load_type == SaveLoadSav && !spop.p.load.savefile_found)
-          spop.p.load.sram_load_type = spop.p.load.i.use_dsaving ? SaveLoadReset : SaveLoadDisable;
-      }
-      if (newkeys & KEY_BUTTRIGHT) {
-        if (spop.p.load.submenu == GbaLoadPopSave) {
-          if (spop.p.load.selector == GBASaveMode)
-            spop.p.load.i.use_dsaving = !spop.p.load.i.use_dsaving && dirsav_avail();
-
-          if (spop.p.load.i.use_dsaving) {
-            if (spop.p.load.selector == GBASaveLoadP)
-              spop.p.load.sram_load_type = (spop.p.load.sram_load_type + 1) % SaveLoadDSCNT;
-          } else {
-            if (spop.p.load.selector == GBASaveLoadP)
-              spop.p.load.sram_load_type = (spop.p.load.sram_load_type + 1) % SaveLoadCNT;
-            else if (spop.p.load.selector == GBASaveSaveP)
-              spop.p.load.sram_save_type = (spop.p.load.sram_save_type + 1) % SaveCNT;
-          }
-        }
-        else if (spop.p.load.submenu == GbaLoadPopPatch) {
-          if (spop.p.load.selector == GBALoadPatch)
-            spop.p.load.i.patch_type = (spop.p.load.i.patch_type + 1) % PatchOptCNT;
-          else if (spop.p.load.selector == GBAInGameMen)
-            spop.p.load.i.ingame_menu_enabled = !spop.p.load.i.ingame_menu_enabled;
-        }
-        else if (spop.p.load.submenu == GbaLoadPopSett) {
-          if (spop.p.load.selector == GBASetLdCht)
-            spop.p.load.use_cheats = !spop.p.load.use_cheats;
-          else if (spop.p.load.selector == GBASetRTCEn)
-            spop.p.load.i.rtc_patch_enabled = !spop.p.load.i.rtc_patch_enabled;
-          else if (spop.p.load.selector == GBASetRememb)
-            spop.p.load.write_config = !spop.p.load.write_config;
-        }
-
-        // If the database has no entry, then do not let the user select that mode.
-        if (!spop.p.load.i.patches_datab_found && spop.p.load.i.patch_type == PatchDatabase)
-          spop.p.load.i.patch_type = PatchEngine;  // Might be invalid, handled below.
-        if (!spop.p.load.i.patches_cache_found && spop.p.load.i.patch_type == PatchEngine)
-          spop.p.load.i.patch_type = PatchNone;
-
-        if (!dirsav_avail())
-          spop.p.load.i.use_dsaving = false;
-
-        // DirSav forces automatic saving
-        if (spop.p.load.i.use_dsaving)
-          spop.p.load.sram_save_type = SaveDirect;
-        else if (spop.p.load.sram_save_type == SaveDirect)
-          spop.p.load.sram_save_type = autosave_default ? SaveReboot : SaveDisable;
-
-        // If DS is selected, do not allow manual mode.
-        if (spop.p.load.sram_load_type == SaveLoadDisable && spop.p.load.i.use_dsaving)
-          spop.p.load.sram_load_type = SaveLoadSav;
-        // If no .sav is available, do not allow that option!
-        if (spop.p.load.sram_load_type == SaveLoadSav && !spop.p.load.savefile_found)
-          spop.p.load.sram_load_type = SaveLoadReset;
-      }
-
-      // Disable ingame-menu if not available.
-      if (!ingame_menu_avail())
-        spop.p.load.i.ingame_menu_enabled = false;
-
-      // If no RTC patches are available, force them to false.
-      if (!spop.p.load.i.patches_datab.rtc_ops)
-        spop.p.load.i.rtc_patch_enabled = false;
-
-      // Disable cheat loading if no cheats are avail, or IGM is disabled
-      if (!spop.p.load.cheats_found || !spop.p.load.i.ingame_menu_enabled)
-        spop.p.load.use_cheats = false;
-
-      if (newkeys & KEY_BUTTA) {
-        if (spop.p.load.submenu == GbaLoadPopSett && spop.p.load.selector == GBASetRTCEn && spop.p.load.i.rtc_patch_enabled) {
-          void accept_rtc() {
-            spop.p.load.rtcval = spop.rtcpop.val;
-          }
-          if (spop.p.load.i.rtc_patch_enabled) {
-            spop.rtcpop.val = spop.p.load.rtcval;
-            spop.rtcpop.callback = accept_rtc;
-          }
-        }
-        else if (spop.p.load.submenu == GbaLoadPopPatch && spop.p.load.selector == GBAPatchGen) {
-          generate_patches_progress(spop.p.load.i.romfn, spop.p.load.i.romfs);
-          spop.alert_msg = msgs[lang_id][MSG_PATCHGEN_OK];
-          // Try/Load the just-generated patches.
-          spop.p.load.i.patches_cache_found = load_cached_patches(spop.p.load.i.romfn, &spop.p.load.i.patches_cache);
-        }
-        else if (GBALoadButt == spop.p.load.selector) {
-          // Insert the ROM into the recent list (or move it around). Flush to disk!
-          if (recent_menu)
-            insert_recent_flush(spop.p.load.i.romfn);
-
-          // Honor load.patch_type.
-          const t_patch *p = spop.p.load.i.patch_type == PatchDatabase ? &spop.p.load.i.patches_datab :
-                             spop.p.load.i.patch_type == PatchEngine   ? &spop.p.load.i.patches_cache :
-                                                                       NULL;
-          EnumSavetype st = p ? p->save_mode : SaveTypeNone;
-
-          // Save settings if the option was enabled
-          if (spop.p.load.write_config) {
-            t_rom_settings savedcfg = {
-              .rtcval = spop.p.load.rtcval,
-              .patch_policy = spop.p.load.i.patch_type,
-              .use_dsaving = spop.p.load.i.use_dsaving,
-              .use_igm = spop.p.load.i.ingame_menu_enabled,
-              .use_cheats = spop.p.load.use_cheats,
-              .use_rtc = spop.p.load.i.rtc_patch_enabled
-            };
-            save_rom_settings(spop.p.load.i.romfn, &savedcfg);
-          }
-
-          // Prepare the savegame (load and store stuff, directsave...)
-          t_dirsave_info dsinfo;
-          unsigned errsave = prepare_savegame(
-            spop.p.load.sram_load_type, spop.p.load.sram_save_type,
-            st, &dsinfo, spop.p.load.savefn);
-          if (errsave) {
-            unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
-                              (errsave == ERR_SAVE_CANTALLOC) ? MSG_ERR_SAVEPR :
-                              (errsave == ERR_SAVE_BADARG)    ? MSG_ERR_SAVEIT :
-                                                                MSG_ERR_SAVEWR;
-            spop.alert_msg = msgs[lang_id][errmsg];
-            return;
-          }
-
-          unsigned err = load_gba_rom(
-            spop.p.load.i.romfn, spop.p.load.i.romfs,
-            &spop.p.load.i.romh, p,
-            spop.p.load.sram_save_type == SaveDirect ? &dsinfo : NULL,
-            spop.p.load.i.ingame_menu_enabled,
-            spop.p.load.i.rtc_patch_enabled ? &spop.p.load.rtcval : NULL,
-            spop.p.load.use_cheats ? spop.p.load.cheats_size : 0,
-            loadrom_progress);
-          if (err) {
-            // Show any errors that might have happened!
-            spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
-            // TODO: We cannot (in many cases) continue since we trash the SDRAM!
-          }
-        }
-      }
-
-      if (psel != spop.p.load.selector)
-        spop.anim = 0;
-
-      break;
+      keyfns[spop.pop_num](newkeys);
     }
-
-    case POPUP_SAVFILE:
-      if (newkeys & KEY_BUTTUP)
-        spop.p.savopt.selector = MAX(0, spop.p.savopt.selector - 1);
-      if (newkeys & KEY_BUTTDOWN)
-        spop.p.savopt.selector = MIN(SavMAX, spop.p.savopt.selector + 1);
-
-      if (newkeys & KEY_BUTTA) {
-        switch (spop.p.savopt.selector) {
-        case SaveWrite:
-          if (write_save_sram(spop.p.savopt.savfn))
-            spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG0];
-          else
-            spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG_WERR];
-          break;
-        case SavLoad:
-          if (load_save_sram(spop.p.savopt.savfn))
-            spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG1];
-          else
-            spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG_RERR];
-          break;
-        case SavClear:
-          if (wipe_sav_file(spop.p.savopt.savfn))
-            spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG2];
-          else
-            spop.alert_msg = msgs[lang_id][MSG_SAVOPT_MSG_WERR];
-          break;
-        case SavQuit:
-          spop.pop_num = 0;
-          break;
-        };
-      }
-      break;
-
-    case POPUP_FWFLASH:
-      if ((newkeys & FLASH_GO_KEYS) == FLASH_GO_KEYS)
-        start_flash_update(spop.p.update.fn, spop.p.update.fw_size, spop.p.update.issfw);
-      else if (newkeys & KEY_BUTTB)
-        spop.pop_num = 0;
-
-      break;
-    };
   } else {
     // Menu change via trigger buttons
     int mintab = (recent_menu && smenu.recent.maxentries) ? MENUTAB_RECENT : MENUTAB_ROMBROWSE;
@@ -2399,345 +3126,18 @@ void menu_keypress(unsigned newkeys) {
     if (newkeys & (KEY_BUTTL | KEY_BUTTR | KEY_BUTTUP | KEY_BUTTDOWN))
       smenu.anim_state = 0;
 
-    switch (smenu.menu_tab) {
-    case MENUTAB_RECENT:
-      if (smenu.recent.maxentries) {
-        if (newkeys & KEY_BUTTUP)
-          smenu.recent.selector = MAX(0, smenu.recent.selector - 1);
-        else if (newkeys & KEY_BUTTDOWN)
-          smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + 1);
-        if (newkeys & KEY_BUTTLEFT) {
-          smenu.recent.selector = MAX(0, smenu.recent.selector - RECENT_ROWS);
-          smenu.recent.seloff   = MAX(0, smenu.recent.seloff - RECENT_ROWS);
-        }
-        else if (newkeys & KEY_BUTTRIGHT) {
-          smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + RECENT_ROWS);
-          smenu.recent.seloff   = MIN(smenu.recent.maxentries - 1, smenu.recent.seloff   + RECENT_ROWS);
-        }
-        if (newkeys & KEY_BUTTA) {
-          t_rentry *e = &sdr_state->rentries[smenu.recent.selector];
-          // stat() the file since we need the size, and validate that it exists!
-          FILINFO info;
-          FRESULT res = f_stat(e->fpath, &info);
-          if (res == FR_OK) {
-            browser_open(e->fpath, info.fsize);
-          } else {
-            spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
-          }
-        }
-        else if (newkeys & KEY_BUTTSEL) {
-          void sram_battery_test_callback(bool confirm) {
-            if (confirm) {
-              delete_recent_flush(smenu.recent.selector);
-            }
-          }
-          spop.qpop.message = msgs[lang_id][MSG_Q4_DELREC];
-          spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
-          spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
-          spop.qpop.option = 0;
-          spop.qpop.callback = sram_battery_test_callback;
-          spop.qpop.clear_popup_ok = false;
-        }
-      }
-
-      if (smenu.recent.selector < smenu.recent.seloff)
-        smenu.recent.seloff = smenu.recent.selector;
-      else if (smenu.recent.selector >= smenu.recent.seloff + RECENT_ROWS)
-        smenu.recent.seloff = smenu.recent.selector - RECENT_ROWS + 1;
-
-      break;
-    case MENUTAB_ROMBROWSE:
-      // Move menu up and down
-      if (smenu.browser.maxentries) {
-        if (newkeys & KEY_BUTTUP)
-          smenu.browser.selector = MAX(0, smenu.browser.selector - 1);
-        if (newkeys & KEY_BUTTDOWN)
-          smenu.browser.selector = MIN(smenu.browser.maxentries - 1, smenu.browser.selector + 1);
-        if (newkeys & KEY_BUTTLEFT) {
-          smenu.browser.selector = MAX(0, smenu.browser.selector - BROWSER_ROWS);
-          smenu.browser.seloff   = MAX(0, smenu.browser.seloff - BROWSER_ROWS);
-        }
-        if (newkeys & KEY_BUTTRIGHT) {
-          smenu.browser.selector = MIN(smenu.browser.maxentries - 1, smenu.browser.selector + BROWSER_ROWS);
-          smenu.browser.seloff   = MIN(smenu.browser.maxentries - 1, smenu.browser.seloff   + BROWSER_ROWS);
-        }
-        // Move into a new dir and/or open a file
-        if (newkeys & KEY_BUTTA) {
-          t_centry *e = sdr_state->fileorder[smenu.browser.selector];
-          if (e->isdir) {
-            strcat(smenu.browser.cpath, e->fname);
-            strcat(smenu.browser.cpath, "/");
-            browser_reload();
-          } else {
-            char path[MAX_FN_LEN];
-            strcpy(path, smenu.browser.cpath);
-            strcat(path, e->fname);
-            browser_open(path, e->filesize);
-          }
-        }
-        else if (newkeys & KEY_BUTTSEL) {
-          // Shows a file management menu.
-          t_centry *e = sdr_state->fileorder[smenu.browser.selector];
-          if (!e->isdir) {
-            void remove_file_action(bool confirm) {
-              char tmpfn[MAX_FN_LEN];
-              t_centry *e = sdr_state->fileorder[smenu.browser.selector];
-              strcpy(tmpfn, smenu.browser.cpath);
-              strcat(tmpfn, e->fname);
-
-              if (confirm) {
-                if (FR_OK != f_unlink(tmpfn))
-                  spop.alert_msg = msgs[lang_id][MSG_ERR_DELFILE];
-                else
-                  spop.alert_msg = msgs[lang_id][MSG_OK_DELFILE];
-
-                browser_reload();   // Force reload so the file disappears! TODO: maintain scroll position?
-              }
-            }
-            spop.qpop.message = msgs[lang_id][MSG_Q0_DELFILE];
-            spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
-            spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
-            spop.qpop.option = 0;
-            spop.qpop.callback = remove_file_action;
-            spop.qpop.clear_popup_ok = true;
-          }
-        }
-      }
-      if (newkeys & KEY_BUTTB) {
-        // Try to go up in the dir structure
-        if (movedir_up())
-          browser_reload();
-      }
-
-      // Selector was updated, figure out how we update the menu params so it
-      // can be rendered properly.
-      if (smenu.browser.selector < smenu.browser.seloff)
-        smenu.browser.seloff = smenu.browser.selector;
-      else if (smenu.browser.selector >= smenu.browser.seloff + BROWSER_ROWS)
-        smenu.browser.seloff = smenu.browser.selector - BROWSER_ROWS + 1;
-    break;
-
-    #ifdef SUPPORT_NORGAMES
-    case MENUTAB_NORBROWSE:
-      if (smenu.fbrowser.maxentries) {
-        if (newkeys & KEY_BUTTUP)
-          smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - 1);
-        if (newkeys & KEY_BUTTDOWN)
-          smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + 1);
-        if (newkeys & KEY_BUTTLEFT) {
-          smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - NORGAMES_ROWS);
-          smenu.fbrowser.seloff   = MAX(0, smenu.fbrowser.seloff - NORGAMES_ROWS);
-        }
-        if (newkeys & KEY_BUTTRIGHT) {
-          smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + NORGAMES_ROWS);
-          smenu.fbrowser.seloff   = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.seloff   + NORGAMES_ROWS);
-        }
-
-        if (newkeys & KEY_BUTTA) {
-          const t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
-          launch_gba_nor(e->blkmap, e->numblks);
-        }
-        else if (newkeys & KEY_BUTTSEL) {
-          // Prompt NOR entry deletion.
-          {
-            void remove_nor_action(bool confirm) {
-              if (!confirm)
-                return;
-
-              // Remove game entry, just memmove the other games on top.
-              sdr_state->nordata.gamecnt--;
-              memmove32(&sdr_state->nordata.games[smenu.fbrowser.selector],
-                        &sdr_state->nordata.games[smenu.fbrowser.selector + 1],
-                        (sdr_state->nordata.gamecnt - smenu.fbrowser.selector) * sizeof(t_flash_game_entry));
-
-              // Go ahead and write a new metadata entry;
-              if (!flashmgr_store(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE, (t_reg_entry*)&sdr_state->nordata))
-                spop.alert_msg = msgs[lang_id][MSG_ERR_NORUPD];
-              flashbrowser_reload();   // Force list reload, free block calculation, etc.
-            }
-            spop.qpop.message = msgs[lang_id][MSG_Q5_DELNORG];
-            spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
-            spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
-            spop.qpop.option = 0;
-            spop.qpop.callback = remove_nor_action;
-            spop.qpop.clear_popup_ok = true;
-          }
-        }
-
-        if (smenu.fbrowser.selector < smenu.fbrowser.seloff)
-          smenu.fbrowser.seloff = smenu.fbrowser.selector;
-        else if (smenu.fbrowser.selector >= smenu.fbrowser.seloff + NORGAMES_ROWS)
-          smenu.fbrowser.seloff = smenu.fbrowser.selector - NORGAMES_ROWS + 1;
-      }
-      break;
-    #endif
-
-    case MENUTAB_UILANG:
-      if (newkeys & KEY_BUTTUP)
-        smenu.uiset.selector = MAX(0, smenu.uiset.selector - 1);
-      if (newkeys & KEY_BUTTDOWN)
-        smenu.uiset.selector = MIN(UiSetMAX, smenu.uiset.selector + 1);
-      if (newkeys & KEY_BUTTLEFT) {
-        if (smenu.uiset.selector == UiSetTheme)
-          menu_theme = menu_theme ? menu_theme - 1 : 0;
-        else if (smenu.uiset.selector == UiSetASpd)
-          anim_speed = anim_speed ? anim_speed - 1 : 0;
-        else if (smenu.uiset.selector == UiSetRect)
-          recent_menu ^= 1;
-        else if (smenu.uiset.selector == UiSetLang)
-          lang_id = (lang_id + LANG_COUNT - 1) % LANG_COUNT;
-      }
-      if (newkeys & KEY_BUTTRIGHT) {
-        if (smenu.uiset.selector == UiSetTheme)
-          menu_theme = MIN(THEME_COUNT - 1, menu_theme + 1);
-        else if (smenu.uiset.selector == UiSetASpd)
-          anim_speed = MIN(animspd_cnt - 1, anim_speed + 1);
-        else if (smenu.uiset.selector == UiSetRect)
-          recent_menu ^= 1;
-        else if (smenu.uiset.selector == UiSetLang)
-          lang_id = (lang_id + 1) % LANG_COUNT;
-      }
-
-      if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
-        smenu.uiset.selector = 0;
-        if (save_ui_settings())
-          spop.alert_msg = msgs[lang_id][MSG_OK_SETSAVE];
-        else
-          spop.alert_msg = msgs[lang_id][MSG_ERR_SETSAVE];
-      }
-
-      reload_theme(menu_theme);
-      break;
-
-    case MENUTAB_TOOLS:
-      if (newkeys & KEY_BUTTUP)
-        smenu.tools.selector = MAX(0, smenu.tools.selector - 1);
-      if (newkeys & KEY_BUTTDOWN)
-        smenu.tools.selector = MIN(ToolsMAX, smenu.tools.selector + 1);
-
-      if (newkeys & KEY_BUTTA) {
-        if (smenu.tools.selector == ToolsSDRAMTest) {
-          // Performs a test on the SRAM/SDRAM, ensure they are fine.
-          set_supercard_mode(MAPPED_SDRAM, true, false);
-
-          if (sdram_test(loadrom_progress_abort))
-            spop.alert_msg = msgs[lang_id][MSG_BAD_SDRAM];
-          else
-            spop.alert_msg = msgs[lang_id][MSG_GOOD_RAM];
-
-          set_supercard_mode(MAPPED_SDRAM, true, true);
-        }
-        if (smenu.tools.selector == ToolsSRAMTest) {
-          if (sram_test())
-            spop.alert_msg = msgs[lang_id][MSG_BAD_SRAM];
-          else
-            spop.alert_msg = msgs[lang_id][MSG_GOOD_RAM];
-        }
-        else if (smenu.tools.selector == ToolsBatteryTest) {
-          // Go ahead and fill in SRAM with a pattern.
-          spop.qpop.message = msgs[lang_id][MSG_Q2_SRAMTST];
-          spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
-          spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
-          spop.qpop.option = 0;
-          spop.qpop.callback = sram_battery_test_callback;
-          spop.qpop.clear_popup_ok = true;
-        }
-        else if (smenu.tools.selector == ToolsSDBench) {
-          slowsd = use_slowld;
-          int ret = sdbench_read(loadrom_progress_abort);
-          slowsd = true;
-          if (ret < 0)
-            spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
-          else {
-            unsigned speed = 8*1024*1024 / (unsigned)ret;
-            npf_snprintf(smenu.info.tstr, sizeof(smenu.info.tstr), msgs[lang_id][MSG_BENCHSPD], speed);
-            spop.alert_msg = smenu.info.tstr;
-          }
-        }
-        else if (smenu.tools.selector == ToolsFlashBak) {
-          // Backup the flash contents to a file.
-          if (dump_flashmem_backup())
-            spop.alert_msg = msgs[lang_id][MSG_FLASH_READOK];
-          else
-            spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
-        }
-      }
-      break;
-
-    case MENUTAB_SETTINGS:
-      if (newkeys & KEY_BUTTUP)
-        smenu.set.selector = MAX(0, smenu.set.selector - 1);
-      if (newkeys & KEY_BUTTDOWN)
-        smenu.set.selector = MIN(SettMAX, smenu.set.selector + 1);
-      if (newkeys & KEY_BUTTLEFT) {
-        if (smenu.set.selector == SettHotkey)
-          hotkey_combo = (hotkey_combo + hotkey_listcnt - 1) % hotkey_listcnt;
-        else if (smenu.set.selector == SettSaveLoc)
-          save_path_default = (save_path_default + SaveDirCNT - 1) % SaveDirCNT;
-        else if (smenu.set.selector == SettStateLoc)
-          state_path_default = (state_path_default + StateDirCNT - 1) % StateDirCNT;
-        else if (smenu.set.selector == SettSaveBkp)
-          backup_sram_default = backup_sram_default ? backup_sram_default - 1 : 0;
-        else if (smenu.set.selector == DefsPatchEng)
-          patcher_default = (patcher_default + PatchTotalCNT - 1) % PatchTotalCNT;
-      }
-      if (newkeys & KEY_BUTTRIGHT) {
-        if (smenu.set.selector == SettHotkey)
-          hotkey_combo = (hotkey_combo + 1) % hotkey_listcnt;
-        else if (smenu.set.selector == SettSaveLoc)
-          save_path_default = (save_path_default + 1) % SaveDirCNT;
-        else if (smenu.set.selector == SettStateLoc)
-          state_path_default = (state_path_default + 1) % StateDirCNT;
-        else if (smenu.set.selector == SettSaveBkp)
-          backup_sram_default = MIN(16, backup_sram_default + 1);
-        else if (smenu.set.selector == DefsPatchEng)
-          patcher_default = (patcher_default + 1) % PatchTotalCNT;
-      }
-      if (newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) {
-        if (smenu.set.selector == SettBootType)
-          boot_bios_splash ^= 1;
-        else if (smenu.set.selector == SettCheatEn)
-          enable_cheats ^= 1;
-        else if (smenu.set.selector == DefsGamMenu)
-          ingamemenu_default ^= 1;
-        else if (smenu.set.selector == DefsRTCEnb)
-          rtcpatch_default ^= 1;
-        else if (smenu.set.selector == DefsLoadPol)
-          autoload_default ^= 1;
-        else if (smenu.set.selector == DefsSavePol)
-          autosave_default ^= 1;
-        else if (smenu.set.selector == DefsPrefDS)
-          autosave_prefer_ds ^= 1;
-        else if (smenu.set.selector == SettFastSD)
-          use_slowld ^= 1;
-        else if (smenu.set.selector == SettFastEWRAM)
-          use_fastew = fastew ? (use_fastew ^ 1) : 0;
-      }
-
-      if (newkeys & KEY_BUTTA && smenu.set.selector == DefsRTCVal) {
-        void accept_rtc() {
-          rtcvalue_default = spop.rtcpop.val;
-        }
-        spop.rtcpop.val = rtcvalue_default;
-        spop.rtcpop.callback = accept_rtc;
-      }
-      if (newkeys & KEY_BUTTA && smenu.set.selector == SettSave) {
-        smenu.set.selector = 0;
-        if (save_settings())
-          spop.alert_msg = msgs[lang_id][MSG_OK_SETSAVE];
-        else
-          spop.alert_msg = msgs[lang_id][MSG_ERR_SETSAVE];
-      }
-
-      break;
-
-    case MENUTAB_INFO:
-      if (newkeys & KEY_BUTTA)
-        smenu.info.selector = (smenu.info.selector + 1) % 4;
-      if ((newkeys & FLASH_UNLOCK_KEYS) == FLASH_UNLOCK_KEYS)
-        enable_flashing = true;
-      break;
+    const t_mkeyupd_fn keyfns[] = {
+      keypress_menu_recent,
+      keypress_menu_browse,
+      #ifdef SUPPORT_NORGAMES
+      keypress_menu_norbrowse,
+      #endif
+      keypress_menu_settings,
+      keypress_menu_uisettings,
+      keypress_menu_tools,
+      keypress_menu_info,
     };
+    keyfns[smenu.menu_tab](newkeys);
   }
 }
 

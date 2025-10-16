@@ -69,15 +69,9 @@ bool wait_dat0_idle(unsigned timeout);
 bool receive_sdcard_response(uint8_t *buffer, unsigned maxsize, unsigned timeout);
 void send_sdcard_commandbuf(const uint8_t *buffer, unsigned maxsize);
 
-// We use the 0x8-9 mapping here, since there is little performance difference
-// when sending/receiving commands.
-#define SC_MIRROR_BASE           0x08000000
 
 #define REG_SC_MODE_REG_ADDR     0x09FFFFFE
-#define REG_SD_MODE              (*(volatile uint16_t*)(REG_SC_MODE_REG_ADDR))
-
 #define MODESWITCH_MAGIC         0xA55A
-#define NORMAPPING_MAGIC         0xA558
 
 #define MAX_WRITE_RETRIES        2            // Try up to 3 times to write a block.
 #define MAX_REINIT_RETRIES       9            // Try up to 10 to re-init the card.
@@ -152,19 +146,37 @@ void write_supercard_mode(uint16_t modebits) {
     : "memory");
 }
 
-void set_supercard_normap(const uint8_t *blks) {
-  // Push blocks in order via magic register
-  for (unsigned i = 0; i < 8; i++) {
-    asm volatile (
-      "strh %1, [%0]\n"
-      "strh %1, [%0]\n"
-      "strh %2, [%0]\n"
-      "strh %2, [%0]\n"
-      :: "l"(REG_SC_MODE_REG_ADDR),
-         "l"(NORMAPPING_MAGIC),
-         "l"((unsigned int)blks[i])
-      : "memory");
-  }
+static void push_superchis_normap(uint8_t value) {
+  asm volatile (
+    "strh %1, [%0]\n"
+    "strh %1, [%0]\n"
+    "strh %2, [%0]\n"
+    :: "l"(REG_SC_MODE_REG_ADDR),
+       "l"(MODESWITCH_MAGIC),
+       "l"((unsigned int)(0x200 | value))
+    : "memory");
+}
+
+void set_superchis_normap(const uint8_t *blks) {
+  for (unsigned i = 0; i < 8; i++)
+    push_superchis_normap(blks[i]);
+}
+
+void reset_superchis_normap() {
+  // Clears the map to zero (mirrored flash base)
+  for (unsigned i = 0; i < 8; i++)
+    push_superchis_normap(0);
+}
+
+void sram_superchis_bank(unsigned bankn) {
+  asm volatile (
+    "strh %1, [%0]\n"
+    "strh %1, [%0]\n"
+    "strh %2, [%0]\n"
+    :: "l"(REG_SC_MODE_REG_ADDR),
+       "l"(MODESWITCH_MAGIC),
+       "l"((unsigned int)(0x100 | bankn))
+    : "memory");
 }
 
 void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_interface) {

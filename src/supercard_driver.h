@@ -34,9 +34,12 @@ typedef struct {
 #define MAPPED_SDRAM         1
 
 // Generic supercard function to change mapping mode
-void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_interface);
-void set_supercard_normap(const uint8_t *blks);
 void write_supercard_mode(uint16_t modebits);
+void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_interface);
+
+void sram_superchis_bank(unsigned bankn);
+void set_superchis_normap(const uint8_t *blks);
+void reset_superchis_normap();
 
 // Full SD card init
 unsigned sdcard_init(t_card_info *info);

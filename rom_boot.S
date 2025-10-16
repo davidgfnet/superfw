@@ -182,6 +182,21 @@ main:
   sub pc, pc, r1
   nop; nop;
 
+  @ When using bigger flashes, map the flash mirrored N times.
+  #ifdef SUPERCHIS_IO
+  mov r0, $0x0A000000
+  mov r1, $0x5A
+  orr r1, $0xA500
+  mov r2, $8
+  mov r3, $0x200
+1:
+    strh r1, [r0, #-2]
+    strh r1, [r0, #-2]
+    strh r3, [r0, #-2]
+    subs r2, $1
+    bne 1b
+  #endif
+
   @ Figure out whether this payload is running on FW flash or on SDRAM.
   @ Place the mode (0x4 for flash or 0x5 for sdram) in r12
   mov r0, $GAMEPAK_BASEADDR

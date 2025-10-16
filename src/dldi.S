@@ -42,10 +42,12 @@ dldi_payload:
   .byte __fix_flags                         // FIX_* flags (only use FIX_GOT and/or FIX_BSS)
   .byte 0x00                                // Allocated app space size (avail_size, ignore)
 
-  #ifndef SUPERCARD_LITE_IO
-    .asciz "SuperFW Supercard DLDI driver by davidgf"
-  #else
+  #if defined(SUPERCHIS_IO)
+    .asciz "SuperFW SuperChis DLDI driver by davidgf"
+  #elif defined(SUPERCARD_LITE_IO)
     .asciz "SuperFW Supercard Lite DLDI driver by davidgf"
+  #else
+    .asciz "SuperFW Supercard DLDI driver by davidgf"
   #endif
   .align 6
 

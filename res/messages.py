@@ -87,9 +87,8 @@ en_strings = [
   "MSG_UIS_SPD4":  "< Very fast >",
 
   "MSG_GBALOAD_MINFO":  "ROM information",
-  "MSG_GBALOAD_MSAVE":  "Savegame options",
+  "MSG_GBALOAD_OPTS":   "Loading options",
   "MSG_GBALOAD_MPATCH": "Patching options",
-  "MSG_GBALOAD_MSETT":  "Game settings",
 
   "MSG_PATCH_TYPE0": "< Built-in database >",
   "MSG_PATCH_TYPE1": "< Patch engine >",
@@ -162,11 +161,15 @@ en_strings = [
 
   "MSG_LOADINFO_GAME": "GameID: %s | Version: %d",
   "MSG_LOADINFO_SAVE": "Save type: %s (%s)",
-  "MSG_LOADINFO_UNKW": "Unknown game!",
+  "MSG_LOADINFO_UNKW": "Unknown save type!",
 
   "MSG_OK_SETSAVE": "Settings saved!",                   # alertmsg
   "MSG_OK_DELFILE": "File deleted!",                     # alertmsg
   "MSG_OK_GENERIC": "Completed successfully!",           # alertmsg
+
+  "MSG_FMGR_DEL":    "Delete file/directory",
+  "MSG_FMGR_HIDE":   "Hide file/directory",
+  "MSG_FMGR_UNHIDE": "Un-Hide file/directory",
 
   "MSG_SAVOPT_OPT0": "Write SRAM to sav",
   "MSG_SAVOPT_OPT1": "Load sav to SRAM",
@@ -176,6 +179,7 @@ en_strings = [
   "MSG_SAVOPT_MSG2": ".sav was cleared!",                # alertmsg
   "MSG_SAVOPT_MSG_RERR": "Could not read sav file!",     # alertmsg
   "MSG_SAVOPT_MSG_WERR": "Could not write sav file!",    # alertmsg
+  "MSG_REMEMB_CFG_OK": "Config saved!",                  # alertmsg
 
   "MSG_FWUP_HOTKEY":   "Use Down+B+Start to unlock updates",
   "MSG_FWUP_ENABLED":  "Update flashing is enabled",
@@ -222,6 +226,10 @@ en_strings = [
   ("SUPPORT_NORGAMES", {
   "MSG_Q5_DELNORG": "Delete this game from flash memory?",
   "MSG_ERR_NORUPD": "Flash write failed!",                 # alertmsg
+  "MSG_ERR_NORSPC": "Insufficient disk space!",            # alertmsg
+  "MSG_NOR_WRITE":  "Write game to flash",
+  "MSG_NOR_LAUNCH": "Launch flash game",
+  "MSG_NOR_WROK":   "Game flashed successfully!",
   }),
 ]
 
