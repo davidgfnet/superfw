@@ -366,7 +366,7 @@ unsigned flash_gba_nor(
     for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += LOAD_BS) {
       uint32_t absoff = offset + bigoff;
       if (progress && (absoff & (128*1024-1)) == 0)
-        progress((bigoff + offset / 2) >> 8, fs >> 8);
+        progress((bigoff + offset / 4) >> 8, fs >> 8);
 
       unsigned toread = MIN(LOAD_BS, fs - absoff);
       UINT rdbytes;
@@ -389,7 +389,7 @@ unsigned flash_gba_nor(
       uint32_t absoff = offset + bigoff;
       uint32_t flashaddr = GBA_ROM_BASE + absoff;
       if (progress && (absoff & (128*1024-1)) == 0)
-        progress((bigoff + (ssize + offset) / 2) >> 8, fs >> 8);
+        progress((bigoff + ssize / 4 + offset * 3/4) >> 8, fs >> 8);
 
       if (!flash_check_erased(flashaddr, flashinfo.blksize))
         if (!flash_erase_sector(flashaddr)) {

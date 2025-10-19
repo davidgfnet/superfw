@@ -134,7 +134,7 @@ bool flashmgr_store(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
   ndata->magic = NOR_ENTRY_MAGIC;
   ndata->crc = xorh((uint32_t*)ndata->games, (sizeof(t_flash_game_entry) * ndata->gamecnt) / 4) ^ ndata->gamecnt;
 
-  if (!flash_program_buffered(baseaddr + off, (uint8_t*)ndata, reqsz, flashinfo.blkwrite))
+  if (!flash_program(baseaddr + off, (uint8_t*)ndata, reqsz))
     return false;
 
   if (!flash_verify(baseaddr + off, (uint8_t*)ndata, reqsz))

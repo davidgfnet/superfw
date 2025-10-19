@@ -251,7 +251,7 @@ bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
 
       // Perform the actual write operation
       volatile uint16_t *ptr = (uint16_t*)(baseaddr + addr);
-      *ptr = tmp[off];
+      *ptr = tmp[off/2];
 
       // It should take less than 1ms usually (in the order of us).
       for (unsigned j = 0; j < 8*1024; j++) {
@@ -262,7 +262,7 @@ bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
       SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
 
       // Timed out or the value programmed is wrong
-      if (notfinished || *ptr != tmp[off]) {
+      if (notfinished || *ptr != tmp[off/2]) {
         set_supercard_mode(MAPPED_SDRAM, true, true);
         return false;
       }
