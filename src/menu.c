@@ -2639,7 +2639,7 @@ static void keypress_popup_filemgr(unsigned newkeys) {
         void remove_file_action(bool confirm) {
           char tmpfn[MAX_FN_LEN];
           strcpy(tmpfn, smenu.browser.cpath);
-          strcat(tmpfn, e->fname);
+          strcat(tmpfn, sdr_state->fileorder[smenu.browser.selector]->fname);
 
           if (confirm) {
             if (FR_OK != f_unlink(tmpfn))
