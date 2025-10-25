@@ -6,3 +6,5 @@
 *.gcda
 *.gcno
 *.info
+*.bin
+coverage/
