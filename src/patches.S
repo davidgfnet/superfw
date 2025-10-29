@@ -28,68 +28,28 @@
 .balign 4
 .thumb
 
-// RTC patches/hooks
-.global patch_rtc_probe
-.global patch_rtc_probe_size
-.global patch_rtc_getstatus
-.global patch_rtc_getstatus_size
-.global patch_rtc_gettimedate
-.global patch_rtc_gettimedate_size
-.global patch_rtc_reset
-.global patch_rtc_reset_size
+#define START_FUNC(name)  \
+  .global name;           \
+  .type name, %function;  \
+  .balign 4;              \
+  name:
 
-// EEPROM/FLASH patches for SRAM conversion
-.global patch_eeprom_read_sram64k
-.global patch_eeprom_read_sram64k_size
-.global patch_eeprom_write_sram64k
-.global patch_eeprom_write_sram64k_size
+#define END_FUNC(name)          \
+  .balign 4;                    \
+  .pool;                        \
+  .balign 4;                    \
+  name##_size:                  \
+    .word (name##_size - name); \
+  name##_end:                   \
+  .global name##_size;          \
+  .global name##_end;
 
-.global patch_flash_read_sram64k
-.global patch_flash_read_sram64k_size
-.global patch_flash_erase_device_sram64k
-.global patch_flash_erase_device_sram64k_size
-.global patch_flash_erase_sector_sram64k
-.global patch_flash_erase_sector_sram64k_size
-.global patch_flash_write_sector_sram64k
-.global patch_flash_write_sector_sram64k_size
-.global patch_flash_write_byte_sram64k
-.global patch_flash_write_byte_sram64k_size
-
-.global patch_flash_read_sram128k
-.global patch_flash_read_sram128k_size
-.global patch_flash_erase_device_sram128k
-.global patch_flash_erase_device_sram128k_size
-.global patch_flash_erase_sector_sram128k
-.global patch_flash_erase_sector_sram128k_size
-.global patch_flash_write_sector_sram128k
-.global patch_flash_write_sector_sram128k_size
-.global patch_flash_write_byte_sram128k
-.global patch_flash_write_byte_sram128k_size
-
-// EEPROM/FLASH patches for direct save mode.
-.global patch_eeprom_read_directsave
-.global patch_eeprom_read_directsave_size
-.global patch_eeprom_write_directsave
-.global patch_eeprom_write_directsave_size
-
-.global patch_flash_read_directsave
-.global patch_flash_read_directsave_size
-.global patch_flash_erase_device_directsave
-.global patch_flash_erase_device_directsave_size
-.global patch_flash_erase_sector_directsave
-.global patch_flash_erase_sector_directsave_size
-.global patch_flash_write_sector_directsave
-.global patch_flash_write_sector_directsave_size
-.global patch_flash_write_byte_directsave
-.global patch_flash_write_byte_directsave_size
-
-
+// When running superchis, write the bank bit only (3rd)
 #ifdef SUPERCHIS_IO
-  #define SRAM_BANK(reg, bank)   ldr reg, =(0x0100 | (bank))
+  #define SRAM_BANK(bank)   (0x0070 | ((bank) << 3))
 #else
-  #define SRAM_BANK(reg, bank)   mov reg, $(0x0001 | ((bank) << 2))
+  #define SRAM_BANK(bank)   (0x0001 | ((bank) << 2))
 #endif
-
 
 
 // This function reads a byte from the emulated EEPROM
@@ -99,12 +59,11 @@
 
 // R0: Block number (0-63 or 0-1023) to read from.
 // R1: Byte buffer where the byte will be written (as bits)
-// Returns 0 on success?
-patch_eeprom_read_sram64k:
+// Returns 0 on success? (Space: 168 bytes)
+START_FUNC(patch_eeprom_read_sram64k)
   lsl r0, r0, #22            // Cap address to 0x3FF
   lsr r0, r0, #19            // and mult by 8 (8 byte blocks)
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r2, r2, r0             // Address of the desired byte
   add r2, r2, #8             // Read from the MSB
   mov r0, #8                 // Bit counter
@@ -116,21 +75,18 @@ patch_eeprom_read_sram64k:
   sub r0, #1                 // Decrement counter
   bne 1b
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-patch_eeprom_read_sram64k_size:
-  .word (patch_eeprom_read_sram64k_size - patch_eeprom_read_sram64k)
+END_FUNC(patch_eeprom_read_sram64k)
 
 // Similarly, this function gets an 8 byte buffer (8 bits) and stores it
 // in the SRAM memory (at the specified address).
 
 // R0: Block number (0-63 or 0-1023) to write to.
 // R1: Byte buffer where the byte will be read (as bits)
-// Returns 0 on success?
-patch_eeprom_write_sram64k:
+// Returns 0 on success?  (Space: 204 bytes)
+START_FUNC(patch_eeprom_write_sram64k)
   lsl r0, r0, #22            // Cap address to 0x3FF
   lsr r0, r0, #19            // and mult by 8 (8 byte blocks)
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r2, r2, r0             // Address of the desired byte
   add r2, r2, #8             // Write in inverse order (MSB first)
   mov r0, #8                 // Bit counter
@@ -142,9 +98,7 @@ patch_eeprom_write_sram64k:
   sub r0, #1                 // Decrement counter
   bne 1b
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-patch_eeprom_write_sram64k_size:
-  .word (patch_eeprom_write_sram64k_size - patch_eeprom_write_sram64k)
+END_FUNC(patch_eeprom_write_sram64k)
 
 
 // FLASH read/write/erase patch routines.
@@ -158,12 +112,12 @@ patch_eeprom_write_sram64k_size:
 // R1: byte offset withing the sector
 // R2: buffer pointer (destination)
 // R3: amount of bytes to read
-patch_flash_read_sram64k:
+// Has 118 bytes of space.
+START_FUNC(patch_flash_read_sram64k)
   lsl r0, #28; lsr r0, #16   // Limit sector number to [0...15] + lsl #12
   add r0, r1                 // Address to read in the backup memory
-  mov r1, #0x0E              // Add SRAM base to it
-  lsl r1, #24
-  add r0, r1
+  ldr r1, =0x0E000000
+  add r0, r1                 // Add SRAM base to it
 1:
   ldrb r1, [r0]              // Copy one byte at a time
   strb r1, [r2]
@@ -174,68 +128,57 @@ patch_flash_read_sram64k:
 
   mov r0, #0                 // Return zero
   bx lr
-  .balign 4
-patch_flash_read_sram64k_size:
-  .word (patch_flash_read_sram64k_size - patch_flash_read_sram64k)
-
+END_FUNC(patch_flash_read_sram64k)
 
 // Clears the full flash device (fills it with 0xFF)
-patch_flash_erase_device_sram64k:
+// Has 90 bytes of space.
+START_FUNC(patch_flash_erase_device_sram64k)
   mov r0, #64                // Clear 64KiB
   lsl r0, #10
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   mov r1, #0xFF              // Clear with all-set-bits
 1:
   strb r1, [r2, #0]          // Write byte-by-byte to SRAM
   strb r1, [r2, #1]
   strb r1, [r2, #2]
   strb r1, [r2, #3]
-
   add r2, #4
   sub r0, #1
   bne 1b
 
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-patch_flash_erase_device_sram64k_size:
-  .word (patch_flash_erase_device_sram64k_size - patch_flash_erase_device_sram64k)
+END_FUNC(patch_flash_erase_device_sram64k)
 
 
 // Clears a sector in the flash device (fills it with 0xFF)
 // R0: Sector number to wipe
-patch_flash_erase_sector_sram64k:
+// Has 110 bytes of space.
+START_FUNC(patch_flash_erase_sector_sram64k)
   lsl r0, #28; lsr r0, #16   // Limit sector number to [0...15] + lsl #12 (sectors are 4KB)
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r2, r2, r0             // r2 points to the base of the sector
 
   mov r1, #0xFF              // Clear with all-set-bits
-  mov r0, #4                 // Clear 4KiB
-  lsl r0, #10
+  ldr r0, =1024              // Clear 1024 (*4) bytes
 1:
   strb r1, [r2, #0]          // Write byte-by-byte to SRAM
   strb r1, [r2, #1]
   strb r1, [r2, #2]
   strb r1, [r2, #3]
-
   add r2, #4
   sub r0, #1
   bne 1b
 
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-patch_flash_erase_sector_sram64k_size:
-  .word (patch_flash_erase_sector_sram64k_size - patch_flash_erase_sector_sram64k)
+END_FUNC(patch_flash_erase_sector_sram64k)
 
 
 // Writes a sector with a user-provided buffer.
 // R0: Sector number to write
 // R1: User provided pointer
-patch_flash_write_sector_sram64k:
+START_FUNC(patch_flash_write_sector_sram64k)
   lsl r0, #28; lsr r0, #16   // Limit sector number to [0...15] + lsl#12
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r2, r2, r0             // r2 points to the base of the sector
 
   mov r0, #4                 // Copy 4KiB
@@ -256,31 +199,25 @@ patch_flash_write_sector_sram64k:
   bne 1b
 
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-patch_flash_write_sector_sram64k_size:
-  .word (patch_flash_write_sector_sram64k_size - patch_flash_write_sector_sram64k)
+END_FUNC(patch_flash_write_sector_sram64k)
 
 
 // Writes a single byte to a specifc sector and offset.
 // R0: Sector number to write
 // R1: Offset within the sector
 // R2: Data (byte) to write
-patch_flash_write_byte_sram64k:
+START_FUNC(patch_flash_write_byte_sram64k)
   lsl r0, #28; lsr r0, #16   // Limit sector number to [0...15] + lsl#12
 
   add r0, r0, r1             // Full offset from flash start
-  mov r1, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r1, #24
+  ldr r1, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r0, r0, r1             // Full address of the byte to program
 
   strb r2, [r0]              // Write the byte
 
   mov r0, #0
   bx lr
-  .balign 4
-patch_flash_write_byte_sram64k_size:
-  .word (patch_flash_write_byte_sram64k_size - patch_flash_write_byte_sram64k)
-
+END_FUNC(patch_flash_write_byte_sram64k)
 
 
 // FLASH -> SRAM (128KB) conversion routines.
@@ -291,14 +228,15 @@ patch_flash_write_byte_sram64k_size:
 // R2: buffer pointer (destination)
 // R3: amount of bytes to read
 // Around 118 bytes are available for this patch.
-patch_flash_read_sram128k:
+// Has 118 bytes of space.
+START_FUNC(patch_flash_read_sram128k)
   push {r4, r5, r6}
   ldr r5, =0xA55A
   ldr r4, =0x9FFFFFE
 
   lsl r0, #28                // Limit sector number to [0...15] + lsl #12
   bcc 2f                     // Sector num MSB is in carry flag
-    SRAM_BANK(r6, 1)         // Switch to bank 1, since the sector num is 16..31
+    mov r6, $SRAM_BANK(1)    // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r6, [r4]
@@ -308,8 +246,7 @@ patch_flash_read_sram128k:
   lsr r0, #16                // Finish limit + lsl12
 
   add r0, r1                 // Address to read in the backup memory
-  mov r1, #0x0E              // Add SRAM base to it
-  lsl r1, #24
+  ldr r1, =0x0E000000        // Add SRAM base to it
   add r0, r1
 1:
   ldrb r1, [r0]              // Copy one byte at a time
@@ -319,7 +256,7 @@ patch_flash_read_sram128k:
   sub r3, #1
   bne 1b
 
-  SRAM_BANK(r6, 0)           // Switch to bank 0
+  mov r6, $SRAM_BANK(0)      // Switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r6, [r4]
@@ -328,54 +265,45 @@ patch_flash_read_sram128k:
   mov r0, #0                 // Return zero
   pop {r4, r5, r6}
   bx lr
-
-  .balign 4
-  .pool
-patch_flash_read_sram128k_size:
-  .word (patch_flash_read_sram128k_size - patch_flash_read_sram128k)
+END_FUNC(patch_flash_read_sram128k)
 
 
 // Clears the full flash device (fills it with 0xFF), max ~44 instr.
-patch_flash_erase_device_sram128k:
+// Has 90 bytes of space.
+START_FUNC(patch_flash_erase_device_sram128k)
   push {r4, r5}
   ldr r5, =0xA55A
   ldr r4, =0x9FFFFFE
 
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   mov r1, #0xFF              // Clear with all-set-bits
 
   // Clear first bank.
-  mov r0, #64                // Clear 64KiB
+  mov r0, #32                // Clear 64KiB
   lsl r0, #10
 1:
   strb r1, [r2, #0]          // Write byte-by-byte to SRAM
   strb r1, [r2, #1]
-  strb r1, [r2, #2]
-  strb r1, [r2, #3]
-  add r2, #4
+  add r2, #2
   sub r0, #1
   bne 1b
 
-  SRAM_BANK(r3, 1)           // Switch to bank 1, might enable SDRAM writes (dangerous!)
+  mov r3, $SRAM_BANK(1)      // Switch to bank 1, might enable SDRAM writes (dangerous!)
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
   strh r3, [r4]
 
-  mov r0, #64                // Clear 64KiB
+  mov r0, #32                // Clear 64KiB
   lsl r0, #10
 1:
   strb r1, [r2, #0]          // Write byte-by-byte to SRAM
   strb r1, [r2, #1]
-  strb r1, [r2, #2]
-  strb r1, [r2, #3]
-
-  add r2, #4
+  add r2, #2
   sub r0, #1
   bne 1b
 
-  SRAM_BANK(r3, 0)           // Switch to bank 0
+  mov r3, $SRAM_BANK(0)      // Switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -383,23 +311,20 @@ patch_flash_erase_device_sram128k:
 
   pop {r4, r5}
   bx lr                      // Return, r0 is zero here.
-
-  .balign 4
-  .pool
-patch_flash_erase_device_sram128k_size:
-  .word (patch_flash_erase_device_sram128k_size - patch_flash_erase_device_sram128k)
+END_FUNC(patch_flash_erase_device_sram128k)
 
 
 // Clears a sector in the flash device (fills it with 0xFF)
 // R0: Sector number to wipe
-patch_flash_erase_sector_sram128k:
+// Has 110 bytes of space.
+START_FUNC(patch_flash_erase_sector_sram128k)
   push {r4, r5}
   ldr r5, =0xA55A
   ldr r4, =0x9FFFFFE
 
   lsl r0, #28                // Limit sector number to [0...15], MSB into Carry
   bcc 2f
-    SRAM_BANK(r3, 1)         // Switch to bank 1, since the sector num is 16..31
+    mov r3, $SRAM_BANK(1)    // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r3, [r4]
@@ -408,24 +333,21 @@ patch_flash_erase_sector_sram128k:
 2:
   lsr r0, #16                // Complete the clamp plus shift
 
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r2, r2, r0             // r2 points to the base of the sector
 
   mov r1, #0xFF              // Clear with all-set-bits
-  mov r0, #4                 // Clear 4KiB
-  lsl r0, #10
+  ldr r0, =1024              // Clear 4KiB
 1:
   strb r1, [r2, #0]          // Write byte-by-byte to SRAM
   strb r1, [r2, #1]
   strb r1, [r2, #2]
   strb r1, [r2, #3]
-
   add r2, #4
   sub r0, #1
   bne 1b
 
-  SRAM_BANK(r3, 0)           // Unconditionally switch to bank 0
+  mov r3, $SRAM_BANK(0)      // Unconditionally switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -433,23 +355,20 @@ patch_flash_erase_sector_sram128k:
 
   pop {r4, r5}
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-  .pool
-patch_flash_erase_sector_sram128k_size:
-  .word (patch_flash_erase_sector_sram128k_size - patch_flash_erase_sector_sram128k)
+END_FUNC(patch_flash_erase_sector_sram128k)
 
 
 // Writes a sector with a user-provided buffer.
 // R0: Sector number to write
 // R1: User provided pointer
-patch_flash_write_sector_sram128k:
+START_FUNC(patch_flash_write_sector_sram128k)
   push {r4, r5}
   ldr r5, =0xA55A
   ldr r4, =0x9FFFFFE
 
   lsl r0, #28                // Limit sector number to [0...15] + lsl#12
   bcc 2f
-    SRAM_BANK(r3, 1)         // Switch to bank 1, since the sector num is 16..31
+    mov r3, $SRAM_BANK(1)    // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r3, [r4]
@@ -458,8 +377,7 @@ patch_flash_write_sector_sram128k:
 2:
   lsr r0, #16                // Finish lsl#12
 
-  mov r2, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r2, #24
+  ldr r2, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r2, r2, r0             // r2 points to the base of the sector
 
   mov r0, #4                 // Copy 4KiB
@@ -479,7 +397,7 @@ patch_flash_write_sector_sram128k:
   sub r0, #4
   bne 1b
 
-  SRAM_BANK(r3, 0)           // Unconditionally switch to bank 0
+  mov r3, $SRAM_BANK(0)      // Unconditionally switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -487,24 +405,21 @@ patch_flash_write_sector_sram128k:
 
   pop {r4, r5}
   bx lr                      // Return, r0 is zero here.
-  .balign 4
-  .pool
-patch_flash_write_sector_sram128k_size:
-  .word (patch_flash_write_sector_sram128k_size - patch_flash_write_sector_sram128k)
+END_FUNC(patch_flash_write_sector_sram128k)
 
 
 // Writes a single byte to a specifc sector and offset.
 // R0: Sector number to write
 // R1: Offset within the sector
 // R2: Data (byte) to write
-patch_flash_write_byte_sram128k:
+START_FUNC(patch_flash_write_byte_sram128k)
   push {r4, r5}
   ldr r5, =0xA55A
   ldr r4, =0x9FFFFFE
 
   lsl r0, #28                // Limit sector number to [0...15] + lsl#12
   bcc 2f
-    SRAM_BANK(r3, 1)         // Switch to bank 1, since the sector num is 16..31
+    mov r3, $SRAM_BANK(1)    // Switch to bank 1, since the sector num is 16..31
     strh r5, [r4]
     strh r5, [r4]
     strh r3, [r4]
@@ -514,13 +429,12 @@ patch_flash_write_byte_sram128k:
   lsr r0, #16                // Finish lsl#12
 
   add r0, r0, r1             // Full offset from flash start
-  mov r1, #0x0E              // Load the SRAM base (0x0E000000)
-  lsl r1, #24
+  ldr r1, =0x0E000000        // Load the SRAM base (0x0E000000)
   add r0, r0, r1             // Full address of the byte to program
 
   strb r2, [r0]              // Write the byte
 
-  SRAM_BANK(r3, 0)           // Unconditionally switch to bank 0
+  mov r3, $SRAM_BANK(0)      // Unconditionally switch to bank 0
   strh r5, [r4]
   strh r5, [r4]
   strh r3, [r4]
@@ -529,11 +443,7 @@ patch_flash_write_byte_sram128k:
   mov r0, #0
   pop {r4, r5}
   bx lr
-  .balign 4
-  .pool
-patch_flash_write_byte_sram128k_size:
-  .word (patch_flash_write_byte_sram128k_size - patch_flash_write_byte_sram128k)
-
+END_FUNC(patch_flash_write_byte_sram128k)
 
 
 // Direct Saving patch routines.
@@ -550,65 +460,65 @@ patch_flash_write_byte_sram128k_size:
 
 
 #define trampoline_arm_r3()                \
-  .balign 4;                               \
-  /* r3 contains the jumping addr */;      \
-33:;                                       \
-  .thumb;                                  \
-  bx pc; nop;                              \
-  .arm;                                    \
-  bx r3;                                   \
-  .thumb;                                  \
-  .balign 4;
+33:                                        \
+  bx r3; /* r3 has target addr */
 
 // This routine is similar to patch_eeprom_read_sram64k since the date is loaded
 // from SRAM. However, it honors memory_size when it comes to parameter testing.
 
 // R0: Block number (0-63 or 0-1023) to read from.
 // R1: Byte buffer where the byte will be written (as bits)
-patch_eeprom_read_directsave:
-  push {r7, lr}
+// Returns 0 on success? (Space: 168 bytes)
+START_FUNC(patch_eeprom_read_directsave)
+  push {r6, r7, lr}
 
-  mov r2, r0                 // Swap args
-  mov r0, r1
-  mov r1, r2
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r3, =0xFF1F
+  ldrh r6, [r7]
+  and r3, r6
+  strh r3, [r7]
 
   mov r7, $READ_EEPROM_FN
   adr r3, patch_eeprom_read_directsave_size
   ldr r3, [r3]
   bl 33f
 
-  pop {r7}
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
+  pop {r6, r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-
-  .balign 4
-patch_eeprom_read_directsave_size:
-  .word (patch_eeprom_read_directsave_size - patch_eeprom_read_directsave)
+END_FUNC(patch_eeprom_read_directsave)
 
 
 // R0: Block number (0-63 or 0-1023) to write to.
 // R1: Byte buffer where the byte will be read (as bits)
-patch_eeprom_write_directsave:
-  push {r7, lr}
+// Returns 0 on success?  (Space: 204 bytes)
+START_FUNC(patch_eeprom_write_directsave)
+  push {r6, r7, lr}
 
-  mov r2, r0                 // Swap args
-  mov r0, r1
-  mov r1, r2
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r3, =0xFF1F
+  ldrh r6, [r7]
+  and r3, r6
+  strh r3, [r7]
 
   mov r7, $WRITE_EEPROM_FN
   adr r3, patch_eeprom_write_directsave_size
   ldr r3, [r3]
   bl 33f
 
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
   // The handler does actually return an error code in r0
-  pop {r7}
+  pop {r6, r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-  .balign 4
-patch_eeprom_write_directsave_size:
-  .word (patch_eeprom_write_directsave_size - patch_eeprom_write_directsave)
+END_FUNC(patch_eeprom_write_directsave)
 
 
 // Reads data/sector to the user buffer
@@ -616,9 +526,16 @@ patch_eeprom_write_directsave_size:
 // R1: byte offset withing the sector
 // R2: buffer pointer (destination)
 // R3: amount of bytes to read
-.balign 4
-patch_flash_read_directsave:
-  push {r7, lr}
+// Has 118 bytes of space.
+START_FUNC(patch_flash_read_directsave)
+  push {r5-r7, lr}
+
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r5, =0xFF1F
+  ldrh r6, [r7]
+  and r5, r6
+  strh r5, [r7]
+
   lsl r0, #27; lsr r0, #15   // Limit sector number to [0...31] + lsl #12
   add r1, r0                 // Data offset to read at.
 
@@ -631,66 +548,81 @@ patch_flash_read_directsave:
   ldr r3, [r3]
   bl 33f
 
-  mov r0, #0
-  pop {r7}
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
+  pop {r5-r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-
-  .balign 4
-patch_flash_read_directsave_size:
-  .word (patch_flash_read_directsave_size - patch_flash_read_directsave)
+END_FUNC(patch_flash_read_directsave)
 
 // Clears the full flash device (fills it with 0xFF)
-.balign 4
-patch_flash_erase_device_directsave:
-  push {r7, lr}
+// Has 90 bytes of space.
+START_FUNC(patch_flash_erase_device_directsave)
+  push {r6, r7, lr}
+
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r3, =0xFF1F
+  ldrh r6, [r7]
+  and r3, r6
+  strh r3, [r7]
 
   mov r7, $ERASE_CHIP_FLASH_FN
   adr r3, patch_flash_erase_device_directsave_size
   ldr r3, [r3]
   bl 33f
 
-  mov r0, #0
-  pop {r7}
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
+  pop {r6, r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-
-.balign 4
-patch_flash_erase_device_directsave_size:
-  .word (patch_flash_erase_device_directsave_size - patch_flash_erase_device_directsave)
+END_FUNC(patch_flash_erase_device_directsave)
 
 
 // Clears a sector in the flash device (fills it with 0xFF)
 // R0: Sector number to wipe
-.balign 4
-patch_flash_erase_sector_directsave:
-  push {r7, lr}
+// Has 110 bytes of space.
+START_FUNC(patch_flash_erase_sector_directsave)
+  push {r6, r7, lr}
+
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r3, =0xFF1F
+  ldrh r6, [r7]
+  and r3, r6
+  strh r3, [r7]
+
   lsl r0, #27; lsr r0, #27   // Limit sector number to [0...31]
 
   mov r7, $ERASE_SECTOR_FLASH_FN
   adr r3, patch_flash_erase_sector_directsave_size
   ldr r3, [r3]
-
   bl 33f
 
-  mov r0, #0
-  pop {r7}
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
+  pop {r6, r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-
-.balign 4
-patch_flash_erase_sector_directsave_size:
-  .word (patch_flash_erase_sector_directsave_size - patch_flash_erase_sector_directsave)
+END_FUNC(patch_flash_erase_sector_directsave)
 
 // Writes a sector with a user-provided buffer.
 // R0: Sector number to write
 // R1: User provided pointer
-.balign 4
-patch_flash_write_sector_directsave:
-  push {r7, lr}
+START_FUNC(patch_flash_write_sector_directsave)
+  push {r6, r7, lr}
+
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r3, =0xFF1F
+  ldrh r6, [r7]
+  and r3, r6
+  strh r3, [r7]
+
   lsl r0, #27; lsr r0, #27   // Limit sector number to [0...31]
 
   mov r2, r0                 // Swap args
@@ -700,25 +632,30 @@ patch_flash_write_sector_directsave:
   mov r7, $WRITE_FLASH_FN
   adr r3, patch_flash_write_sector_directsave_size
   ldr r3, [r3]
-
   bl 33f
 
-  mov r0, #0
-  pop {r7}
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
+  pop {r6, r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-
-.balign 4
-patch_flash_write_sector_directsave_size:
-  .word (patch_flash_write_sector_directsave_size - patch_flash_write_sector_directsave)
+END_FUNC(patch_flash_write_sector_directsave)
 
 // Writes a single byte to a specifc sector and offset.
 // R0: Sector number to write
 // R1: Offset within the sector
 // R2: Data (byte) to write
-patch_flash_write_byte_directsave:
-  push {r7, lr}
+START_FUNC(patch_flash_write_byte_directsave)
+  push {r6, r7, lr}
+
+  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
+  ldr r3, =0xFF1F
+  ldrh r6, [r7]
+  and r3, r6
+  strh r3, [r7]
+
   sub sp, $256               // Reserve a sector worth of data
   sub sp, $256
 
@@ -753,27 +690,22 @@ patch_flash_write_byte_directsave:
   add sp, $256
   add sp, $256
 
+  ldr r7, =0x04000204
+  strh r6, [r7]
+
   mov r0, #0
-  pop {r7}
+  pop {r6, r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
-
-.balign 4
-patch_flash_write_byte_directsave_size:
-  .word (patch_flash_write_byte_directsave_size - patch_flash_write_byte_directsave)
+END_FUNC(patch_flash_write_byte_directsave)
 
 
 // RTC emulation implementation.
-// We (ab)use the GPIO port memory range [0xC4...0xC9] that contains 6 bytes.
-// We store the current time and date in this memory block as follows:
+// We (ab)use the CPU unused modes (UNDEF/ABORT) to store data in their SP/LR regs.
 //
-// 0xC4: TBD
-// 0xC5: Hours (in 24h format)
-// 0xC6: Minutes
-// 0xC7: Day
-// 0xC8: Month
-// 0xC9: Year    (0x00 means to 2000, so byte + 2000)
+// The register contains: yyyyyyyy.MMMMMMdd.ddddmmmm.mmhhhhhh
+// The routines convert these values to BCD. Year is encoded as 00-99.
 //
 // We store values there, so that the ingame menu can also tweak them, but this
 // works regardless of whether the ingame menu is enabled/patched-in.
@@ -790,106 +722,105 @@ patch_flash_write_byte_directsave_size:
 //  u8 alarmHour;
 //  u8 alarmMinute;
 
-// Have around ~200 bytes of code size (~100 insts)
-patch_rtc_probe:
+// Have 214 bytes of code size (~100 insts)
+START_FUNC(patch_rtc_probe)
   mov r0, $1                 // Just return 1 (working, no errors)
   bx lr
-.balign 4
-patch_rtc_probe_size:
-  .word (patch_rtc_probe_size - patch_rtc_probe)
+END_FUNC(patch_rtc_probe)
 
 // Have around ~200 bytes of code size (~100 insts)
-patch_rtc_getstatus:
+START_FUNC(patch_rtc_getstatus)
   mov r1, $0x40
   add r0, r0, $7             // Overwrite status only
   strb r1, [r0]
   mov r0, $1                 // Return true
   bx lr
-.balign 4
-patch_rtc_getstatus_size:
-  .word (patch_rtc_getstatus_size - patch_rtc_getstatus)
+END_FUNC(patch_rtc_getstatus)
 
-// Max size should be ~170 bytes (85 insts)
-.balign 4
-patch_rtc_gettimedate:
-  ldr r3, =0x080000C4
-
+// Max size should be 176 bytes (88 insts)
+START_FUNC(patch_rtc_gettimedate)
   // TODO: Advance RTC?
 
-  mov r2, $(1f - . - 4 - 2)
-  add r2, pc
+  push {r4, r5, r6, lr}
+
+  mov r4, r0           // Save buffer pointer
+
+  // Switch to ARM mode.
+  adr r2, 1f
+  bx r2
+
+.balign 4
+.arm
+1:
+  mrs r3, CPSR                 // Save the current CPSR
+  msr CPSR_c, $(0x1B | 0x80)   // Move to undefined mode, no interrupts
+  mov r5, lr                   // Read UNDEF[LR]
+  msr CPSR_c, r3               // Restore original model and CPSR
+
+  add r2, pc, $1
+  bx r2
+
+.thumb
+  mov r6, $0x3f
 
   // Copy date/time in to the struct format.
-  mov r1, $0           // Seconds always zero
-  strb r1, [r0, #6]
+  mov r3, $0           // Seconds always zero
+  strb r3, [r4, #6]
 
-  ldrb r1, [r3, #1]    // Hours
-  ldrb r1, [r2, r1]
-  strb r1, [r0, #4]
+  mov r0, r5           // Hours
+  and r0, r6
+  bl bcdconv
+  strb r0, [r4, #4]
 
-  ldrb r1, [r3, #2]    // Minutes
-  ldrb r1, [r2, r1]
-  strb r1, [r0, #5]
+  lsr r0, r5, $6       // Minutes
+  and r0, r6
+  bl bcdconv
+  strb r0, [r4, #5]
 
-  ldrb r1, [r3, #3]    // Day
-  ldrb r1, [r2, r1]
-  strb r1, [r0, #2]
+  lsr r0, r5, $12      // Day
+  and r0, r6
+  bl bcdconv
+  strb r0, [r4, #2]
 
-  ldrb r1, [r3, #4]    // Month
-  add r1, $1           // 0-11 -> 1-12
-  ldrb r1, [r2, r1]
-  strb r1, [r0, #1]
+  lsr r0, r5, $18      // Month
+  and r0, r6
+  add r0, $1           // 0-11 -> 1-12
+  bl bcdconv
+  strb r0, [r4, #1]
 
-  ldrb r1, [r3, #5]    // Year
-  ldrb r1, [r2, r1]
-  strb r1, [r0, #0]
+  lsr r0, r1, $24      // Year
+  bl bcdconv
+  strb r0, [r4, #0]
 
+  pop {r4, r5, r6}
   mov r0, $1                 // Return true
+  pop {r1}
+  bx r1
+
+// Potential BCD conversion routine r0 number
+bcdconv:
+  mov r1, $10
+  swi 0x6              // Divide, r0 is result, r1 residue
+  lsl r0, $4
+  orr r0, r1
   bx lr
-
-1:
-  .byte 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09
-  .byte 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19
-  .byte 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29
-  .byte 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39
-  .byte 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49
-  .byte 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59
-  .byte 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69
-  .byte 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79
-
-  .pool
-.balign 4
-patch_rtc_gettimedate_size:
-  .word (patch_rtc_gettimedate_size - patch_rtc_gettimedate)
+END_FUNC(patch_rtc_gettimedate)
 
 
 // Resets current time and date to Jan 1st 2000, at midnight.
 // Max size should be ~130 bytes (65 insts)
-.balign 4
-patch_rtc_reset:
-  ldr r0, =0xA55A            // Enable ROM writes
-  ldr r2, =0x09FFFFFE
-  mov r3, $0x5
-  strh r0, [r2]
-  strh r0, [r2]
-  strh r3, [r2]
-  strh r3, [r2]
+START_FUNC(patch_rtc_reset)
+  mov r0, pc
+  bx r0
 
-  mov r1, $0                 // Clear GPIO data
-  str r3, [r1]
-  strh r3, [r1, #4]
+.arm
+  mrs r3, CPSR                 // Save the current CPSR
+  msr CPSR_c, $(0x1B | 0x80)   // Move to undefined mode, no interrupts
+  mov lr, $0                   // Write UNDEF[LR] with zero
+  msr CPSR_c, r3               // Restore original model and CPSR
 
-  mov r3, $0x1               // Disable ROM writes.
-  strh r0, [r2]
-  strh r0, [r2]
-  strh r3, [r2]
-  strh r3, [r2]
-
-  mov r0, $1                 // Return true
+  mov r0, $1               // Return true
   bx lr
-  .pool
-.balign 4
-patch_rtc_reset_size:
-  .word (patch_rtc_reset_size - patch_rtc_reset)
+END_FUNC(patch_rtc_reset)
 
 

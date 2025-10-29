@@ -14,7 +14,7 @@ MEMORY {
     ROM     : ORIGIN = 0x00000000, LENGTH = 7K
 }
 
-/* ASSERT(__bss_start - __bss_end == 0, "bss section should be empty") */
+ASSERT(__bss_start - __bss_end == 0, "bss section should be empty")
 /* No GOT section should exist (LTO should optimize it all away). */
 ASSERT(__got_start - __got_end == 0, "got section should be empty")
 

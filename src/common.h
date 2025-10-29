@@ -140,6 +140,9 @@ typedef struct {
   uint8_t data[0x40];
 } t_rom_header;
 
+// The ROM contains an ARM branch as the first instruction, get its target.
+#define ROM_ENTRYPOINT(romhdr)    ( (((romhdr).start_branch & 0xFFFFFF) << 2) + 8 + GBA_ROM_BASE )
+
 _Static_assert (offsetof(t_rom_header, data) == 0xC0, "data offset in t_rom_header is wrong!");
 
 typedef enum {
@@ -175,6 +178,7 @@ void nds_launch();
 void gba_irq_handler();
 void set_irq_enable(bool enable);
 void rom_copy_write16(void *dst, const void *src, unsigned cnt);
+void set_undef_lr(uint32_t value);
 
 // Decompress (WRAM version), returns written bytes
 unsigned apunpack8(const uint8_t *src, uint8_t *dst);
@@ -265,14 +269,17 @@ unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_polic
 // Loads ROM header
 unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh);
 // Loads a ROM file and launches it.
-unsigned load_gba_rom(const char *fn, uint32_t fs, const t_rom_header *rom_header, const struct struct_t_patch *ptch,
+unsigned load_gba_rom(const char *fn, uint32_t fs, uint32_t entry_addr, const struct struct_t_patch *ptch,
                       const t_dirsave_info *dsinfo, bool ingame_menu,
                       const t_rtc_state *rtc_clock, unsigned cheats, progress_fn progress);
 // Launch from NOR
 unsigned  flash_gba_nor(const char *fn, uint32_t fs, const t_rom_header *rom_header,
-                        const struct struct_t_patch *ptch, bool ingame_menu, bool rtc_patches,
+                        const struct struct_t_patch *ptch, bool dirsaving, bool ingame_menu, bool rtc_patches,
                         const uint8_t *blkmap, progress_fn progress, uint8_t *scratch, unsigned ssize);
-unsigned launch_gba_nor(const uint8_t *normap, unsigned blkcnts);
+unsigned launch_gba_nor(
+  const uint8_t *normap, unsigned blkcnts, uint32_t rom_entryaddr, const t_dirsave_info *dsinfo,
+  const t_rtc_state *rtc_clock, bool ingame_menu);
+
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress);
 bool validate_gba_header(const uint8_t *header);
 bool validate_gb_header(const uint8_t *header);

@@ -52,6 +52,8 @@ extern char savestate_pattern[256];
 
 void reset_game();
 void reset_fw();
+void set_undef_lr(uint32_t);
+uint32_t get_undef_lr(void);
 void fast_mem_cpy_256(void *dst, const void *src, unsigned count);
 void fast_mem_clr_256(void *addr, uint32_t value, unsigned count);
 void set_entrypoint_hook(bool process_cheats);
@@ -81,7 +83,7 @@ uint32_t *get_cheat_table();
 
 static unsigned submenu;
 static unsigned copt;
-static uint8_t rtc_values[6];
+static uint8_t rtc_values[5];
 static struct {
   const char *msg;
   void (*callback)();
@@ -621,11 +623,11 @@ void draw_save_menu(uint8_t *fb, unsigned framen) {
 }
 
 void draw_rtc_menu(uint8_t *fb, unsigned framen) {
-  unsigned hour = rtc_values[1];
-  unsigned mins = rtc_values[2];
-  unsigned days = rtc_values[3] + 1;
-  unsigned mont = rtc_values[4] + 1;
-  unsigned year = rtc_values[5];
+  unsigned hour = rtc_values[0];
+  unsigned mins = rtc_values[1];
+  unsigned days = rtc_values[2] + 1;
+  unsigned mont = rtc_values[3] + 1;
+  unsigned year = rtc_values[4];
 
   char thour[3] = {'0' + hour/10, '0' + hour%10, 0};
   char tmins[3] = {'0' + mins/10, '0' + mins%10, 0};
@@ -746,11 +748,11 @@ void draw_states_menu(uint8_t *fb, unsigned framen) {
 
 void rtc_fix() {
   // Correct any out of range values
-  rtc_values[1] %= 24;    // Hour
-  rtc_values[2] %= 60;    // Min
-  rtc_values[3] %= 31;    // Day
-  rtc_values[4] %= 12;    // Month
-  rtc_values[5] %= 100;   // Year
+  rtc_values[0] %= 24;    // Hour
+  rtc_values[1] %= 60;    // Min
+  rtc_values[2] %= 31;    // Day
+  rtc_values[3] %= 12;    // Month
+  rtc_values[4] %= 100;   // Year
 }
 
 enum { MenuMain = 0, MenuReset = 1, MenuSave = 2, MenuSState = 3, MenuRTC = 4, MenuCheats = 5 };
@@ -1031,9 +1033,9 @@ void rtckey(uint16_t keyp) {
 
   if (copt < 5) {
     if (keyp & KEY_BUTTUP)
-      rtc_values[copt + 1]++;
+      rtc_values[copt]++;
     if (keyp & KEY_BUTTDOWN)
-      rtc_values[copt + 1] += rtc_decv[copt];
+      rtc_values[copt] += rtc_decv[copt];
 
     rtc_fix();
   }
@@ -1041,9 +1043,12 @@ void rtckey(uint16_t keyp) {
 
 bool action_write_rtc() {
   // Write to the GPIO buffer, assuming R/W mode!
-  *MEM_ROM_U16(0xC4) = rtc_values[0] | (rtc_values[1] << 8);
-  *MEM_ROM_U16(0xC6) = rtc_values[2] | (rtc_values[3] << 8);
-  *MEM_ROM_U16(0xC8) = rtc_values[4] | (rtc_values[5] << 8);
+  set_undef_lr((rtc_values[0] <<  0) |
+               (rtc_values[1] <<  6) |
+               (rtc_values[2] << 12) |
+               (rtc_values[3] << 18) |
+               (rtc_values[4] << 24));
+
   submenu = MenuMain;
   copt = 0;
 
@@ -1197,7 +1202,12 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
   num_dsk_savestates = savestate_pattern[0] ? MAX_DISK_SLOTS : 0;
 
   // Read RTC values
-  memcpy(rtc_values, (uint8_t*)&MEM_ROM_U8[0xC4], sizeof(rtc_values));
+  uint32_t rval = get_undef_lr();
+  rtc_values[0] = (rval >>  0) & 0x3f;
+  rtc_values[1] = (rval >>  6) & 0x3f;
+  rtc_values[2] = (rval >> 12) & 0x3f;
+  rtc_values[3] = (rval >> 18) & 0x3f;
+  rtc_values[4] = (rval >> 24) & 0xff;
 
   // Lazy intialization of the SD card, to avoid blocking the menu
   FATFS fs;

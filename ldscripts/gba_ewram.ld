@@ -219,3 +219,6 @@ SECTIONS
 
     /* No heap defined nor used here */
 }
+
+#include "validate.inc"
+

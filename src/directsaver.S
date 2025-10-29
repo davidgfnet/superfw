@@ -24,6 +24,7 @@
 // and certain tolerance for disabling interrupts (for a few cycles at a time).
 
 #include "gba_regs.h"
+#include "directsave.h"
 
 #define SAFE_OP_ROUTINE_SIZE    12   // Number of insts (32 bit insts)
 #define SAFE_OP_INST_OFF         5   // Instruction number (from 0) in the routine
@@ -33,36 +34,7 @@
 .align 4
 .arm
 
-.global sc_issdhc
-.global sc_rca
-
-// Header. Contains jump entry point to avoid relocations.
-b ds_entrypoint
-
-// Fields (to be filled by the loader/patcher)
-sector_number:
-  .word 0x0                  // SD card sector number (LBA)
-memory_size:
-  .word 0x0                  // Memory size (in bytes) of the flash/eeprom device (512, 8192, 32768, 65536, 131072)
-sd_mutex:
-  .word 0x0                  // SD access mutex (set to one when there's an ongoing operation).
-
-// SD card driver params.
-drv_issdhc:
-  .word 0x0
-drv_rca:
-  .word 0x0
-
-// Necessary handlers for the SC driver
-sc_issdhc:
-  ldr r0, drv_issdhc
-  bx lr
-
-sc_rca:
-  ldr r0, drv_rca
-  bx lr
-
-
+// It starts directly at the entry point routine.
 // Receives a function call, the call number is stored in r7
 ds_entrypoint:
   push {lr}
@@ -91,227 +63,99 @@ ds_table:
   b ds_erase_sector_flash
 
 
+// r3: value to write to the mutex register
 set_clear_mutex:
-  push {r0, r1, r2}
+  push {r0, lr}
 
-  // Set SDRAM as read write
-  mov r0, $0x0A000000
-  ldr r1, =0xA55A
-  mov r2, $0x5
+  mov r0, $0x0F000000
+  strb r3, [r0, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_MUTEX_OFF)]
 
-  strh r1, [r0, #-2]
-  strh r1, [r0, #-2]
-  strh r2, [r0, #-2]
-  strh r2, [r0, #-2]
+  pop {r0, pc}
 
-  // Update mutex values
-  str r3, sd_mutex
 
-  // Set SDRAM as read only
-  mov r2, $0x1
-  strh r1, [r0, #-2]
-  strh r1, [r0, #-2]
-  strh r2, [r0, #-2]
-  strh r2, [r0, #-2]
+// Validate that the SRAM configuration is correct (not corrupted).
+.global validate_config
+validate_config:
+  sub sp, $DIRSAV_CFG_SIZE
 
-  pop {r0, r1, r2}
+  // Copy the SRAM config to the stack
+  ldr r0, =(0x0F000000 - DIRSAV_CFG_SIZE)
+  mov r1, sp
+  mov r3, $DIRSAV_CFG_SIZE
+1:
+  ldrb r2, [r0], #1
+  strb r2, [r1], #1
+  subs r3, $1
+  bne 1b
+
+  // Check the magic header
+  ldr r0, [sp, #DIRSAV_CFG_MAGIC_OFF]
+  ldr r1, =DIRSAV_CFG_MAGIC
+  cmp r0, r1
+  bne 9f
+
+  // Clear the mutex variable for checksum calculation
+  mov r0, $0
+  strb r0, [sp, #DIRSAV_CFG_MUTEX_OFF]
+  // Calculate checksum
+  mov r1, sp
+  mov r3, $DIRSAV_CFG_SIZE
+1:
+  ldr r2, [r1], #4
+  eor r0, r2, r0
+  subs r3, $4
+  bne 1b
+
+  cmp r0, $0
+  bne 9f
+
+  add sp, $DIRSAV_CFG_SIZE
+  mov r0, $1
   bx lr
 
-// Reads the requested data into the buffer (in WRAM). We use SRAM as a temp
-// buffer to read sectors.
-// r0: Destination buffer (in WRAM)
-// r1: Offset in bytes
-// r2: Number of bytes to read and copy.
-ds_read_flash:
-  push {r4, lr}
-
-  add r4, r1, r2             // Calculate the last byte offset (start + size - 1)
-  sub r4, $1
-  lsr r4, r4, #9             // Calculate the last block (the block num for the last byte)
-
-  lsr r3, r1, #9             // First block to read (offset / 512)
-  lsl r1, r1, #23            // Offset within the first block (offset & 511)
-  lsr r1, r1, #23
-
-  push {r0, r1, r2}          // Save r0 (dest), r1 (offset), r2 (count)
-
-  mov r0, $0x0E000000        // Temp SRAM buffer
-
-  ldr r1, sector_number
-  add r1, r3                 // Calculate absolute sector by adding the base sector num
-
-  sub r2, r4, r3             // Number of blocks to read
-  add r2, $1                 // (last - first + 1)
-
-  bl sdcard_read_blocks
-  pop  {r0, r1, r2}
-
-  // Copy data from SRAM to the destination buffer, skip first r1 bytes.
-  mov r3, $0x0E000000
-  add r1, r1, r3
-
-  1:
-    ldrb r3, [r1], #1
-    strb r3, [r0], #1
-    subs r2, $1
-    bne 1b
-
-  pop {r4, lr}
-  bx lr
-
-
-// Writes a full sector (4KBytes) to the flash device. This was previously erased.
-// r0: Source buffer (in WRAM)
-// r1: Sector number to write (in 4KB blocks)
-ds_write_sector_flash:
-  push {lr}
-
-  ldr r2, memory_size
-  lsr r2, #9                 // Maximum number of 512 byte blocks of memory.
-  sub r2, $1                 // Assuming the block count is power of two, get K-1
-
-  lsl r1, #3                 // Scale flash sector num to 512b blocks (multiply by 4096/512)
-  and r1, r2                 // Modulo operation (power of two), to limit sector count.
-
-  ldr r2, sector_number
-  add r1, r2                 // Calculate absolute sector by adding the base sector num
-  mov r2, $8                 // Reads 8 blocks (512byte each), so 4KiB
-
-  bl sdcard_write_blocks
-
-  pop {lr}
-  bx lr
-
-
-// Writes the whole chip to ones.
-ds_erase_chip_flash:
-  push {lr}
-
-  // Fill the SRAM with 0xFF so we can write ones.
-  mov r0, $0x0E000000
-  mov r1, $(64*1024 / 4)
-  mov r2, $0xFF
-  1:
-    strb r2, [r0], #1
-    strb r2, [r0], #1
-    strb r2, [r0], #1
-    strb r2, [r0], #1
-    subs r1, $1
-    bne 1b
-
-  mov r0, $0x0E000000
-
-  ldr r1, sector_number
-
-  ldr r2, memory_size
-  lsr r2, #9       // Bytes to block count
-
-  bl sdcard_write_blocks
-
-  pop {lr}
-  bx lr
-
-
-// Erases a 4KiB sector in flash
-// r0: sector number to erase
-ds_erase_sector_flash:
-  push {lr}
-
-  // Fill 4KB in SRAM with 0xFF so we can write ones.
-  mov r3, $0x0E000000
-  mov r1, $(4*1024 / 4)
-  mov r2, $0xFF
-  1:
-    strb r2, [r3], #1
-    strb r2, [r3], #1
-    strb r2, [r3], #1
-    strb r2, [r3], #1
-    subs r1, $1
-    bne 1b
-
-  ldr r2, memory_size
-  lsr r2, #9                 // Maximum number of 512 byte blocks of memory.
-  sub r2, $1                 // Assuming the block count is power of two, get K-1
-
-  lsl r0, #3                 // Flash sectors to SD sectors scaling
-  and r0, r2                 // Mask/modulo to ensure we do not go out
-
-  ldr r1, sector_number
-  add r1, r0                 // Base block to write
-
-  mov r2, $(4096 / 512)      // Number of blocks to write
-  mov r0, $0x0E000000        // Source address
-
-  bl sdcard_write_blocks
-
-  pop {lr}
-  bx lr
-
-// This actually does read from SRAM, for speed. Data is already loaded by the loader.
-// r0 buffer pointer to write or read data.
-// r1 block number (blocks are 8 bytes long)
-ds_read_eeprom:
-  ldr r2, memory_size
-  lsr r2, #3                 // Max number of EEPROM blocks
-
-  cmp r1, r2
-  movhs r0, $~0              // Return -1 if the block number exceeds the maximum
-  bxhs lr
-
-  // Actually read from SRAM into the user buffer
-  mov r2, $0x0E000000
-  lsl r1, #3                 // Block to byte offset
-
-  add r2, r2, r1             // Address of the desired first byte
-  add r2, r2, #7             // Start from the MSB
-
-  .rept 8
-    ldrb r3, [r2], #-1       // Read the byte from SRAM
-    strb r3, [r0], #1        // Write byte to user buffer
-  .endr
-
+9:  // Bad config!
+  add sp, $DIRSAV_CFG_SIZE
   mov r0, $0
   bx lr
 
 
-// Updates the SRAM cache/copy and flushes the affected block to SD
-// r0 buffer pointer to write or read data.
-// r1 block number (blocks are 8 bytes long)
-ds_write_eeprom:
-  ldr r2, memory_size
-  lsr r2, #3                 // Max number of EEPROM blocks
+// Necessary handlers for the SC driver, reads info from SRAM.
+.global sc_issdhc
+sc_issdhc:
+  mov r0, $0x0F000000
+  ldrb r0, [r0, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_ISSDHC_OFF)]
+  bx lr
 
-  cmp r1, r2
-  movhs r0, $~0              // Return -1 if the block number exceeds the maximum
-  bxhs lr
+.global sc_rca
+sc_rca:
+  mov r0, $0x0F000000
+  ldrb r1, [r0, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_RCA_OFF)]
+  ldrb r0, [r0, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_RCA_OFF + 1)]
+  orr r0, r1, r0, lsl #8
+  bx lr
 
-  push {r4, lr}
-  mov r4, r1
+.global base_sector
+base_sector:
+  mov r3, $0x0F000000
+  ldrb r0, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_BSECT_OFF)]
+  ldrb r1, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_BSECT_OFF + 1)]
+  ldrb r2, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_BSECT_OFF + 2)]
+  ldrb r3, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_BSECT_OFF + 3)]
+  orr r0, r0, r1, lsl #8
+  orr r0, r0, r2, lsl #16
+  orr r0, r0, r3, lsl #23
+  bx lr
 
-  // We overwrite the SRAM buffer with the user provided buffer
-  lsl r1, #3                 // Block to byte offset
-
-  mov r2, $0x0E000000        // Load the SRAM base (0x0E000000)
-  add r2, r2, r1             // Address of the desired byte
-  add r2, r2, #7             // Write in inverse order (MSB first)
-
-  .rept 8
-    ldrb r3, [r0], #1        // Read byte from buffer
-    strb r3, [r2], #-1       // Write the byte
-  .endr
-
-  // Now proceed to flush the updated block to SD card.
-  lsr r1, r4, #6             // Calculate the 512-byte block number to overwrite
-  mov r0, $0x0E000000        // Base SRAM address
-  add r0, r0, r1, lsl #9     // SRAM base address to use as input ( (blk >> 6) << 9 )
-  mov r2, $1                 // One block
-
-  ldr r3, sector_number
-  add r1, r3                 // Calculate absolute sector by adding the base sector num
-
-  bl sdcard_write_blocks
-
-  pop {r4, lr}
+.global get_memory_size
+get_memory_size:
+  mov r3, $0x0F000000
+  ldrb r0, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_MEMSIZE_OFF)]
+  ldrb r1, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_MEMSIZE_OFF + 1)]
+  ldrb r2, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_MEMSIZE_OFF + 2)]
+  ldrb r3, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_MEMSIZE_OFF + 3)]
+  orr r0, r0, r1, lsl #8
+  orr r0, r0, r2, lsl #16
+  orr r0, r0, r3, lsl #23
   bx lr
 
 
@@ -812,7 +656,7 @@ SD_OPERATION(sd_stm4, stmia r5, {r2, r3, r6, r12});
 // Actual implementation template. (12 insts, 48 bytes)
 safe_sd_operation:
   // Map SD card driver into the high address space (5 insts)
-  mov r11, $0x7       // SDRAM + RW + SD iface
+  mov r11, $(0xD7)       // SDRAM + RW + SD iface
   strh r9,  [r8]
   strh r9,  [r8]
   strh r11, [r8]
@@ -820,7 +664,7 @@ safe_sd_operation:
 
   nop   // Actual operation to perform! To be patched on demand!
 
-  mov r11, $0x1       // SDRAM + RO
+  mov r11, $(0xD1)       // SDRAM + RO
   strh r9,  [r8]
   strh r9,  [r8]
   strh r11, [r8]

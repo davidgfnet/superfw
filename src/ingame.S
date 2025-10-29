@@ -28,8 +28,8 @@
 // and loads the menu into IWRAM/EWRAM. This way we can perform SD accesses
 // as well as other tricky operations without worrying about memory mapping.
 
-// Suggested structure (in SDRAM):
-//  In-game payload, spill area, font blob, cheat DB
+// Used structure (in SDRAM):
+//  [DirSav payload], In-game payload, Spill area, Font blob, Cheat DB
 //
 // The spill area layout is:
 //
@@ -41,15 +41,13 @@
 //
 // Payload size can be read from its header
 
-
-#define SD_MUTEX_OFFSET             (3*4)        // Keep in sync with directsave.h
-
 #define def_function(fnname)           \
   .globl fnname;                       \
   .type fnname, function;              \
   fnname
 
 #include "gba_regs.h"
+#include "directsave.h"
 
 // This is ARM code, placed in SDRAM (at the end of it usually). It is
 // used to initialize and handle IRQs, and launch the menu from IWRAM.
@@ -105,15 +103,13 @@ ingame_payload_size:
   .word (__BINARY_SIZE__ + MIN_SCRATCH_SPACE)    // How much space the payload needs
 
 // SD card driver params.
-drv_issdhc:
-  .word 0x0
-drv_rca:
-  .word 0x0
+drv_issdhc:            .word 0x0
+drv_rca:               .word 0x0
 
 // To be filled by the loader with relevant data.
 ingame_menu_hotkey:    .word 0x0    // Filled with the key combo mask
 ingame_menu_lang:      .word 0x0    // Filled with the language code
-ingame_ds_base_addr:   .word 0x0    // Base addr of the DirectSave payload (or NULL)
+ingame_ds_used:        .word 0x0    // Whether DirectSave is in use.
 font_base_addr:        .word 0x0    // Filled with the font data address
 cheat_base_addr:       .word 0x0    // Filled with the cheat database entry address
 scratch_base:          .word 0x0    // Buffer reserved for scratch space.
@@ -346,11 +342,13 @@ ingame_menu_entry:
   // Setup stack (add some clearance) at the bottom of the first 16KB
   ldr sp, =0x03003E00
 
-  // Determine if there's an DirSav payload, and whether it holds the mutex
-  ldr r0, ingame_ds_base_addr
-  tst r0, r0       // If it's null, no worries.
-  ldrne r0, [r0, #SD_MUTEX_OFFSET]
-  tstne r0, r0     // Check if it's non-zero (mutex is held)
+  // If DirSav payload in use, check whether it holds the mutex
+  ldr r0, ingame_ds_used
+  cmp r0, $0
+
+  ldr r1, =(0x0F000000 - DIRSAV_CFG_SIZE)
+  ldrb r1, [r1, #DIRSAV_CFG_MUTEX_OFF]
+  cmpne r1, $0
 
   // Jump to C code, but in IWRAM copy
   adr r0, use_cheats_irq                    // Pass the ROM space address!
@@ -538,6 +536,21 @@ cheat_process_thumb:
 
 // Place here all routines that are not really used within the boot section
 // (they are used by the C code in cases where assembly is needed).
+
+// Writes the LR register for CPU undef mode (RTC register)
+def_function(set_undef_lr):
+  mrs r2, CPSR         // Save the current CPSR
+  msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
+  mov lr, r0           // Store in UNDEF[LR]
+  msr CPSR_c, r2       // Restore original model and CPSR
+  bx lr
+
+def_function(get_undef_lr):
+  mrs r2, CPSR         // Save the current CPSR
+  msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
+  mov r0, lr           // Read UNDEF[LR]
+  msr CPSR_c, r2       // Restore original model and CPSR
+  bx lr
 
 // Reset routines
 def_function(reset_game):
