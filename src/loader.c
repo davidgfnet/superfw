@@ -41,6 +41,9 @@
 #define GBA_ROM_ADDR16(addr, value)   *((volatile uint16_t *)(0x08000000 + addr)) = (value)
 #define GBA_ROM_ADDR32(addr, value)   *((volatile uint32_t *)(0x08000000 + addr)) = (value)
 
+// The firmware block (#0) is mapped to the last 4MiB block, plus its offset.
+#define FLASH_DIRSAV_PAYLOAD_W1       (0x0C000000 - NOR_BLOCK_SIZE + 0x00140000)
+
 #define ING_PALETTE_BASE    240
 
 extern bool slowsd;
@@ -110,8 +113,8 @@ void fix_gba_header(volatile uint16_t *header) {
 // Loads the in-game menu at the desired address and size (returns success).
 // addr must be 4 byte aligned.
 void load_ingame_menu(
-  uint32_t base_addr, uint32_t total_size, uint32_t ds_addr,
-  const t_rom_header *rom_header,
+  uint32_t base_addr, uint32_t total_size, bool useds,
+  uint32_t rom_entryaddr,
   const char* savefn, const char* statefn,
   bool rtc_patches, unsigned cheats
 ) {
@@ -132,16 +135,15 @@ void load_ingame_menu(
   memcpy32(ptr, &ingame_menu_payload, ingame_menu_payload_size);
 
   // Decode the start instruction, calculate branch target.
-  uint32_t tgtaddr = ((rom_header->start_branch & 0xFFFFFF) << 2) + 8 + 0x08000000;
   uint16_t hotk = hotkey_list[hotkey_combo].mask;
 
   // Patch the menu header to provide necessary data.
-  igm->startup_addr = tgtaddr;                // Target reset jump
+  igm->startup_addr = rom_entryaddr;          // Target reset jump
   igm->drv_issdhc = sc_issdhc();              // SD driver data (no init happens)
   igm->drv_rca = sc_rca();
   igm->menu_hotkey = hotk;                    // Configured hotkey
   igm->menu_lang = lang_id;                   // Use the current lang id
-  igm->menu_directsave_base = ds_addr;        // DirectSave base addr
+  igm->menu_use_directsave = useds;           // DirectSave in use
   igm->menu_anim_speed = anim_speed;          // Menu animation speed
   igm->menu_font_base = base_addr + menu_size;// Base addr where the fonts live
   igm->menu_cheats_base = cheats ? base_addr + menu_size + fontsz : 0;
@@ -164,17 +166,35 @@ void load_ingame_menu(
   set_supercard_mode(MAPPED_SDRAM, true, true);
 }
 
-void load_directsave_payload(uint32_t address, const t_dirsave_info *dsinfo) {
-  // Copy the direct save payload to the specified address offset.
-  uint8_t *ptr = ((uint8_t*)address);
-  memcpy32(ptr, directsave_payload, directsave_payload_size);
+void load_directsave_config(const t_dirsave_info *dsinfo) {
+  t_dirsave_config cfg = {
+    .magic = DIRSAV_CFG_MAGIC,
+    .checksum = 0,
+    .nrandom = 0xdeadbeef ^ (uint32_t)dsinfo,
+    .memory_size = dsinfo->save_size,
+    .base_sector = dsinfo->sector_lba,
+    .drv_issdhc = sc_issdhc(),
+    .drv_rca = sc_rca(),
+    .sd_mutex = 0
+  };
+  const uint32_t *cfg32 = (uint32_t*)(&cfg);
+  uint32_t checksum = 0;
+  for (unsigned i = 0; i < sizeof(cfg) / 4; i++)
+    checksum ^= *cfg32++;
+  cfg.checksum = checksum;
 
-  // Patch header with the necessary fields.
-  t_dirsave_header *hdr = (t_dirsave_header*)ptr;
-  hdr->base_sector = dsinfo->sector_lba;
-  hdr->memory_size = dsinfo->save_size;
-  hdr->drv_issdhc = sc_issdhc();
-  hdr->drv_rca = sc_rca();
+  volatile uint8_t *sram = (uint8_t*)(0x0F000000 - sizeof(cfg));
+  const uint8_t *cfg8 = (uint8_t*)(&cfg);
+  for (unsigned i = 0; i < sizeof(cfg); i++)
+    *sram++ = *cfg8++;
+}
+
+void load_rtcclock_data(const t_rtc_state *rtc_clock) {
+  set_undef_lr((rtc_clock->hour <<  0) |
+               (rtc_clock->mins <<  6) |
+               (rtc_clock->day  << 12) |
+               (rtc_clock->month<< 18) |
+               (rtc_clock->year << 24));
 }
 
 // Loads ROM header from disk for inspection.
@@ -194,7 +214,7 @@ unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh) {
 __attribute__((noinline))
 unsigned load_gba_rom(
   const char *fn, uint32_t fs,
-  const t_rom_header *rom_header,
+  uint32_t rom_entryaddr,
   const t_patch *ptch,
   const t_dirsave_info *dsinfo,
   bool ingame_menu,
@@ -202,6 +222,8 @@ unsigned load_gba_rom(
   unsigned cheats,
   progress_fn progress
 ) {
+
+  bool use_rtc_patches = rtc_clock != NULL;
 
   // Determine how much ROM space we need for the IGM and DirSav payloads
   const unsigned igm_reqsz = ingame_menu_payload.menu_rsize + font_block_size();
@@ -242,18 +264,17 @@ unsigned load_gba_rom(
 
   // Install the menu before loading the ROM, otherwise we overwrite relevant assets.
   if (ingame_menu) {
-    bool use_rtc_patches = rtc_clock != NULL;
     char sfn[MAX_FN_LEN];
     savestate_filename_calc(fn, sfn);
     if (dsinfo) {
       // If DirSave is enabled, we disable the menu save facilities.
-      load_ingame_menu(igm_addr, igm_space, ds_addr, rom_header, NULL, sfn, use_rtc_patches, cheats);
+      load_ingame_menu(igm_addr, igm_space, true, rom_entryaddr, NULL, sfn, use_rtc_patches, cheats);
     } else {
       // Calculate the basename, so we can produce proper sav/backup files
       char save_basename[MAX_FN_LEN];
       sram_template_filename_calc(fn, "", save_basename);
 
-      load_ingame_menu(igm_addr, igm_space, 0, rom_header, save_basename, sfn, use_rtc_patches, cheats);
+      load_ingame_menu(igm_addr, igm_space, false, rom_entryaddr, save_basename, sfn, use_rtc_patches, cheats);
     }
   }
 
@@ -318,13 +339,18 @@ unsigned load_gba_rom(
   set_supercard_mode(MAPPED_SDRAM, true, false);
 
   // Load/Patch the DirectSave payload if necessary.
-  if (dsinfo)
-    load_directsave_payload(ds_addr, dsinfo);
+  if (dsinfo) {
+    memcpy32((uint8_t*)ds_addr, directsave_payload, directsave_payload_size);
+    load_directsave_config(dsinfo);
+  }
 
   // Actually apply patches
-  if (ptch)
-    patch_apply_rom(GBA_ROM_ADDR, MAX_GBA_ROM_SIZE, 0, true, ptch, rtc_clock,
+  if (ptch) {
+    patch_apply_rom(GBA_ROM_ADDR, MAX_GBA_ROM_SIZE, 0, true, ptch, use_rtc_patches,
                     ingame_menu ? igm_addr : 0, dsinfo ? ds_addr : 0);
+    if (rtc_clock)
+      load_rtcclock_data(rtc_clock);
+  }
 
   // Fix header checksum unconditionally (just in case we boot to BIOS).
   fix_gba_header((uint16_t*)GBA_ROM_ADDR);
@@ -342,6 +368,7 @@ unsigned flash_gba_nor(
   const char *fn, uint32_t fs,
   const t_rom_header *rom_header,
   const t_patch *ptch,
+  bool dirsaving,
   bool ingame_menu,
   bool rtc_patches,
   const uint8_t *blkmap,
@@ -349,9 +376,11 @@ unsigned flash_gba_nor(
   uint8_t *scratch, unsigned ssize
 ) {
   // TODO: Add gap support (use the FW directly instead). Add patching
-
   if (!flashinfo.size || !flashinfo.blksize || !flashinfo.blkcount || !flashinfo.blkwrite || !flashinfo.blksize)
     return ERR_FLASH_OP;
+
+  // Determine if the DirSav payload must be flashed in a ROM gap or not.
+  uint32_t dsoffset = (fs > MAX_GBA_ROM_SIZE - NOR_BLOCK_SIZE) ? ptch->hole_addr : 0;
 
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_READ);
@@ -380,9 +409,15 @@ unsigned flash_gba_nor(
       dma_memcpy32(&scratch[offset], tmp, toread/4);
     }
 
+    // TODO: Allow IGM patching and loading.
+    uint32_t dsaddr = dsoffset ? 0x08000000 + dsoffset : FLASH_DIRSAV_PAYLOAD_W1;
+
     // Patch ROM, don't need WAITCNT patches
-    // TODO: Allow for DS patching (in-rom or using direct firmware mapping)
-    patch_apply_rom(scratch, ssize, bigoff, false, ptch, /* RTC clock */ 0, /* IGM */ 0, /* DS */ 0);
+    patch_apply_rom(scratch, ssize, bigoff, false, ptch, rtc_patches, /* IGM */ 0, dirsaving ? dsaddr : 0);
+
+    // Copy (partial) DirSav payload if necessary
+    if (dirsaving && dsoffset)
+      payload_apply_rom(scratch, ssize, bigoff, directsave_payload, directsave_payload_size, dsoffset);
 
     // Go ahead and erase the blocks, then program them.
     for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += flashinfo.blksize) {
@@ -413,9 +448,46 @@ unsigned flash_gba_nor(
 
 __attribute__((noinline))
 unsigned launch_gba_nor(
-  const uint8_t *normap, unsigned blkcnts
+  const uint8_t *normap, unsigned blkcnts,
+  uint32_t rom_entryaddr,
+  const t_dirsave_info *dsinfo,
+  const t_rtc_state *rtc_clock,
+  bool ingame_menu
   // TODO: Add more launching options? Patching?
 ) {
+
+  unsigned cheats = 0; // TODO
+
+  // Allocate payloads, use static addresses since some are flashed to NOR and can't be updated.
+  uint32_t ds_addr = FLASH_DIRSAV_PAYLOAD_W1;
+    // Now the IGM
+  uint32_t igm_addr = ds_addr + DIRSAVE_REQ_SPACE;
+  // Calculate the total space for the IGM to use
+  uint32_t igm_space = NOR_BLOCK_SIZE - DIRSAVE_REQ_SPACE;
+
+  // Install the menu before loading the ROM, otherwise we overwrite relevant assets.
+  if (ingame_menu) {
+    bool use_rtc_patches = rtc_clock != NULL;
+    // char sfn[MAX_FN_LEN];   TODO figure out savestate naming!!
+    // savestate_filename_calc(fn, sfn);
+    const char *sfn = NULL; // TODO
+    if (dsinfo) {
+      // If DirSave is enabled, we disable the menu save facilities.
+      load_ingame_menu(igm_addr, igm_space, true, rom_entryaddr, NULL, sfn, use_rtc_patches, cheats);
+    } else {
+      // Calculate the basename, so we can produce proper sav/backup files
+      char save_basename[MAX_FN_LEN];
+      // sram_template_filename_calc(fn, "", save_basename); TODO
+
+      load_ingame_menu(igm_addr, igm_space, false, rom_entryaddr, save_basename, sfn, use_rtc_patches, cheats);
+    }
+  }
+
+  if (dsinfo)
+    load_directsave_config(dsinfo);
+
+  if (rtc_clock)
+    load_rtcclock_data(rtc_clock);
 
   // Map the game NOR blocks.
   // TODO

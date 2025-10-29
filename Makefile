@@ -96,6 +96,7 @@ DLDIFILES=src/dldi.S \
           src/supercard_driver.c
 
 DIRECTSAVEFILES=src/directsaver.S \
+                src/directsave_emu.c \
                 src/crc.c \
                 src/supercard_driver.c
 
@@ -146,16 +147,16 @@ INFILES=src/gba_ewram_crt0.S \
         src/fonts/font_render.c \
         ${FATFSFILES}
 
-all:	$(FWBINFILES) $(BIEMUFILES)
+all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload
 	# Wrap the firmware around a ROM->EWRAM loader
 	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K
 	$(OBJCOPY) --output-target=binary firmware.elf superfw.gba
 	# Fix the header/checksum.
 	./tools/fw-fixer.py superfw.gba
 
-firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload src/messages_data.h
+firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload src/messages_data.h ldscripts/gba_ewram.ld.i
 	# Build the actual firmware image
-	$(CC) $(CFLAGS) -o firmware.ewram.elf $(INFILES) -T ldscripts/gba_ewram.ld -nostartfiles -Wl,-Map=firmware.ewram.map -Wl,--print-memory-usage -fno-builtin
+	$(CC) $(CFLAGS) -o firmware.ewram.elf $(INFILES) -T ldscripts/gba_ewram.ld.i -nostartfiles -Wl,-Map=firmware.ewram.map -Wl,--print-memory-usage -fno-builtin
 	$(OBJCOPY) --output-target=binary firmware.ewram.elf firmware.ewram.gba
 
 superfw.dldi.payload:	$(DLDIFILES)
@@ -193,6 +194,9 @@ firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr/target/release/upkr
 %.pack.comp:	%.pack apultra/apultra
 	./apultra/apultra $< $@
 
+%.ld.i:	%.ld
+	cpp $< -o $@
+
 apultra/apultra:
 	make -C apultra
 
@@ -200,5 +204,5 @@ upkr/target/release/upkr:
 	cd upkr/ && cargo build --release
 
 clean:
-	rm -f *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h
+	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h
 

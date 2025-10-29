@@ -153,7 +153,7 @@ static void push_superchis_normap(uint8_t value) {
     "strh %2, [%0]\n"
     :: "l"(REG_SC_MODE_REG_ADDR),
        "l"(MODESWITCH_MAGIC),
-       "l"((unsigned int)(0x200 | value))
+       "l"((unsigned int)(0x100 | value))
     : "memory");
 }
 
@@ -169,14 +169,7 @@ void reset_superchis_normap() {
 }
 
 void sram_superchis_bank(unsigned bankn) {
-  asm volatile (
-    "strh %1, [%0]\n"
-    "strh %1, [%0]\n"
-    "strh %2, [%0]\n"
-    :: "l"(REG_SC_MODE_REG_ADDR),
-       "l"(MODESWITCH_MAGIC),
-       "l"((unsigned int)(0x100 | bankn))
-    : "memory");
+  write_supercard_mode(0x70 | ((bankn & 1) << 3));
 }
 
 void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_interface) {

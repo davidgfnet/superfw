@@ -142,8 +142,9 @@ static void write_mem32(uint8_t *mem, uint32_t worddata) {
   write_mem8(mem + 3, worddata >> 24);
 }
 
-static void copy_mem16(uint8_t *buf, uint32_t baseaddr, unsigned bufsize, const uint16_t *fnptr, unsigned size) {
+static void copy_func16(uint8_t *buf, uint32_t baseaddr, unsigned bufsize, const uint16_t *fnptr, unsigned size) {
   volatile uint16_t *buf16 = (uint16_t*)buf;
+  fnptr = (uint16_t*)(((uintptr_t)fnptr) & ~1U);           // Clear thumb addr bit for the symbol
   for (unsigned i = 0; i < size; i += 2)
     if (baseaddr + i < bufsize)
       *buf16++ = *fnptr++;
@@ -247,54 +248,54 @@ void apply_patch_ops(
       // Patch a full program into an address.
       for (unsigned j = 0; j < prgs[arg].length; j++)
         if (moff + j >= baseaddr && moff + j < baseaddr + bufsize)
-          write_mem8(&buffer[moff + j], prgs[arg].data[j]);
+          write_mem8(&buffer[moff + j - baseaddr], prgs[arg].data[j]);
       break;
     case 0x1:   // Patch Thumb instruction
       if (moff >= baseaddr && moff < baseaddr + bufsize)
-        write_mem16(&buffer[moff], 0x46C0);   // mov r8, r8
+        write_mem16(&buffer[moff - baseaddr], 0x46C0);   // mov r8, r8
       break;
     case 0x2:   // Patch ARM instruction
       if (moff >= baseaddr && moff < baseaddr + bufsize)
-        write_mem32(&buffer[moff], 0xE1A00000);   // mov r0, r0
+        write_mem32(&buffer[moff - baseaddr], 0xE1A00000);   // mov r0, r0
       break;
     case 0x3:   // Write N bytes to address
       for (unsigned j = 0; j < arg + 1; j++)
         if (moff + j >= baseaddr && moff + j < baseaddr + bufsize)
-          write_mem8(&buffer[moff + j], ops[(j / 4) + 1] >> (j * 8));
+          write_mem8(&buffer[moff + j - baseaddr], ops[(j / 4) + 1] >> (j * 8));
       i += (arg + 1 + 3) / 4;
       break;
     case 0x4:   // Write N words to address
       for (unsigned j = 0; j < arg + 1; j++)
         if (moff + j >= baseaddr && moff + j < baseaddr + bufsize)
-          write_mem32(&buffer[moff + j * 4], ops[++i]);
+          write_mem32(&buffer[moff + j * 4 - baseaddr], ops[++i]);
       break;
     case 0x5:   // Patch function with a dummy one
       switch (arg) {
         case 0:
         case 1:
           if (moff >= baseaddr && moff < baseaddr + bufsize)
-            write_mem32(&buffer[moff], arg ? FN_THUMB_RET1 : FN_THUMB_RET0);
+            write_mem32(&buffer[moff - baseaddr], arg ? FN_THUMB_RET1 : FN_THUMB_RET0);
           break;
         case 4:
         case 5:
           if (moff >= baseaddr && moff < baseaddr + bufsize)
-            write_mem32(&buffer[moff], (arg == 5) ? FN_ARM_RET1 : FN_ARM_RET0);
+            write_mem32(&buffer[moff - baseaddr], (arg == 5) ? FN_ARM_RET1 : FN_ARM_RET0);
           if (moff + 4 >= baseaddr && moff + 4 < baseaddr + bufsize)
-            write_mem32(&buffer[moff + 4], FN_ARM_RETBX);
+            write_mem32(&buffer[moff + 4 - baseaddr], FN_ARM_RETBX);
           break;
       };
       break;
 
     case 0x7:    // RTC handlers
-      copy_mem16(&buffer[moff], moff - baseaddr, bufsize, rtc_fncs[arg].ptr, *rtc_fncs[arg].size);
+      copy_func16(&buffer[moff - baseaddr], moff - baseaddr, bufsize, rtc_fncs[arg].ptr, *rtc_fncs[arg].size);
       break;
 
     case 0x8:    // EEPROM memory handlers
       if (arg < 2) {
         unsigned fnsz = *psi->sfns->eeprom_fncs[arg].size;
-        copy_mem16(&buffer[moff], moff - baseaddr, bufsize, psi->sfns->eeprom_fncs[arg].ptr, fnsz);
+        copy_func16(&buffer[moff - baseaddr], moff - baseaddr, bufsize, psi->sfns->eeprom_fncs[arg].ptr, fnsz);
         if (moff + fnsz >= baseaddr && moff + fnsz < baseaddr + bufsize)
-          write_mem32(&buffer[moff + fnsz], psi->dspayload_addr);
+          write_mem32(&buffer[moff + fnsz - baseaddr], psi->dspayload_addr);
         break;
       }
       break;
@@ -302,9 +303,9 @@ void apply_patch_ops(
     case 0x9:    // FLASH memory handlers
       if (arg < 5) {
         unsigned fnsz = *psi->sfns->flash_fncs[arg].size;
-        copy_mem16(&buffer[moff], moff - baseaddr, bufsize, psi->sfns->flash_fncs[arg].ptr, fnsz);
+        copy_func16(&buffer[moff - baseaddr], moff - baseaddr, bufsize, psi->sfns->flash_fncs[arg].ptr, fnsz);
         if (moff + fnsz >= baseaddr && moff + fnsz < baseaddr + bufsize)
-          write_mem32(&buffer[moff + fnsz], psi->dspayload_addr);
+          write_mem32(&buffer[moff + fnsz - baseaddr], psi->dspayload_addr);
       }
     };
   }
@@ -322,7 +323,7 @@ bool patch_apply_rom(
   // Patching options
   bool patch_waitcnt,
   const t_patch *pdata,
-  const t_rtc_state *rtc_clock,
+  bool patch_rtc,
   uint32_t igmenu_addr,
   uint32_t ds_addr
 ) {
@@ -357,19 +358,29 @@ bool patch_apply_rom(
   }
   ops += pdata->irqh_ops;
 
-  if (rtc_clock) {
-    // Apply RTC patches and setup initial RTC clock
+  // Apply RTC patches
+  if (patch_rtc)
     apply_patch_ops(buffer, bufsize, baseaddr, ops, pdata->rtc_ops, pdata->prgs, &psi);
 
-    if (baseaddr == 0x0) {
-      write_mem8(&buffer[0xC5], rtc_clock->hour);
-      write_mem8(&buffer[0xC6], rtc_clock->mins);
-      write_mem8(&buffer[0xC7], rtc_clock->day);
-      write_mem8(&buffer[0xC8], rtc_clock->month);
-      write_mem8(&buffer[0xC9], rtc_clock->year);
-    }
-  }
-
   return true;
+}
+
+// Applies a payload to the ROM memory.
+void payload_apply_rom(
+  // Where the ROM has been loaded.
+  uint8_t *buffer, unsigned bufsize,
+  // What base address this ROM has.
+  uint32_t baseaddr,
+  // Patch buffer to apply and its offset.
+  const uint8_t *payload, unsigned payload_size,
+  uint32_t payload_offset
+) {
+  // Optimize away the copy call if this can't possibly overlap.
+  if (payload_offset > baseaddr + bufsize)
+    return;
+  if (baseaddr > payload_offset + payload_size)
+    return;
+
+  copy_func16(&buffer[payload_offset - baseaddr], payload_offset - baseaddr, bufsize, (uint16_t*)payload, payload_size);
 }
 

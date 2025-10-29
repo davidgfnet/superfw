@@ -58,14 +58,15 @@ typedef struct {
   t_patch p;
 } t_patch_builder;
 
-struct struct_t_rtc_state;
-
 void patchmem_dbinfo(const uint8_t *dbptr, uint32_t *pcnt, char *version, char *date, char *creator);
 // Lookup routines (builtin, on-disk, etc).
 bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pdata);
 // Actual patching magic
 bool patch_apply_rom(uint8_t *buffer, unsigned bufsize, uint32_t baseaddr, bool patch_waitcnt, const t_patch *pdata,
-                     const struct struct_t_rtc_state *rtc_clock, uint32_t igmenu_addr, uint32_t ds_addr);
+                     bool patch_rtc, uint32_t igmenu_addr, uint32_t ds_addr);
+// Payload patching routine
+void payload_apply_rom(uint8_t *buffer, unsigned bufsize, uint32_t baseaddr,
+                       const uint8_t *payload, unsigned payload_size, uint32_t payload_offset);
 
 void patchengine_init(t_patch_builder *patch, unsigned filesize);
 void patchengine_finalize(t_patch_builder *patch);

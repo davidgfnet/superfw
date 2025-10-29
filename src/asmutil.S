@@ -30,8 +30,35 @@
 #define REG_MEMCTRL      0x04000800
 #define REG_VRAMCNT_CD   0x04000242
 
+#define START_ARM_FUNC(name)  \
+  .arm;                       \
+  .global name;               \
+  .type name, %function;      \
+  .balign 4;                  \
+  name:
+
+#define START_THUMB_FUNC(name)\
+  .thumb;                     \
+  .balign 4;                  \
+  .global name;               \
+  .thumb_func;                \
+  .type name, %function;      \
+  name:
+
+
 .section .text
-.thumb
+
+// Writes the LR register for CPU undef mode (RTC register)
+START_THUMB_FUNC(set_undef_lr)
+  mov r2, pc; bx r2    // Go into arm mode
+  .arm
+
+  mrs r2, CPSR         // Save the current CPSR
+  mov r1, $0x1B        // Move to undefined mode
+  msr CPSR_c, r1
+  mov lr, r0           // Store in UNDEF[LR]
+  msr CPSR_c, r2       // Restore original model and CPSR
+  bx lr
 
 
 #define WAIT_SYNC(value, wcnt)  \
@@ -50,7 +77,6 @@
   mov r1, $(value << 8);        \
   str r1, [r0];
 
-
 // This code starts an already loaded NDS rom. The memory map at this point:
 // Main RAM:
 //  - [0x02000000, 0x023BFE00)   - Loaded ARM9 payload
@@ -59,9 +85,8 @@
 //  - [0x023FF800, 0x023FFD80)   - ARM9 stack (only during boot, ~1.4KiB bytes, SVC+IRQ+SYS stacks)
 //  - [0x023FFD80, 0x023FFE00)   - ARM7 stack (in bootloader, max 128 bytes)
 //  - [0x023FFE00, 0x02400000)   - NDS header (already loaded)
-.global nds_launch
-nds_launch:
-  mov r0, pc; bx r0            // Go into arm mode
+START_THUMB_FUNC(nds_launch)
+  mov r2, pc; bx r2            // Go into arm mode
   .arm
 
   // Setup IRQ, SVC and System stack pointers, we are about to remap.
@@ -139,11 +164,9 @@ ewram_test_zone:
 
 .section .iwram.text, "ax", %progbits
 .balign 4
-.arm
 
 // Slower copy to ROM routine. Performs checks on the written data.
-.global rom_copy_write16
-rom_copy_write16:
+START_ARM_FUNC(rom_copy_write16)
   push {r4-r11}
 
   // Copy using non-SEQ accesses.
@@ -189,8 +212,7 @@ rom_copy_write16:
   bx lr
 
 
-.global test_fast_ewram
-test_fast_ewram:
+START_ARM_FUNC(test_fast_ewram)
   push {r4-r9}
 
   // Test EWRAM reads/writes when overclocked
@@ -224,8 +246,7 @@ test_fast_ewram:
   .word 0xDEADBEEF, 0x0BADC0DE, 0xABAD1DEA, 0xDAB1D6F0
 
 
-.global launch_reset
-launch_reset:
+START_ARM_FUNC(launch_reset)
   // Check arg[1], if non-zero, overclock EWRAM
   cmp r1, $0
   ldr r1, =REG_MEMCTRL
@@ -290,14 +311,13 @@ hard_reset:
   swi 0x260000             // Resets through the BIOS opening animation
 
 
-.global running_on_nds
-running_on_nds:
+START_THUMB_FUNC(running_on_nds)
   // Overwrites a couple of words in RAM and checks whether they are mirrored
   // (would mean GBA) or not (it must be an NDS with more memory).
   // Restores the data to its previous state before returning.
   push {r4, r5}
-  mov r0, $0x02000000
-  add r1, r0, $(256*1024)
+  ldr r0, =0x02000000
+  ldr r1, =(0x02000000 + 256*1024)
   ldr r2, =0xDEADBEEF
   ldr r3, =0x600DF00D
 
@@ -315,15 +335,16 @@ running_on_nds:
 
   mov r0, $0       // Assuming GBA for now
   cmp r2, r3
-  movne r0, $1     // Return one if values are different (NDS)
+  beq 1f           // Equal means GBA, so return zero.
+  mov r0, $1       // Return one if values are different (NDS)
 
+1:
   pop {r4, r5}
   bx lr
 
 
 // It should be fine for NDS since it runs from WRAM and it has 4 cycles/access.
-.global wait_ms
-wait_ms:
+START_ARM_FUNC(wait_ms)
   mov r1, $2096    // 2^24 cycles / 1000 / 8
   mul r0, r1, r0
 1:
@@ -333,8 +354,7 @@ wait_ms:
   bne 1b
   bx lr
 
-.global set_irq_enable
-set_irq_enable:
+START_ARM_FUNC(set_irq_enable)
   cmp r0, $0
   mrs r1, cpsr
   bicne r1, #0x80   // IRQ bit is number 7
@@ -342,10 +362,11 @@ set_irq_enable:
   msr cpsr, r1
   bx lr
 
-.global gba_irq_handler
-gba_irq_handler:
+START_ARM_FUNC(gba_irq_handler)
   ldr r0, =irq_handler_fn
   bx r0
+
+.pool
 
 #define _APPACK_HWORD_VERSION
 #include "unpack.S"

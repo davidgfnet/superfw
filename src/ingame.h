@@ -38,7 +38,7 @@ typedef struct {
 
   uint32_t menu_hotkey;                // Magic key combo to trigger menu
   uint32_t menu_lang;                  // Menu language code
-  uint32_t menu_directsave_base;       // Base address of the direct save payload if present.
+  uint32_t menu_use_directsave;        // Whether direct save is in use.
   uint32_t menu_font_base;             // Font rendering graphic binary base address
   uint32_t menu_cheats_base;           // Cheats database entry for the current game
   uint32_t scratch_space_base;         // Empty scratch space for savestate purposes

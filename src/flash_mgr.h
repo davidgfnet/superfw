@@ -43,6 +43,7 @@ typedef struct {
   uint8_t numblks;                     // Number of blocks used by this game.
   uint8_t gattrs;                      // Bitfield attributes
   uint8_t bnoffset;                    // Base name offset (byte offset in game_name)
+  uint32_t entry_addr;                 // Address of the game entrypoint
   uint8_t blkmap[MAX_GAME_BLOCKS];     // Block mapping (blocks used, in order)
   char game_name[256];                 // UTF-8 encoded file name.
 } t_flash_game_entry;
