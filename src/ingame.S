@@ -346,9 +346,8 @@ ingame_menu_entry:
   ldr r0, ingame_ds_used
   cmp r0, $0
 
-  ldr r1, =(0x0F000000 - DIRSAV_CFG_SIZE)
-  ldrb r1, [r1, #DIRSAV_CFG_MUTEX_OFF]
-  cmpne r1, $0
+  blne read_sdmutex
+  cmp r0, $0
 
   // Jump to C code, but in IWRAM copy
   adr r0, use_cheats_irq                    // Pass the ROM space address!
@@ -394,7 +393,7 @@ ingame_menu_entry:
   str r0, [r1, #-4]
 
   // Make the SDRAM read-only again!
-  mov r0, $0x1       // SD-RAM, Readonly mode
+  mov r0, $0x1       // SD-RAM, Readonly mode, no SD and Bank0
   bl set_cpld_mode
 
   // Restore timer control regs (to r11-r14)
@@ -536,6 +535,23 @@ cheat_process_thumb:
 
 // Place here all routines that are not really used within the boot section
 // (they are used by the C code in cases where assembly is needed).
+
+// Reads the SD mutex byte and returns it in r0
+read_sdmutex:
+  push {lr}
+
+  mov r0, $0x1       // SD-RAM, Readonly mode, no SD (SRAM Bank0)
+  bl set_cpld_mode
+
+  ldr r4, =(0x0F000000 - DIRSAV_CFG_SIZE)
+  ldrb r4, [r4, #DIRSAV_CFG_MUTEX_OFF]
+
+  mov r0, $0x5       // SD-RAM, Read-Write mode, no SD
+  bl set_cpld_mode
+
+  mov r0, r4
+  pop {pc}
+
 
 // Writes the LR register for CPU undef mode (RTC register)
 def_function(set_undef_lr):

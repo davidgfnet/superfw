@@ -176,6 +176,7 @@ void set_supercard_mode(unsigned mapped_area, bool write_access, bool sdcard_int
   // Bit0: Controls SDRAM vs internal Flash mapping
   // Bit1: Controls whether the SD card interface is mapped into the ROM addresspace.
   // Bit2: Controls read-only/write access. Doubles as SRAM bank selector!
+  // Bit3: In SuperChis this controls the SRAM bank selector (always zero here).
   uint16_t value = mapped_area | (sdcard_interface ? 0x2 : 0x0) | (write_access ? 0x4 : 0x0);
 
   write_supercard_mode(value);

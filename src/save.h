@@ -37,6 +37,9 @@ void savestate_filename_calc(const char *rom, char *statefn);
 // Calculate save game template filename for a given extension.
 void sram_template_filename_calc(const char *rom, const char * extension, char *savefn);
 
+// Writes data to SRAM
+void write_sram_buffer(const uint8_t *buf, unsigned offset, unsigned len);
+
 // Loads save file to SRAM
 bool load_save_sram(const char *savefn);
 
