@@ -376,7 +376,7 @@ bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size
 bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size);
 
 // Test/validation stuff
-int sram_test();
+unsigned sram_test();
 int sdram_test(progress_abort_fn progcb);
 void sram_pseudo_fill();
 unsigned sram_pseudo_check();

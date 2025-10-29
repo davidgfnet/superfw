@@ -183,10 +183,7 @@ void load_directsave_config(const t_dirsave_info *dsinfo) {
     checksum ^= *cfg32++;
   cfg.checksum = checksum;
 
-  volatile uint8_t *sram = (uint8_t*)(0x0F000000 - sizeof(cfg));
-  const uint8_t *cfg8 = (uint8_t*)(&cfg);
-  for (unsigned i = 0; i < sizeof(cfg); i++)
-    *sram++ = *cfg8++;
+  write_sram_buffer((uint8_t*)(&cfg), 64*1024 - sizeof(cfg), sizeof(cfg));
 }
 
 void load_rtcclock_data(const t_rtc_state *rtc_clock) {
@@ -339,10 +336,8 @@ unsigned load_gba_rom(
   set_supercard_mode(MAPPED_SDRAM, true, false);
 
   // Load/Patch the DirectSave payload if necessary.
-  if (dsinfo) {
-    memcpy32((uint8_t*)ds_addr, directsave_payload, directsave_payload_size);
-    load_directsave_config(dsinfo);
-  }
+  if (dsinfo)
+    payload_apply_rom(GBA_ROM_ADDR, MAX_GBA_ROM_SIZE, GBA_ROM_BASE, directsave_payload, directsave_payload_size, ds_addr);
 
   // Actually apply patches
   if (ptch) {
@@ -355,7 +350,11 @@ unsigned load_gba_rom(
   // Fix header checksum unconditionally (just in case we boot to BIOS).
   fix_gba_header((uint16_t*)GBA_ROM_ADDR);
 
-  // Set the ROM into read only mode, disable SD card reader as well.
+  // Go ahead and load config in SRAM, if applicable.
+  if (dsinfo)
+    load_directsave_config(dsinfo);
+
+  // Set the ROM into read only mode, disable SD card reader as well. Maps SRAM bank 0.
   set_supercard_mode(MAPPED_SDRAM, false, false);
 
   launch_reset(boot_bios_splash, use_fastew);

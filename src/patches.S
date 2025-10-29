@@ -51,11 +51,7 @@
   #define SRAM_BANK(bank)   (0x0001 | ((bank) << 2))
 #endif
 
-
-// This function reads a byte from the emulated EEPROM
-// The output format is a bit odd, instead of a single byte we output 8 bytes
-// each of them being 0x00 or 0x01 (due to how the EEPROM works). The bit order
-// is MSB to LSB.
+// EEPROM read/write patch routines.
 
 // R0: Block number (0-63 or 0-1023) to read from.
 // R1: Byte buffer where the byte will be written (as bits)

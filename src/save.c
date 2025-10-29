@@ -29,16 +29,39 @@
 #include "save.h"
 #include "nanoprintf.h"
 
+// All reading/writing of SRAM should be centralized here, except for IGM/DirSav/Patches.
+
 #define SRAM_BASE_U8        ((volatile uint8_t *)(0x0E000000))
 #define SRAM_BANK_SIZE      ( 64*1024)
 #define SRAM_CHIP_SIZE      (128*1024)
 
 // SuperChis maps SRAM bank separatedly (not shared with read/write bit)
 #ifdef SUPERCHIS_IO
-  #define SRAM_MAP_BANK(bank) sram_superchis_bank(bank)
+  #define SRAM_MAP_BANK(bank) sram_superchis_bank((bank))
 #else
-  #define SRAM_MAP_BANK(bank) set_supercard_mode(MAPPED_SDRAM, bank ? true : false, true)
+  #define SRAM_MAP_BANK(bank) set_supercard_mode(MAPPED_SDRAM, (bank) ? true : false, true)
 #endif
+
+// Writes data to SRAM, write may not cross a bank boundary.
+void write_sram_buffer(const uint8_t *buffer, unsigned offset, unsigned len) {
+  SRAM_MAP_BANK(offset / SRAM_BANK_SIZE);
+  offset &= (SRAM_BANK_SIZE - 1);
+
+  for (unsigned i = 0; i < len; i++)
+    SRAM_BASE_U8[offset + i] = buffer[i];
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
+
+void read_sram_buffer(uint8_t *buffer, unsigned offset, unsigned len) {
+  SRAM_MAP_BANK(offset / SRAM_BANK_SIZE);
+  offset &= (SRAM_BANK_SIZE - 1);
+
+  for (unsigned i = 0; i < len; i++)
+    buffer[i] = SRAM_BASE_U8[offset + i];
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
 
 bool load_save_sram(const char *savefn) {
   FIL fd;
@@ -57,12 +80,8 @@ bool load_save_sram(const char *savefn) {
       return false;
     }
 
-    volatile uint8_t *sram_ptr = &SRAM_BASE_U8[i % SRAM_BANK_SIZE];
-    unsigned bank = i / SRAM_BANK_SIZE;
-    SRAM_MAP_BANK(bank);
-    for (unsigned j = 0; j < rdbytes; j++)
-      *sram_ptr++ = buf[j];
-    SRAM_MAP_BANK(0);
+    write_sram_buffer(buf, i, rdbytes);
+    set_supercard_mode(MAPPED_SDRAM, true, true);
 
     if (rdbytes < sizeof(buf))
       break;   // EOF
@@ -109,7 +128,7 @@ bool write_save_sram(const char *fn) {
     SRAM_MAP_BANK(bank);
     for (unsigned j = 0; j < 1024; j++)
       tmpbuf[j] = sram_ptr[j];
-    SRAM_MAP_BANK(0);
+    set_supercard_mode(MAPPED_SDRAM, true, true);
 
     res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
     if (res != FR_OK) {
@@ -145,7 +164,7 @@ bool compare_save_sram(const char *fn) {
     for (unsigned j = 0; j < 1024; j++)
       if (tmpbuf[j] != sram_ptr[j])
         mism = true;
-    SRAM_MAP_BANK(0);
+    set_supercard_mode(MAPPED_SDRAM, true, true);
   }
   f_close(&fd);
 
@@ -301,6 +320,7 @@ void erase_sram() {
     for (unsigned i = 0; i < SRAM_BANK_SIZE; i++)
       SRAM_BASE_U8[i] = 0xFF;
   }
+  set_supercard_mode(MAPPED_SDRAM, true, true);
 }
 
 bool file_is_contiguous(const char *fn, LBA_t *lba) {
@@ -384,13 +404,15 @@ bool copy_save_contiguous_file(const char *fn, const char *dest, unsigned size) 
 
 __attribute__((noinline))
 unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, const char *savefn) {
+  // Clear the SRAM before loading any data (avoid random garbage!), unless in manual mode ofc.
+  if (loadp != SaveLoadDisable)
+    erase_sram();
+
   // Process the loading part first:
   if (loadp == SaveLoadSav) {
     if (!load_save_sram(savefn))
       return ERR_SAVE_BADSAVE;
   }
-  else if (loadp == SaveLoadReset)
-    erase_sram();
 
   // Now proceed to program / de-program the saving on reboot aspect.
   if (savep == SaveReboot) {
@@ -442,6 +464,9 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
     if (!rotate_savefile(tmpfilen, backup_sram_default))
       return ERR_SAVE_CANTWRITE;
 
+    // Clear SRAM (since config bits are also stored there)
+    erase_sram();
+
     // For EEPROM based DirSave we only flush, so the save needs to be loaded
     if (stype == SaveTypeEEPROM4K || stype == SaveTypeEEPROM64K) {
       // Proceed to load the current save, to SRAM. Or clear it all if necessary.
@@ -449,8 +474,6 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
         if (!load_save_sram(savefn))
           return ERR_SAVE_BADSAVE;
       }
-      else if (loadp == SaveLoadReset)
-        erase_sram();
     }
 
     // Proceed with the saving magic. Validate that the file is contiguous to ensure
@@ -463,7 +486,6 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
     dsinfo->sector_lba = lba;
   } else {
     // SRAM-based (on reboot/manual) saving!
-
     return prepare_sram_based_savegame(loadp, savep, savefn);
   }
 
