@@ -22,6 +22,7 @@
 #include "compiler.h"
 #include "common.h"
 #include "util.h"
+#include "save.h"
 #include "supercard_driver.h"
 #include "fatfs/ff.h"
 
@@ -79,71 +80,40 @@ int sdram_test(progress_abort_fn progcb) {
   return ret;
 }
 
-// Tests the SRAM, to ensure it actually holds data correctly.
-int sram_test() {
-  // Similar to above, just way faster :P
-  volatile uint8_t *sram_ptr  = (uint8_t*)0x0E000000;
-  const static uint8_t tseq[] = { 0xAA, 0x55, 0x00, 0xFF };
-
-  // Test both SRAM banks!
-  for (unsigned b = 0; b < 2; b++) {
-    set_supercard_mode(MAPPED_SDRAM, b ? true : false, false);
-    for (unsigned i = 0; i < 64*1024; i++) {
-      uint8_t oval = sram_ptr[i];
-      for (unsigned j = 0; j < sizeof(tseq)/sizeof(tseq[0]); j++) {
-        sram_ptr[i] = tseq[j];
-        if (sram_ptr[i] != tseq[j]) {
-          sram_ptr[i] = oval;
-          set_supercard_mode(MAPPED_SDRAM, true, true);
-          return -i;
-        }
-      }
-      sram_ptr[i] = oval;
-    }
-  }
-
-  // Ensure we have two banks!
-  set_supercard_mode(MAPPED_SDRAM, false, false);
-  uint8_t oval0 = sram_ptr[0];
-  sram_ptr[0] = 0x0A;
-  set_supercard_mode(MAPPED_SDRAM, true, false);
-  uint8_t oval1 = sram_ptr[0];
-  sram_ptr[0] = 0x05;
-  set_supercard_mode(MAPPED_SDRAM, false, false);
-  bool mism = (sram_ptr[0] != 0x0A);
-
-  // Restore values before returning.
-  set_supercard_mode(MAPPED_SDRAM, false, false);
-  sram_ptr[0] = oval0;
-  set_supercard_mode(MAPPED_SDRAM, true, false);
-  sram_ptr[0] = oval1;
-
-  set_supercard_mode(MAPPED_SDRAM, true, true);
-
-  return mism ? -0x10000 : 0;
-}
-
 // Tests whether the SRAM can hold data long term. Fills it with some pseudo random seq.
-void sram_pseudo_fill() {
-  volatile uint8_t *sram_ptr = (uint8_t*)0x0E000000;
+NOINLINE void sram_pseudo_fill() {
   uint32_t rnval = 0;
-  for (unsigned i = 0; i < 64*1024; i++) {
-    rnval = rnval * 1103515245 + 12345;    // Generate a new pseudorandom number
-    sram_ptr[i] = (uint8_t)(rnval >> 16);
+  uint8_t tmp[512];
+  for (unsigned i = 0; i < 128*1024; i += sizeof(tmp)) {
+    for (unsigned j = 0; j < sizeof(tmp); j++) {
+      rnval = rnval * 1103515245 + 12345;    // Generate a new pseudorandom number
+      tmp[j] = (uint8_t)(rnval >> 16);
+    }
+    write_sram_buffer(tmp, i, sizeof(tmp));
   }
 }
 
-unsigned sram_pseudo_check() {
-  volatile uint8_t *sram_ptr = (uint8_t*)0x0E000000;
+NOINLINE unsigned sram_pseudo_check() {
   unsigned errs = 0;
   uint32_t rnval = 0;
-  for (unsigned i = 0; i < 64*1024; i++) {
-    rnval = rnval * 1103515245 + 12345;    // Generate a new pseudorandom number
+  uint8_t tmp[512];
+  for (unsigned i = 0; i < 128*1024; i += sizeof(tmp)) {
+    read_sram_buffer(tmp, i, sizeof(tmp));
 
-    if (sram_ptr[i] != (uint8_t)(rnval >> 16))
-      errs++;
+    for (unsigned j = 0; j < sizeof(tmp); j++) {
+      rnval = rnval * 1103515245 + 12345;    // Generate a new pseudorandom number
+      if (tmp[j] != (uint8_t)(rnval >> 16))
+        errs++;
+    }
   }
   return errs;
+}
+
+// Tests the SRAM, to ensure it actually holds data correctly. Destroys data!
+unsigned sram_test() {
+  // Just piggyback on the battery test implementation.
+  sram_pseudo_fill();
+  return sram_pseudo_check();
 }
 
 void program_sram_check() {
@@ -166,7 +136,7 @@ int check_peding_sram_test() {
 }
 
 // Tests the SD card by reading blocks (directly) and discarding the data.
-int sdbench_read(progress_abort_fn progcb) {
+NOINLINE int sdbench_read(progress_abort_fn progcb) {
   // Just read consecutive blocks without repeating them (to avoid any caching)
   // Assume ~1MB/s read rate, aim for 8 seconds aprox. Read 8MiB in 8KiB blocks.
   unsigned start_frame = frame_count;

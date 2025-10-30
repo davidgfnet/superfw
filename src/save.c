@@ -49,6 +49,18 @@ void write_sram_buffer(const uint8_t *buffer, unsigned offset, unsigned len) {
 
   for (unsigned i = 0; i < len; i++)
     SRAM_BASE_U8[offset + i] = buffer[i];
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
+
+void read_sram_buffer(uint8_t *buffer, unsigned offset, unsigned len) {
+  SRAM_MAP_BANK(offset / SRAM_BANK_SIZE);
+  offset &= (SRAM_BANK_SIZE - 1);
+
+  for (unsigned i = 0; i < len; i++)
+    buffer[i] = SRAM_BASE_U8[offset + i];
+
+  set_supercard_mode(MAPPED_SDRAM, true, true);
 }
 
 bool load_save_sram(const char *savefn) {
