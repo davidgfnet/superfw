@@ -466,23 +466,14 @@ END_FUNC(patch_flash_write_byte_sram128k)
 // R1: Byte buffer where the byte will be written (as bits)
 // Returns 0 on success? (Space: 168 bytes)
 START_FUNC(patch_eeprom_read_directsave)
-  push {r6, r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r3, =0xFF1F
-  ldrh r6, [r7]
-  and r3, r6
-  strh r3, [r7]
+  push {r7, lr}
 
   mov r7, $READ_EEPROM_FN
   adr r3, patch_eeprom_read_directsave_size
   ldr r3, [r3]
   bl 33f
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
-  pop {r6, r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
@@ -493,24 +484,15 @@ END_FUNC(patch_eeprom_read_directsave)
 // R1: Byte buffer where the byte will be read (as bits)
 // Returns 0 on success?  (Space: 204 bytes)
 START_FUNC(patch_eeprom_write_directsave)
-  push {r6, r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r3, =0xFF1F
-  ldrh r6, [r7]
-  and r3, r6
-  strh r3, [r7]
+  push {r7, lr}
 
   mov r7, $WRITE_EEPROM_FN
   adr r3, patch_eeprom_write_directsave_size
   ldr r3, [r3]
   bl 33f
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
   // The handler does actually return an error code in r0
-  pop {r6, r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
@@ -524,13 +506,7 @@ END_FUNC(patch_eeprom_write_directsave)
 // R3: amount of bytes to read
 // Has 118 bytes of space.
 START_FUNC(patch_flash_read_directsave)
-  push {r5-r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r5, =0xFF1F
-  ldrh r6, [r7]
-  and r5, r6
-  strh r5, [r7]
+  push {r7, lr}
 
   lsl r0, #27; lsr r0, #15   // Limit sector number to [0...31] + lsl #12
   add r1, r0                 // Data offset to read at.
@@ -544,10 +520,7 @@ START_FUNC(patch_flash_read_directsave)
   ldr r3, [r3]
   bl 33f
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
-  pop {r5-r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
@@ -556,23 +529,14 @@ END_FUNC(patch_flash_read_directsave)
 // Clears the full flash device (fills it with 0xFF)
 // Has 90 bytes of space.
 START_FUNC(patch_flash_erase_device_directsave)
-  push {r6, r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r3, =0xFF1F
-  ldrh r6, [r7]
-  and r3, r6
-  strh r3, [r7]
+  push {r7, lr}
 
   mov r7, $ERASE_CHIP_FLASH_FN
   adr r3, patch_flash_erase_device_directsave_size
   ldr r3, [r3]
   bl 33f
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
-  pop {r6, r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
@@ -583,13 +547,7 @@ END_FUNC(patch_flash_erase_device_directsave)
 // R0: Sector number to wipe
 // Has 110 bytes of space.
 START_FUNC(patch_flash_erase_sector_directsave)
-  push {r6, r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r3, =0xFF1F
-  ldrh r6, [r7]
-  and r3, r6
-  strh r3, [r7]
+  push {r7, lr}
 
   lsl r0, #27; lsr r0, #27   // Limit sector number to [0...31]
 
@@ -598,10 +556,7 @@ START_FUNC(patch_flash_erase_sector_directsave)
   ldr r3, [r3]
   bl 33f
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
-  pop {r6, r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
@@ -611,13 +566,7 @@ END_FUNC(patch_flash_erase_sector_directsave)
 // R0: Sector number to write
 // R1: User provided pointer
 START_FUNC(patch_flash_write_sector_directsave)
-  push {r6, r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r3, =0xFF1F
-  ldrh r6, [r7]
-  and r3, r6
-  strh r3, [r7]
+  push {r7, lr}
 
   lsl r0, #27; lsr r0, #27   // Limit sector number to [0...31]
 
@@ -630,10 +579,7 @@ START_FUNC(patch_flash_write_sector_directsave)
   ldr r3, [r3]
   bl 33f
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
-  pop {r6, r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()
@@ -644,13 +590,7 @@ END_FUNC(patch_flash_write_sector_directsave)
 // R1: Offset within the sector
 // R2: Data (byte) to write
 START_FUNC(patch_flash_write_byte_directsave)
-  push {r6, r7, lr}
-
-  ldr r7, =0x04000204        // WS1 mirror to use 4,4 waitstates
-  ldr r3, =0xFF1F
-  ldrh r6, [r7]
-  and r3, r6
-  strh r3, [r7]
+  push {r7, lr}
 
   sub sp, $256               // Reserve a sector worth of data
   sub sp, $256
@@ -686,11 +626,8 @@ START_FUNC(patch_flash_write_byte_directsave)
   add sp, $256
   add sp, $256
 
-  ldr r7, =0x04000204
-  strh r6, [r7]
-
   mov r0, #0
-  pop {r6, r7}
+  pop {r7}
   pop {r1}
   bx r1
   trampoline_arm_r3()

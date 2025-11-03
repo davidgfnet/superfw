@@ -54,9 +54,19 @@ START_THUMB_FUNC(set_undef_lr)
   .arm
 
   mrs r2, CPSR         // Save the current CPSR
-  mov r1, $0x1B        // Move to undefined mode
-  msr CPSR_c, r1
+  msr CPSR_c, $0x9B    // Move to undefined mode
   mov lr, r0           // Store in UNDEF[LR]
+  msr CPSR_c, r2       // Restore original model and CPSR
+  bx lr
+
+// Writes the LR register for CPU abort mode (IGM-KeyCombo register)
+START_THUMB_FUNC(set_abort_lr)
+  mov r2, pc; bx r2    // Go into arm mode
+  .arm
+
+  mrs r2, CPSR         // Save the current CPSR
+  msr CPSR_c, $0x97    // Move to abort mode
+  mov lr, r0           // Store in ABORT[LR]
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 

@@ -23,14 +23,23 @@
 #define IWRAM_SPILL_SIZE        (16 * 1024)
 #define VRAM_SPILL_SIZE         (80 * 1024)
 
+#define IGM_ENTRYPOINT_NOCHEATS_OFF     ( 8*4)    // Offsets in ingame.S
+#define IGM_ENTRYPOINT_CHEATS_OFF       (12*4)
+
+#define FLASH_IGM_TRAMP_NOCHEATS_OFF    ( 8*4)    // Offsets in ingame_trampoline.S
+#define FLASH_IGM_TRAMP_CHEATS_OFF      (32*4)
+
 #ifndef __ASSEMBLER__
 
 // In-game menu patching structure
 // This is used to load and patch the menu with the required values.
 
 typedef struct {
-  uint32_t startup_insts[15];          // Initial startup instructions
-  uint32_t startup_addr;               // Startup address to begin ROM execution
+  uint32_t startup_insts[8];           // Initial startup instructions
+
+  uint32_t tramp1_insts[4];            // NOR trampolines
+  uint32_t tramp2_insts[4];
+
   uint32_t menu_rsize;                 // Payload size (including scratch area).
 
   uint32_t drv_issdhc;                 // Boolean (is SDHC card)
@@ -198,6 +207,9 @@ typedef struct {
 
 _Static_assert(sizeof(t_iomap) == 1024, "I/O map size mismatch");
 _Static_assert(sizeof(t_spilled_region) <= MIN_SCRATCH_SPACE, "Reserved spilled area size is too small");
+
+_Static_assert(offsetof(t_igmenu, tramp1_insts) == IGM_ENTRYPOINT_NOCHEATS_OFF, "Struct offset mismatch");
+_Static_assert(offsetof(t_igmenu, tramp2_insts) == IGM_ENTRYPOINT_CHEATS_OFF, "Struct offset mismatch");
 
 #endif
 

@@ -81,3 +81,8 @@ SECTIONS
     __EWRAM_SIZE__ = __EWRAM_END__ - __EWRAM_START__;
     __IWRAM_SIZE__ = __IWRAM_END__ - __IWRAM_START__;
 }
+
+ASSERT(ingame_menu             == 0x02000000, "ingame_menu should be at address 0x02000000")
+ASSERT(igm_trampoline_nocheats == 0x02000020, "igm_trampoline_nocheats should be at address 0x02000020")
+ASSERT(igm_trampoline_cheats   == 0x02000030, "igm_trampoline_nocheats should be at address 0x02000030")
+
