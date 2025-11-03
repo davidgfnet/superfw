@@ -10,6 +10,8 @@ OBJCOPY		:= $(PREFIX)objcopy
 
 COMPRESSION_RATIO ?= 3
 
+GLOBAL_DEFINES = -D__GBA__
+
 # BOARD can be "sd", "lite", "chis"
 BOARD ?= sd
 
@@ -55,33 +57,35 @@ ifeq ($(BUNDLE_OTHER_EMULATORS),1)
                 emu/pceadvance-v7.5-scptch.gba.comp
 endif
 
+BASEFLAGS=$(GLOBAL_DEFINES) -mcpu=arm7tdmi -mtune=arm7tdmi
+
 CFLAGS=-O2 -ggdb \
-       -D__GBA__ $(GLOBAL_DEFINES) \
+       $(BASEFLAGS) \
        -DFW_MAX_SIZE_KB=$(MAXFSIZE) -DFW_FLAVOUR="\"$(FWFLAVOUR)\"" \
        -DSC_FAST_ROM_MIRROR="use_fast_mirror()" \
        -DSD_PREERASE_BLOCKS_WRITE \
        -DVERSION_WORD="$(VERSION_WORD)" \
        -DVERSION_SLUG_WORD="0x$(VERSION_SLUG_WORD)" \
-       -mcpu=arm7tdmi -mtune=arm7tdmi -Wall -Isrc -I. -mthumb -flto -flto-partition=none
+       -Wall -Isrc -I. -mthumb -flto -flto-partition=none
 
 
 INGAME_CFLAGS=-Os -ggdb \
-              -D__GBA__ $(GLOBAL_DEFINES) \
+              $(BASEFLAGS) \
               -DNO_SUPERCARD_INIT \
               -DSD_PREERASE_BLOCKS_WRITE \
-              -mcpu=arm7tdmi -mtune=arm7tdmi -Wall -Isrc -I. \
+              -Wall -Isrc -I. \
               -mthumb -flto
 
 DLDI_CFLAGS=-Os -ggdb \
-            -D__GBA__ $(GLOBAL_DEFINES) \
+            $(BASEFLAGS) \
             -DSD_PREERASE_BLOCKS_WRITE \
-            -mcpu=arm7tdmi -mtune=arm7tdmi -Wall -Isrc -I. \
+            -Wall -Isrc -I. \
             -mthumb -flto -fPIC
 
 DIRECTSAVE_CFLAGS=-Os -ggdb \
-                 -D__GBA__ $(GLOBAL_DEFINES) \
+                 $(BASEFLAGS) \
                  -DNO_SUPERCARD_INIT \
-                 -mcpu=arm7tdmi -mtune=arm7tdmi -Wall -Isrc -I. \
+                 -Wall -Isrc -I. \
                  -marm -flto -fPIC
 
 FATFSFILES=fatfs/diskio.c \
@@ -147,14 +151,14 @@ INFILES=src/gba_ewram_crt0.S \
         src/fonts/font_render.c \
         ${FATFSFILES}
 
-all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload
+all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload ingame_trampoline.payload
 	# Wrap the firmware around a ROM->EWRAM loader
 	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K
 	$(OBJCOPY) --output-target=binary firmware.elf superfw.gba
 	# Fix the header/checksum.
 	./tools/fw-fixer.py superfw.gba
 
-firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload src/messages_data.h ldscripts/gba_ewram.ld.i
+firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload ingame_trampoline.payload src/messages_data.h ldscripts/gba_ewram.ld.i
 	# Build the actual firmware image
 	$(CC) $(CFLAGS) -o firmware.ewram.elf $(INFILES) -T ldscripts/gba_ewram.ld.i -nostartfiles -Wl,-Map=firmware.ewram.map -Wl,--print-memory-usage -fno-builtin
 	$(OBJCOPY) --output-target=binary firmware.ewram.elf firmware.ewram.gba
@@ -175,6 +179,10 @@ ingamemenu.payload:	$(MENUFILES) src/menu_messages.h
 	$(CC) $(INGAME_CFLAGS) -o ingamemenu.elf $(MENUFILES) -T ldscripts/gba_ingame.ld \
 			-nostartfiles -fno-builtin -Wl,-Map=firmware.ingame.map -Wl,--print-memory-usage
 	$(OBJCOPY) --output-target=binary ingamemenu.elf ingamemenu.payload
+
+ingame_trampoline.payload:	src/ingame_trampoline.S
+	$(CC) $(BASEFLAGS) -nostartfiles -T ldscripts/gba_ingametramp.ld -o ingame_trampoline.elf src/ingame_trampoline.S
+	$(OBJCOPY) --output-target=binary ingame_trampoline.elf ingame_trampoline.payload
 
 src/messages_data.h:	res/messages.py
 	./res/messages.py h main > src/messages_data.h

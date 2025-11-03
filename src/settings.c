@@ -262,7 +262,7 @@ void sram_template_filename_calc(const char *rom, const char * extension, char *
   }
   else {
     const char *p = file_basename(rom);
-    const char *path = save_paths[save_path_default];;
+    const char *path = save_paths[save_path_default];
     strcpy(savefn, path);   // Add the base path
     strcat(savefn, p);      // Append just the basename
   }

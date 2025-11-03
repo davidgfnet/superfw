@@ -41,6 +41,10 @@
 //
 // Payload size can be read from its header
 
+#define def_symbol(fnname)             \
+  .globl fnname;                       \
+  fnname
+
 #define def_function(fnname)           \
   .globl fnname;                       \
   .type fnname, function;              \
@@ -69,34 +73,35 @@
 .globl savefile_pattern
 .globl savestate_pattern
 
-.globl ingame_menu
-ingame_menu:
-  sub r5, pc, $8      // R5 contains the address for "ingame_menu" (base addr)
-
+def_symbol(ingame_menu):
   // Writes address 0x03007ffc (actually mirror 0x03fffffc) with the ingame
   // menu address (following routine). Resumes ROM startup execution.
   adr r0, ingame_menu_entrypoint_nocheats
   mov r1, $0x04000000
   str r0, [r1, #-4]
 
-  mov r0, $0x5     // R/W mode
-  bl set_cpld_mode
-
-  // Update binary start addr (in ROM) so we can copy if whenever needed.
-  str r5, sob_addr
-  ldr r0, bin_size
-  add r0, r0, r5   // Spill to the end of the binary (in SDRAM space)
-  str r0, spill_addr
-
-  mov r0, $0x1             // Read only mode
-  bl set_cpld_mode
-
-2:
-  ldr r0, [pc, #0x4]
-  bx r0
+  // The start address is patched to 0xB8 (ROM header)
+  mov r0, $0x08000000
+  ldr pc, [r0, #0xB8]          // Reserved area, contains start address.
 
   nop
-  nop                     // To be patched with the game entry point branch
+  nop
+  nop
+
+// Ingame menu entry via NOR trampoline
+def_symbol(igm_trampoline_nocheats):
+  pop {r1}                   // Save WAITCNT to the reserved slot
+  str r1, saved_waitcnt
+
+  str pc, running_on_nor     // Write non-zero value there
+  b ingame_menu_entry
+
+def_symbol(igm_trampoline_cheats):
+  pop {r1}                   // Save WAITCNT to the reserved slot
+  str r1, saved_waitcnt
+
+  str pc, running_on_nor
+  b ingame_menu_mid_entrypoint_cheats
 
 // Informational data for the loader (read-only).
 ingame_payload_size:
@@ -121,6 +126,7 @@ savefile_backups:      .word 0x0    // Fill the number of backups to preserve.
 
 savefile_pattern:      .fill 256, 1, 0          // File name pattern (NULL terminated)
 savestate_pattern:     .fill 256, 1, 0          // File name pattern (NULL terminated)
+
 
 // Necessary handlers for the SC driver
 def_function(sc_issdhc):
@@ -224,9 +230,18 @@ ingame_menu_entry:
   strh r2, [r1, #-2]; strh r2, [r1, #-2]
   strh r0, [r1, #-2]; strh r0, [r1, #-2]
 
+  // Calculate the sob_addr (payload base address)
+  9: mov r0, pc;
+     sub r0, $(9b - ingame_menu + 8);
+     str r0, sob_addr
+
+  // Calculate the spill addr
+  ldr r1, =__BINARY_SIZE__
+  add r1, r0
+  str r1, spill_addr
+
   // Save relevant I/O regs: timer, DMA, display... and disable them!
   // Uses ~160KiB of space. The menu must have that much space after.
-  ldr r1, spill_addr
   mov r3, $0
 
   // Backup and disable timers (8 bytes)
@@ -385,11 +400,27 @@ ingame_menu_entry:
   bl restore_spill_data
 
   // Repatch the IRQ handler just in case we activated/deactivated cheats!
-  ldr r1, use_cheats_irq
-  cmp r1, $0
-  adrne r0, ingame_menu_entrypoint_cheats
-  adreq r0, ingame_menu_entrypoint_nocheats
   mov r1, $0x04000000
+
+  ldr r2, use_cheats_irq
+  cmp r2, $0
+  adreq r0, ingame_menu_entrypoint_nocheats
+  adrne r0, ingame_menu_entrypoint_cheats
+
+  ldr r2, running_on_nor
+  cmp r2, $0
+  beq 1f
+
+    ldr r0, [r1, #-4]          // Load the IRQ handler address
+    bic r0, $0x0ff             // Find base address, payload is always 1KB aligned
+    bic r0, $0x300             // Find base address, payload is always 1KB aligned
+    ldr r2, use_cheats_irq
+    cmp r2, $0
+
+    addeq r0, r0, $FLASH_IGM_TRAMP_NOCHEATS_OFF
+    addne r0, r0, $FLASH_IGM_TRAMP_CHEATS_OFF
+
+1:
   str r0, [r1, #-4]
 
   // Make the SDRAM read-only again!
@@ -443,6 +474,7 @@ ingame_menu_entry:
   ldr r3, [r1, #(64 + 0)]            // CPSR (IRQ mode)
   msr cpsr, r3                       // Load CPSR, changes to IRQ mode too.
 
+  ldr sp, [r1, #(4*13)]              // Restore the stack before we actually overwrite it
 
   // Wait for v-blank, try to be precise to help with timing breakages
   ldr r3, =(0x04000000 + REG_TM0CNT)
@@ -467,8 +499,6 @@ ingame_menu_entry:
   strh r9, [r2, #REG_DMA3CNT_H]
 
   // Restore regs before calling out the user IRQ
-  ldr sp, [r1, #(4*13)]  // Restore the stack before we actually overwrite it
-
   ldr r8, [r1, #(4*12)]  // Load r0-r3 and r12/r14 into r4-r9
   ldr r9, [r1, #(4*14)]
   ldr lr, [r1, #(4*15)]  // BIOS handler ret addr
@@ -478,18 +508,61 @@ ingame_menu_entry:
 
   ldmia r1!, {r4-r11}    // Load save registers (r4-r11)
 
-  // Go ahead and fallback to the user IRQ handler.
-  ldr pc, [r2, #-12]
+  // Check whether we are running from SDRAM or NOR
+  ldr r1, running_on_nor
+  cmp r1, $0
+
+  // Go ahead and fallback to the user IRQ handler directly.
+  ldreq pc, [r2, #-12]
+
+  // Go back via trampoline (remaps NOR)
+return_to_nor:
+  adr ip, tramp_code                 // Load pool pointer
+  ldmia ip, {r0, r1, r2, r3, ip}     // Load 5 ARM instructions
+  stmdb sp, {r0, r1, r2, r3, ip}     // Store them at SP-20
+
+  adr ip, tramp_data                 // Load pool pointer
+  ldmia ip, {r0, r1, r2}             // Load r0-r2 constants needed by the trampoline code
+  ldr r3, saved_waitcnt              // Load the WAITCNT value to restore.
+  sub pc, sp, $(4*5)                 // Jump to SP-20 to execute the copied insts.
+
+
+ingame_menu_mid_entrypoint_cheats:
+  // Entrypoint for cheats enabled (from NOW). Often we just process cheats.
+  push {r5-r6, lr}
+  bl cheat_process_arm
+  pop {r5-r6, lr}
+
+  mov r0, $0x04000000
+  ldr r2, (ingame_menu_hotkey + 2)    // Read mask from constant pool (rotate by 16)
+  ldr r1, [r0, #REG_P1]      // It's actually a 16 bit reg really
+  cmp r2, r1, lsl #16        // Compare the lowest 16 bits only!
+  bne return_to_nor          // Exiting to NOR is a bit more convoluted!
+  b ingame_menu_entry        // Key combo match, launch menu
+
+
+tramp_code:
+  strh r1, [r0]                      // Map NOR again (read only)
+  strh r1, [r0]
+  strh r2, [r0]                      // Writing zero (NOR mapped, read only, etc).
+  str  r3, [r2, #REG_WAITCNT]        // Restore WAITCNT
+  ldr  pc, [r2, #-12]                // Jump to the user IRQ handler
+tramp_data:
+  .word 0x09FFFFFE
+  .word 0x0000A55A
+  .word 0x04000000
 
 // Some constants that, for some reason, don't wanna go into the pool
-bin_size:
-  .word __BINARY_SIZE__         // Binary size for the ingame menu payload.
 sob_addr:
   .word 0          // Updated with the actual ROM addr where the menu lives
 spill_addr:
   .word 0          // Updated with the end-of-binary address address to spill
 use_cheats_irq:
   .word 0          // Whether we should be using the slower cheats IRQ hook
+running_on_nor:
+  .word 0          // Whether we should be returning to NOR (or SDRAM)
+saved_waitcnt:
+  .word 0          // Saved WAITCNT value (in case of NOR game)
 
 // Constant pool goes here.
 .balign 4
@@ -570,12 +643,21 @@ def_function(get_undef_lr):
 
 // Reset routines
 def_function(reset_game):
-  mov r0, $0x1       // SD-RAM, Readonly mode
+  ldr r0, running_on_nor
+  cmp r0, $0
+  movne r0, $0x0       // NOR, readonly mode
+  moveq r0, $0x1       // SD-RAM, Readonly mode
   bl set_cpld_mode
   b clear_and_reset
 
 def_function(reset_fw):
-  mov r0, $0x0       // FW mapped, read-only mode
+  #ifdef SUPERCHIS_IO
+    mov r0, $0x100         // Reset flash mapping
+    .rept 8
+      bl set_cpld_mode
+    .endr
+  #endif
+  mov r0, $0x0               // FW mapped, read-only mode
   bl set_cpld_mode
   b clear_and_reset
 

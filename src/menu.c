@@ -591,7 +591,7 @@ static const t_patch * get_game_patch(const t_load_gba_info *info) {
          info->patch_type == PatchEngine   && info->patches_cache_found ? &info->patches_cache : NULL;
 }
 
-bool ingame_menu_avail(const t_load_gba_info *info) {
+bool ingame_menu_avail_sdram(const t_load_gba_info *info) {
   const t_patch *p = get_game_patch(info);
   // Necessary size to load the IGM (+fonts +cheats)
   const unsigned igm_reqsz = ROUND_UP2(ingame_menu_payload.menu_rsize + font_block_size() + spop.p.load.l.cheats_size, 1024);
@@ -601,6 +601,20 @@ bool ingame_menu_avail(const t_load_gba_info *info) {
     // Discard holes that are too small, or not well formed.
     if (!p || p->hole_size < igm_reqsz || p->hole_addr + p->hole_size > info->romfs)
       return false;   // Too big to fit the menu!
+  }
+
+  // Check if the patches exist and have proper IRQ support.
+  return p && p->irqh_ops > 0;
+}
+
+bool ingame_menu_avail_flash(const t_load_gba_info *info) {
+  const t_patch *p = get_game_patch(info);
+
+  // Checks if the ROM is small enough so the last 4MiB block can be remapped.
+  if (info->romfs > MAX_GBA_ROM_SIZE - NOR_BLOCK_SIZE) {
+    // Otherwise find a gap to flash on NOR our tiny payload
+    if (!p || p->hole_size < DIRSAVE_REQ_SPACE || p->hole_addr + p->hole_size > info->romfs)
+      return false;   // Too big to fit!
   }
 
   // Check if the patches exist and have proper IRQ support.
@@ -695,9 +709,11 @@ static bool prepare_gba_info(
 
   // Fill defaults as requested if possible.
   bool allowds = load_sdram ? dirsav_avail_sdram(info) : dirsav_avail_flash(info);
+  bool allowigm = load_sdram ? ingame_menu_avail_sdram(info) : ingame_menu_avail_flash(info);
+
   info->rtc_patch_enabled = st->use_rtc && rtcemu_avail(info);
   info->use_dsaving = st->use_dsaving && allowds;
-  info->ingame_menu_enabled = st->use_igm && ingame_menu_avail(info);
+  info->ingame_menu_enabled = st->use_igm && allowigm;
 
   return true;
 }
@@ -2334,7 +2350,7 @@ static void keypress_popup_loadgba(unsigned newkeys) {
   }
 
   // Disable ingame-menu if not available.
-  if (!ingame_menu_avail(&spop.p.load.i))
+  if (!ingame_menu_avail_sdram(&spop.p.load.i))
     spop.p.load.i.ingame_menu_enabled = false;
 
   // If no RTC patches are available, force them to false.
@@ -2398,8 +2414,7 @@ static void keypress_popup_loadgba(unsigned newkeys) {
       }
 
       unsigned err = load_gba_rom(
-        spop.p.load.i.romfn, spop.p.load.i.romfs,
-        ROM_ENTRYPOINT(spop.p.load.i.romh), p,
+        spop.p.load.i.romfn, spop.p.load.i.romfs, p,
         spop.p.load.l.sram_save_type == SaveDirect ? &dsinfo : NULL,
         spop.p.load.i.ingame_menu_enabled,
         spop.p.load.i.rtc_patch_enabled ? &spop.p.load.l.rtcval : NULL,
@@ -2493,7 +2508,7 @@ static void keypress_popup_norwrite(unsigned newkeys) {
     // Disable certain features (depends on patch types)
     if (!dirsav_avail_flash(&spop.p.norwr.i))
       spop.p.norwr.i.use_dsaving = false;
-    if (!ingame_menu_avail(&spop.p.norwr.i))
+    if (!ingame_menu_avail_flash(&spop.p.norwr.i))
       spop.p.norwr.i.ingame_menu_enabled = false;
     if (!rtcemu_avail(&spop.p.norwr.i))
       spop.p.norwr.i.rtc_patch_enabled = false;
@@ -2634,14 +2649,32 @@ static void keypress_popup_norload(unsigned newkeys) {
       const t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
       const int stype = GET_GATTR_SAVEM(e->gattrs);
       const EnumSavetype st = stype < 0 ? SaveTypeNone : stype;
+      bool uses_dsave = e->gattrs & GATTR_SAVEDS;
+      bool uses_igm   = e->gattrs & GATTR_IGM;
+      bool uses_rtc   = e->gattrs & GATTR_RTC;
 
       t_dirsave_info dsinfo;
       unsigned errsave = prepare_savegame(
         spop.p.norld.l.sram_load_type, spop.p.norld.l.sram_save_type,
         st, &dsinfo, spop.p.norld.l.savefn);
-      // TODO
+      if (errsave) {
+        unsigned errmsg = (errsave == ERR_SAVE_BADSAVE)   ? MSG_ERR_SAVERD :
+                          (errsave == ERR_SAVE_CANTALLOC) ? MSG_ERR_SAVEPR :
+                          (errsave == ERR_SAVE_BADARG)    ? MSG_ERR_SAVEIT :
+                                                            MSG_ERR_SAVEWR;
+        spop.alert_msg = msgs[lang_id][errmsg];
+        return;
+      }
 
-      launch_gba_nor(e->blkmap, e->numblks, e->entry_addr, &dsinfo, &spop.p.norld.l.rtcval, false);
+      // TODO Handle errors, finish missing stuff.
+      unsigned err = launch_gba_nor(
+        e->game_name,
+        e->blkmap, e->numblks,
+        uses_dsave ? &dsinfo : NULL,
+        uses_rtc ? &spop.p.norld.l.rtcval : NULL,
+        uses_igm,
+        spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0);
+
     } else if (spop.selector == GBALdSetRTC) {
       void accept_rtc() {
         spop.p.norld.l.rtcval = spop.rtcpop.val;
@@ -2854,7 +2887,7 @@ static void keypress_menu_norbrowse(unsigned newkeys) {
       // Use attributes to determine patched save method.
       bool game_no_save = GET_GATTR_SAVEM(e->gattrs) <= SaveTypeNone;
 
-      t_rom_settings savedcfg = {  // TODO FIX
+      t_rom_settings savedcfg = {  // TODO FIX FIX FIX
         //.rtcval = spop.p.load.l.rtcval,
         .use_dsaving = (e->gattrs & GATTR_SAVEDS),
         .use_cheats = false,

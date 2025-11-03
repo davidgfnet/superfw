@@ -349,11 +349,18 @@ bool patch_apply_rom(
   if (igmenu_addr) {
     apply_patch_ops(buffer, bufsize, baseaddr, ops, pdata->irqh_ops, pdata->prgs, &psi);
 
+    // Need to patch the header with some entrypoint detour.
     if (baseaddr == 0x0) {
+      uint32_t ibranch = *(uint32_t*)buffer;
+      uint32_t boot_addr = ((ibranch & 0xFFFFFF) << 2) + 8 + GBA_ROM_BASE;
+
       // Calculate the branch from 0x08000000 to igmenu_addr
-      unsigned brop = 0xEA000000 | ((igmenu_addr - 0x08000000 - 8) >> 2);
+      unsigned brop = 0xEA000000 | ((igmenu_addr - GBA_ROM_BASE - 8) >> 2);
+
       // Patch the first instruction with the branch opcode
       write_mem32(&buffer[0], brop);
+      // Patch offset 0xB8 (unused header bits) with the real boot addr.
+      write_mem32(&buffer[0xB8], boot_addr);
     }
   }
   ops += pdata->irqh_ops;

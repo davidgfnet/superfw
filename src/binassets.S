@@ -20,32 +20,33 @@
 // These are kept here and compressed along with the firmware due to their
 // small size and better compression ratio when kept toghether (due to dupe code).
 
+#define DEF_ASSET(name, file)   \
+  .global name;                 \
+  .balign 4;                    \
+  name:                         \
+  .incbin file;                 \
+  name##_end:                   \
+  .balign 4;                    \
+  .balign 4;                    \
+  name##_size:                  \
+    .word (name##_end - name);  \
+  .global name##_size;
+
 .text
 .balign 4
 
 // In-game menu assets
-.global ingame_menu_payload
-ingame_menu_payload:
-  .incbin "ingamemenu.payload"
-ingame_menu_payload_end:
-
-.global ingame_menu_payload_size
-ingame_menu_payload_size:
-  .word (ingame_menu_payload_end - ingame_menu_payload)
+DEF_ASSET(ingame_menu_payload, "ingamemenu.payload")
 
 // Direct save payload
-.global directsave_payload
-directsave_payload:
-  .incbin "directsave.payload"
-directsave_payload_end:
-
-.global directsave_payload_size
-directsave_payload_size:
-  .word (directsave_payload_end - directsave_payload)
+DEF_ASSET(directsave_payload, "directsave.payload")
 
 // DLDI payload (builtin!)
-.global dldi_payload
-dldi_payload:
-  .incbin "superfw.dldi.payload"
+DEF_ASSET(dldi_payload, "superfw.dldi.payload")
+
+// IGM trampoline gadget for NOR flashed games
+#ifdef SUPPORT_NORGAMES
+  DEF_ASSET(ingame_trampoline_payload, "ingame_trampoline.payload")
+#endif
 
 
