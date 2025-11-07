@@ -77,13 +77,13 @@ INGAME_CFLAGS=-Os -ggdb \
               -mthumb -flto
 
 DLDI_CFLAGS=-Os -ggdb \
-            $(BASEFLAGS) \
+            $(BASEFLAGS) -DSDDRV_TIMEOUT_MULT=2 \
             -DSD_PREERASE_BLOCKS_WRITE \
             -Wall -Isrc -I. \
             -mthumb -flto -fPIC
 
 DIRECTSAVE_CFLAGS=-Os -ggdb \
-                 $(BASEFLAGS) \
+                 $(BASEFLAGS) -DSDDRV_TIMEOUT_MULT=16 \
                  -DNO_SUPERCARD_INIT \
                  -Wall -Isrc -I. \
                  -marm -flto -fPIC
