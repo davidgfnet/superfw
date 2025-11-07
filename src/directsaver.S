@@ -29,6 +29,8 @@
 #define SAFE_OP_ROUTINE_SIZE    12   // Number of insts (32 bit insts)
 #define SAFE_OP_INST_OFF         5   // Instruction number (from 0) in the routine
 
+#define STACK_IRESV     (4*SAFE_OP_ROUTINE_SIZE + 4) // Extra slot for saving LR
+
 // Jump table in ARM mode to simplify instruction sizes.
 .section    .directsave, "ax"
 .align 4
@@ -174,10 +176,6 @@ get_memory_size:
 
 #define SD_DATA0                   0x0100
 
-#define SD_ERR_READTIMEOUT             10
-#define SD_ERR_WRITETIMEOUT            11
-#define CMD_WAIT_DATA            0x400000     // Aprox ~1s as data timeout
-
 
 // Some registers are fixed values, set on function entry for speed.
 // r7 must contain REG_IMG address
@@ -188,15 +186,16 @@ get_memory_size:
 
 // r0: output byte buffer (output)
 // r1: number of blocks to read
+// r2: number of timeout iterations
 .global sc_read_sectors_w0
 .type sc_read_sectors_w0,function
 sc_read_sectors_w0:
-  push {r4-r12, lr}
+  push {r2, r4-r12, lr}
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
 
-  sub sp, $48      // Some space for the code
+  sub sp, $STACK_IRESV      // Some space for the code
 
   // Copy the template routine to the stack
   .set i, 0
@@ -211,7 +210,7 @@ sc_read_sectors_w0:
   1:
     // This is the slower unaligned version (a bit more friendly for this use case)
     // Perform a wait on the data bus, until the bits are pulled zero once.
-    mov r4, $(CMD_WAIT_DATA)
+    ldr r4, [sp, #STACK_IRESV]   // Read initial timeout value
     2:
       subs r4, r4, $1
       moveq r0, $1      // Non zero retvalue on timeout error
@@ -247,7 +246,7 @@ sc_read_sectors_w0:
 
   mov r0, $0            // Return value: success
 3:
-  add sp, $48
+  add sp, $(STACK_IRESV + 4)     // Skip r2 pushed on the stack
   pop {r4-r12, lr}
   bx lr
 
@@ -258,19 +257,20 @@ sc_read_sectors_w0:
 
 // r0: data byte buffer (input)
 // r1: number of 512byte blocks to send/write
+// r2: number of timeout iterations
 // returns non zero on timeout or data rejected (ie. CRC error, write error...)
 .global sc_write_sectors_w0
 .type sc_write_sectors_w0,function
 sc_write_sectors_w0:
-  push {r4-r12, lr}
+  push {r2, r4-r12, lr}
   mov r5, $(SC_WRITE_REGISTER_8)
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
 
-  sub sp, $(8 + 48)    // Some space for the CRC buffer, and the RAM routine.
-  mov r4, r0           // Input buffer
-  mov r6, r1           // Block count
+  sub sp, $(STACK_IRESV + 8)    // Some space for the CRC buffer, and the RAM routine.
+  mov r4, r0                    // Input buffer
+  mov r6, r1                    // Block count
 
   // Copy the template routine to the stack
   .set i, 0
@@ -281,7 +281,7 @@ sc_write_sectors_w0:
   .endr
 
   // Calculate crc for the first block.
-  add r1, sp, $48
+  add r1, sp, $STACK_IRESV
   bl crc16_nibble_512_nolut8bit
 
   1: // Loop r6 times. Try to perform checksum while waiting for write to finish.
@@ -319,7 +319,7 @@ sc_write_sectors_w0:
     .set i, 0
     #ifdef SUPERCARD_LITE_IO
     .rept 4                  // Send 16x4 bits of checksum
-      ldrh r2, [sp, #(i*2 + 48)]
+      ldrh r2, [sp, #(i*2 + STACK_IRESV)]
       orr r2, r2, lsl #20
       mov r3, r2, lsr #8
       bl sd_stm2
@@ -327,7 +327,7 @@ sc_write_sectors_w0:
     .endr
     #else
     .rept 8                  // Send 16x4 bits of checksum
-      ldrb r2, [sp, #(i + 48)]
+      ldrb r2, [sp, #(i + STACK_IRESV)]
       bl sd_str
       .set i, i+1
     .endr
@@ -367,11 +367,11 @@ sc_write_sectors_w0:
     // Calculate the block checksum for the next block to send.
     // (helps hiding busy latency!)
     mov r0, r4
-    add r1, sp, $48
+    add r1, sp, $STACK_IRESV
     bl crc16_nibble_512_nolut8bit
 
     // Perform a wait on the data bus, DAT0 goes high when ready.
-    mov r1, $(CMD_WAIT_DATA)
+    ldr r1, [sp, #(STACK_IRESV + 8)]
     2:
       subs r1, r1, $1
       beq 4f
@@ -383,7 +383,7 @@ sc_write_sectors_w0:
 
 5:
   // Perform a final wait, ensure we leave with no pending operations.
-  mov r0, $(CMD_WAIT_DATA)
+  ldr r0, [sp, #(STACK_IRESV + 8)]
   2:
     subs r0, r0, $1
     beq 4f
@@ -391,13 +391,13 @@ sc_write_sectors_w0:
     tst r2, $(SD_DATA0)
   beq 2b
 
-  add sp, $(8 + 48)
-  pop {r4-r12, lr}
+  add sp, $(8 + STACK_IRESV)
+  pop {r2, r4-r12, lr}
   mov r0, $0            // Return OK
   bx lr
 
 3:  // Wait-and-exit on error
-  mov r0, $(CMD_WAIT_DATA)
+  ldr r0, [sp, #(STACK_IRESV + 8)]
   2:
     subs r0, r0, $1
     beq 4f
@@ -406,8 +406,8 @@ sc_write_sectors_w0:
   beq 2b
 
 4:  // Return non zero on timeout/response error
-  add sp, $(8 + 48)
-  pop {r4-r12, lr}
+  add sp, $(8 + STACK_IRESV)
+  pop {r2, r4-r12, lr}
   mov r0, $1
   bx lr
 
@@ -420,7 +420,7 @@ sc_write_sectors_w0:
 // r0: number of clocks to send
 send_empty_clocks:
   push {r5-r12, lr}
-  sub sp, $48      // Some space for the code
+  sub sp, $STACK_IRESV      // Some space for the code
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
@@ -438,7 +438,7 @@ send_empty_clocks:
     bl sd_ldm4
     subs r0, $8
     bgt 1b
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r5-r12, lr}
   bx lr
 
@@ -448,7 +448,7 @@ send_empty_clocks:
 // r0: number of iterations before giving up
 wait_sdcard_idle:
   push {r5-r12, lr}
-  sub sp, $48      // Some space for the code
+  sub sp, $STACK_IRESV      // Some space for the code
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
@@ -473,7 +473,7 @@ wait_sdcard_idle:
 
   mov r0, $0
 2:
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r5-r12, lr}
   bx lr
 
@@ -483,7 +483,7 @@ wait_sdcard_idle:
 // r0: number of iterations before giving up
 wait_dat0_idle:
   push {r5-r12, lr}
-  sub sp, $48
+  sub sp, $STACK_IRESV
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
@@ -506,12 +506,12 @@ wait_dat0_idle:
     subs r0, $1              // Decrement timeout.
     bne 1b
 
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r5-r12, lr}
   mov r0, $0
   bx lr
 2:
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r5-r12, lr}
   mov r0, $1
   bx lr
@@ -524,7 +524,7 @@ wait_dat0_idle:
 // r2: number of iterations before giving up
 receive_sdcard_response:
   push {r4-r12, lr}
-  sub sp, $48
+  sub sp, $STACK_IRESV
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
@@ -551,7 +551,7 @@ receive_sdcard_response:
     bne 1b
 
   mov r0, $0           // Timeout, return false
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r4-r12, lr}
   bx lr
 
@@ -574,7 +574,7 @@ receive_sdcard_response:
     bne 3b
 
   mov r0, $1           // Return true
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r4-r12, lr}
   bx lr
 
@@ -586,7 +586,7 @@ receive_sdcard_response:
 // r1: command length in bytes
 send_sdcard_commandbuf:
   push {r5-r12, lr}
-  sub sp, $48
+  sub sp, $STACK_IRESV
   ldr r7, =(0x04000000 + REG_IME)
   ldr r8, =0x09FFFFFE
   ldr r9, =0xA55A
@@ -612,7 +612,7 @@ send_sdcard_commandbuf:
     subs r1, $1
     bne 1b
 
-  add sp, $48
+  add sp, $STACK_IRESV
   pop {r5-r12, lr}
   bx lr
 
@@ -621,11 +621,11 @@ send_sdcard_commandbuf:
 // Supercard SD interface "safe" read/write operation
 #define SD_OPERATION(fn_name, ...)                                            \
   fn_name:                                                                    \
-    push {lr};   /* Adding 4 bytes to the stack, careful! */                  \
+    str lr, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];   /* Preserve LR */              \
                                                                               \
     /* Insert operation instruction */                                        \
     ldr r11, 1f;                                                              \
-    str r11, [sp, #(4 + SAFE_OP_INST_OFF*4)];                                 \
+    str r11, [sp, #(SAFE_OP_INST_OFF*4)];                                     \
                                                                               \
     /* Disable IRQs */                                                        \
     mov r11, $0;                                                              \
@@ -633,12 +633,12 @@ send_sdcard_commandbuf:
                                                                               \
     /* Actually call the routine */                                           \
     mov lr, pc;                                                               \
-    add pc, sp, $4;                                                           \
+    mov pc, sp;                                                               \
                                                                               \
     /* (maybe) re-enable IRQs */                                              \
     str r10, [r7];                                                            \
                                                                               \
-    pop {pc};                                                                 \
+    ldr pc, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];   /* Restore LR directly */      \
   1:                                                                          \
     __VA_ARGS__;                                                              \
 
@@ -653,7 +653,7 @@ SD_OPERATION(sd_ldm4, ldmia r5, {r2, r3, r6, r12});
 SD_OPERATION(sd_stm4, stmia r5, {r2, r3, r6, r12});
 
 
-// Actual implementation template. (12 insts, 48 bytes)
+// Actual implementation template. (12 insts, 48 bytes, see STACK_IRESV)
 safe_sd_operation:
   // Map SD card driver into the high address space (5 insts)
   mov r11, $(0xD7)       // SDRAM + RW + SD iface

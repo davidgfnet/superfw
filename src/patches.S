@@ -469,8 +469,7 @@ START_FUNC(patch_eeprom_read_directsave)
   push {r7, lr}
 
   mov r7, $READ_EEPROM_FN
-  adr r3, patch_eeprom_read_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_eeprom_read_directsave_size
   bl 33f
 
   pop {r7}
@@ -487,8 +486,7 @@ START_FUNC(patch_eeprom_write_directsave)
   push {r7, lr}
 
   mov r7, $WRITE_EEPROM_FN
-  adr r3, patch_eeprom_write_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_eeprom_write_directsave_size
   bl 33f
 
   // The handler does actually return an error code in r0
@@ -516,8 +514,7 @@ START_FUNC(patch_flash_read_directsave)
 
   // The address of the DirectSave payload is written right after the patch.
   mov r7, $READ_FLASH_FN
-  adr r3, patch_flash_read_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_flash_read_directsave_size
   bl 33f
 
   pop {r7}
@@ -532,8 +529,7 @@ START_FUNC(patch_flash_erase_device_directsave)
   push {r7, lr}
 
   mov r7, $ERASE_CHIP_FLASH_FN
-  adr r3, patch_flash_erase_device_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_flash_erase_device_directsave_size
   bl 33f
 
   pop {r7}
@@ -552,8 +548,7 @@ START_FUNC(patch_flash_erase_sector_directsave)
   lsl r0, #27; lsr r0, #27   // Limit sector number to [0...31]
 
   mov r7, $ERASE_SECTOR_FLASH_FN
-  adr r3, patch_flash_erase_sector_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_flash_erase_sector_directsave_size
   bl 33f
 
   pop {r7}
@@ -575,8 +570,7 @@ START_FUNC(patch_flash_write_sector_directsave)
   mov r1, r2
 
   mov r7, $WRITE_FLASH_FN
-  adr r3, patch_flash_write_sector_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_flash_write_sector_directsave_size
   bl 33f
 
   pop {r7}
@@ -606,8 +600,7 @@ START_FUNC(patch_flash_write_byte_directsave)
   mov r2, $128; lsl r2, #2;  // Load 512 bytes
 
   mov r7, $READ_FLASH_FN
-  adr r3, patch_flash_write_byte_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_flash_write_byte_directsave_size
   bl 33f
 
   // Data was read, proceed to patch the sector byte
@@ -619,8 +612,7 @@ START_FUNC(patch_flash_write_byte_directsave)
   mov r0, sp
 
   mov r7, $WRITE_FLASH_FN
-  adr r3, patch_flash_write_byte_directsave_size
-  ldr r3, [r3]
+  ldr r3, patch_flash_write_byte_directsave_size
   bl 33f
 
   add sp, $256

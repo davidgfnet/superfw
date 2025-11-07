@@ -360,7 +360,7 @@ unsigned load_gba_rom(
   return 0;
 }
 
-  // Flashes a game to NOR patching it as necessary. This includes DirSav as well as IGM.
+// Flashes a game to NOR patching it as necessary. This includes DirSav as well as IGM.
 __attribute__((noinline))
 unsigned flash_gba_nor(
   const char *fn, uint32_t fs,

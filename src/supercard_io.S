@@ -41,11 +41,6 @@
 
 #define SD_DATA0                0x0100
 
-#define SD_ERR_READTIMEOUT             10
-#define SD_ERR_WRITETIMEOUT            11
-#define CMD_WAIT_DATA            0x400000     // Aprox ~1s as data timeout
-
-
 .global sc_read_sectors_w0   // Version that uses 0x08000000-0x09FFFFFF addrs
 .global sc_read_sectors_w1   // Version that uses 0x0A000000-0x0BFFFFFF addrs
 
@@ -59,17 +54,18 @@
 
 // r0: output byte buffer (output)
 // r1: number of blocks to read
+// r2: number of timeout iterations when waiting for data.
 
 .type sc_read_sectors_w0,function
 sc_read_sectors_w0:
-  push {r4-r12}
+  push {r2, r4-r12}
 
   ldr r5, =SC_READ_REGISTER_8
   b 6f
 
 .type sc_read_sectors_w1,function
 sc_read_sectors_w1:
-  push {r4-r12}
+  push {r2, r4-r12}
 
   ldr r5, =SC_READ_REGISTER_A
 
@@ -81,14 +77,14 @@ sc_read_sectors_w1:
 
 1:
   // Perform a wait on the data bus, until the bits are pulled zero once.
-  mov r4, $(CMD_WAIT_DATA)
   mov r3, $(SC_READ_REGISTER_16)
+  ldr r2, [sp]
   2:
-    subs r4, r4, $1
+    subs r2, r2, $1   // Decrement timeout
     moveq r0, $1      // Non zero retvalue on timeout error
     beq 3f            // Function return.
-    ldrh r2, [r3]
-    tst r2, $(SD_DATA0)
+    ldrh r4, [r3]
+    tst r4, $(SD_DATA0)
   bne 2b
 
   // Go ahead and read a 512 byte sector
@@ -121,20 +117,20 @@ sc_read_sectors_w1:
 
   mov r0, $0            // Return value: success
 3:
-  pop {r4-r12}
+  pop {r2, r4-r12}
   bx lr
 
   // Unaligned code! It should be slower (but also smaller)
 5:
   // Perform a wait on the data bus, until the bits are pulled zero once.
-  mov r4, $(CMD_WAIT_DATA)
   mov r3, $(SC_READ_REGISTER_16)
+  ldr r2, [sp]
   2:
-    subs r4, r4, $1
+    subs r2, r2, $1   // Decrement timeout.
     moveq r0, $1      // Non zero retvalue on timeout error
     beq 3f            // Function return.
-    ldrh r2, [r3]
-    tst r2, $(SD_DATA0)
+    ldrh r4, [r3]
+    tst r4, $(SD_DATA0)
   bne 2b
 
   // Go ahead and read a 512 byte sector
@@ -160,7 +156,7 @@ sc_read_sectors_w1:
 
   mov r0, $0            // Return value: success
 3:
-  pop {r4-r12}
+  pop {r2, r4-r12}
   bx lr
 
 #else
@@ -172,13 +168,14 @@ sc_read_sectors_w1:
 
 // r0: output byte buffer (output)
 // r1: number of blocks to read
+// r2: number of timeout iterations when waiting for data.
 
 .type sc_read_sectors_w0,function
 sc_read_sectors_w0:
 .type sc_read_sectors_w1,function
 sc_read_sectors_w1:
 
-  push {r4-r11}
+  push {r2, r4-r11}
   ldr r5, =SCLITE_DATA_REGISTER32
 
 6:
@@ -187,14 +184,14 @@ sc_read_sectors_w1:
 
 1:
   // Perform a wait on the data bus, until the bits are pulled zero once.
-  mov r3, $(CMD_WAIT_DATA)
   mov r4, $(SC_READ_REGISTER_16)
+  ldr r2, [sp]
   2:
-    subs r3, r3, $1
+    subs r2, r2, $1   // Decrement timeout iteration
     moveq r0, $1      // Non zero retvalue on timeout error
     beq 3f            // Function return.
-    ldrh r2, [r4]
-    tst r2, $(SD_DATA0)
+    ldrh r3, [r4]
+    tst r3, $(SD_DATA0)
   bne 2b
 
   ldrh r2, [r5]       // Discard the first 32 bits
@@ -218,20 +215,20 @@ sc_read_sectors_w1:
 
   mov r0, $0            // Return value: success
 3:
-  pop {r4-r11}
+  pop {r2, r4-r11}
   bx lr
 
   // Unaligned code! It should be slower (but also smaller)
 5:
   // Perform a wait on the data bus, until the bits are pulled zero once.
-  mov r3, $(CMD_WAIT_DATA)
   mov r4, $(SC_READ_REGISTER_16)
+  ldr r2, [sp]
   2:
-    subs r3, r3, $1
+    subs r2, r2, $1   // Decrement timeout iteration
     moveq r0, $1      // Non zero retvalue on timeout error
     beq 3f            // Function return.
-    ldrh r2, [r4]
-    tst r2, $(SD_DATA0)
+    ldrh r3, [r4]
+    tst r3, $(SD_DATA0)
   bne 2b
 
   ldrh r2, [r5]       // Discard the first 32 bits
@@ -269,7 +266,7 @@ sc_read_sectors_w1:
 
   mov r0, $0            // Return value: success
 3:
-  pop {r4-r11}
+  pop {r2, r4-r11}
   bx lr
 
 #endif
@@ -280,6 +277,7 @@ sc_read_sectors_w1:
 
 // r0: data byte buffer (input)
 // r1: number of 512byte blocks to send/write
+// r2: number of timeout iterations when waiting for data.
 // returns non zero on timeout or data rejected (ie. CRC error, write error...)
 .global sc_write_sectors_w0   // Version that uses 0x08000000-0x09FFFFFF addrs
 .global sc_write_sectors_w1   // Version that uses 0x0A000000-0x0BFFFFFF addrs
@@ -288,19 +286,20 @@ sc_read_sectors_w1:
 
 .type sc_write_sectors_w0,function
 sc_write_sectors_w0:
-  push {r4-r6, lr}
+  push {r4-r7, lr}
   mov r6, $(SC_WRITE_REGISTER_8)
   b 9f
 
 .type sc_write_sectors_w1,function
 sc_write_sectors_w1:
-  push {r4-r6, lr}
+  push {r4-r7, lr}
   mov r6, $(SC_WRITE_REGISTER_A)
 
 9:
   sub sp, $8    // Some space for the CRC buffer
   mov r4, r0    // Input buffer
   mov r5, r1    // Block count
+  mov r7, r2    // Save the timeout count.
 
   // Calculate crc for the first block.
   mov r1, sp
@@ -371,7 +370,7 @@ sc_write_sectors_w1:
     bl crc16_nibble_512_nolut   // Must be in IWRAM as well!
 
     // Perform a wait on the data bus, DAT0 goes high when ready.
-    mov r1, $(CMD_WAIT_DATA)
+    mov r1, r7
     2:
       subs r1, r1, $1
       beq 4f
@@ -383,23 +382,21 @@ sc_write_sectors_w1:
 
 5:
   // Perform a final wait, ensure we leave with no pending operations.
-  mov r0, $(CMD_WAIT_DATA)
   2:
-    subs r0, r0, $1
+    subs r7, r7, $1
     beq 4f
     ldrh r2, [r6]
     tst r2, $(SD_DATA0)
   beq 2b
 
   add sp, $8
-  pop {r4-r6, lr}
+  pop {r4-r7, lr}
   mov r0, $0            // Return OK
   bx lr
 
 3:  // Wait-and-exit on error
-  mov r0, $(CMD_WAIT_DATA)
   2:
-    subs r0, r0, $1
+    subs r7, r7, $1
     beq 4f
     ldrh r2, [r6]
     tst r2, $(SD_DATA0)
@@ -407,7 +404,7 @@ sc_write_sectors_w1:
 
 4:  // Return non zero on timeout/response error
   add sp, $8
-  pop {r4-r6, lr}
+  pop {r4-r7, lr}
   mov r0, $1
   bx lr
 
@@ -418,7 +415,7 @@ sc_write_sectors_w0:
 .type sc_write_sectors_w1,function
 sc_write_sectors_w1:
 
-  push {r4-r11, lr}
+  push {r2, r4-r11, lr}
   mov r6, $(SC_WRITE_REGISTER_8)
   mov r7, $(SCLITE_DATA_REGISTER32)
 
@@ -493,7 +490,7 @@ sc_write_sectors_w1:
     bl crc16_nibble_512_nolut   // Must be in IWRAM as well!
 
     // Perform a wait on the data bus, DAT0 goes high when ready.
-    mov r1, $(CMD_WAIT_DATA)
+    ldr r1, [sp, #8]
     2:
       subs r1, r1, $1
       beq 4f
@@ -576,7 +573,7 @@ sc_write_sectors_w1:
     bl crc16_nibble_512_nolut   // Must be in IWRAM as well!
 
     // Perform a wait on the data bus, DAT0 goes high when ready.
-    mov r1, $(CMD_WAIT_DATA)
+    ldr r1, [sp, #8]
     2:
       subs r1, r1, $1
       beq 4f
@@ -589,7 +586,7 @@ sc_write_sectors_w1:
 
 5:
   // Perform a final wait, ensure we leave with no pending operations.
-  mov r0, $(CMD_WAIT_DATA)
+  ldr r0, [sp, #8]
   2:
     subs r0, r0, $1
     beq 4f
@@ -597,13 +594,13 @@ sc_write_sectors_w1:
     tst r2, $(SD_DATA0)
   beq 2b
 
-  add sp, $8
+  add sp, $(8 + 4)
   pop {r4-r11, lr}
   mov r0, $0            // Return OK
   bx lr
 
 3:  // Wait-and-exit on error
-  mov r0, $(CMD_WAIT_DATA)
+  ldr r0, [sp, #8]
   2:
     subs r0, r0, $1
     beq 4f
@@ -612,7 +609,7 @@ sc_write_sectors_w1:
   beq 2b
 
 4:  // Return non zero on timeout/response error
-  add sp, $8
+  add sp, $(8 + 4)
   pop {r4-r11, lr}
   mov r0, $1
   bx lr

@@ -37,6 +37,10 @@ extern bool slowsd;
   #define SC_FAST_ROM_MIRROR false
 #endif
 
+#ifndef SDDRV_TIMEOUT_MULT
+  #define SDDRV_TIMEOUT_MULT     1
+#endif
+
 static inline bool use_fast_mirror() {
   // Use it only when in GBA mode and if fast-load is enabled.
   #ifdef SUPERCARD_LITE_IO
@@ -46,13 +50,13 @@ static inline bool use_fast_mirror() {
   #endif
 }
 
-typedef int (*t_rdsec_fn)(uint8_t *buffer, unsigned count);
-typedef int (*t_wrsec_fn)(const uint8_t *buffer, unsigned count);
+typedef int (*t_rdsec_fn)(uint8_t *buffer, unsigned count, unsigned timeout);
+typedef int (*t_wrsec_fn)(const uint8_t *buffer, unsigned count, unsigned timeout);
 
-int sc_read_sectors_w0(uint8_t *buffer, unsigned count);
-int sc_read_sectors_w1(uint8_t *buffer, unsigned count);
-int sc_write_sectors_w0(const uint8_t *buffer, unsigned count);
-int sc_write_sectors_w1(const uint8_t *buffer, unsigned );
+int sc_read_sectors_w0(uint8_t *buffer, unsigned count, unsigned timeout);
+int sc_read_sectors_w1(uint8_t *buffer, unsigned count, unsigned timeout);
+int sc_write_sectors_w0(const uint8_t *buffer, unsigned count, unsigned timeout);
+int sc_write_sectors_w1(const uint8_t *buffer, unsigned count, unsigned timeout);
 
 const static t_rdsec_fn sc_read_sectors[2] = {
   &sc_read_sectors_w0, &sc_read_sectors_w1
@@ -76,11 +80,11 @@ void send_sdcard_commandbuf(const uint8_t *buffer, unsigned maxsize);
 #define MAX_WRITE_RETRIES        2            // Try up to 3 times to write a block.
 #define MAX_REINIT_RETRIES       9            // Try up to 10 to re-init the card.
 
-#define CMD_WAIT_IDLE            0x800000     // Number of iterations to wait for card ready
-#define CMD_WAIT_RESP             0x60000     // Aprox ~100ms as command timeout
-#define CMD_WAIT_DATA            0x800000     // Aprox ~1s as data timeout
-#define WAIT_READY_COUNT             4096     // Aprox 50-200ms, should take less
-#define WAIT_READY_WRITE         0x200000     // Around 500ms.
+#define WAIT_IDLE_TIMEOUT    (0x800000 / SDDRV_TIMEOUT_MULT)   // Number of iterations to wait for card ready
+#define WAIT_RESP_TIMEOUT     (0x60000 / SDDRV_TIMEOUT_MULT)   // Aprox ~100ms as command timeout
+#define WAIT_READY_COUNT         (4096 / SDDRV_TIMEOUT_MULT)   // Aprox 50-200ms, should take less
+#define WAIT_EREADY_TIMEOUT  (0x200000 / SDDRV_TIMEOUT_MULT)   // Around 500ms.
+#define WAIT_DATA_TIMEOUT    (0x400000 / SDDRV_TIMEOUT_MULT)   // Aprox ~1s as data timeout
 
 #define OCR_CCS         0x40000000
 #define OCR_NBUSY       0x80000000
@@ -189,7 +193,7 @@ static bool send_sdcard_command_raw(uint8_t cmd, uint32_t arg) {
   buf[5] = crc7(buf, 5);
 
   // Wait before sending any command, until the line is not pulled down.
-  if (!wait_sdcard_idle(CMD_WAIT_IDLE))
+  if (!wait_sdcard_idle(WAIT_IDLE_TIMEOUT))
     return false;
 
   // Send the buffer out
@@ -205,7 +209,7 @@ static bool send_sdcard_command_noclock(uint8_t cmd, uint32_t arg, uint8_t *resp
     return false;
 
   // Wait for response, and retrieve a response to the command.
-  return receive_sdcard_response(resp, respsize, CMD_WAIT_RESP);
+  return receive_sdcard_response(resp, respsize, WAIT_RESP_TIMEOUT);
 }
 
 // Like send_sdcard_command_noclock but it inject a bunch of clocks after.
@@ -249,7 +253,7 @@ static bool send_sdcard_reset() {
   buf[5] = crc7(buf, 5);
 
   // Wait before sending any command, until the line is not pulled down.
-  if (!wait_sdcard_idle(CMD_WAIT_IDLE))
+  if (!wait_sdcard_idle(WAIT_IDLE_TIMEOUT))
     return false;
 
   // Send the buffer out
@@ -358,7 +362,7 @@ unsigned sdcard_init(t_card_info *info) {
   }
 
   drv_rca = 0;
-  for (unsigned i = 0; i < CMD_WAIT_IDLE; i++) {
+  for (unsigned i = 0; i < WAIT_IDLE_TIMEOUT; i++) {
     if (!send_sdcard_command(SD_CMD3, 0, resp, SD_MAX_RESP))
       return SD_ERR_BAD_INIT;
 
@@ -426,7 +430,7 @@ unsigned sdcard_read_blocks(uint8_t *buffer, uint32_t blocknum, unsigned blkcnt)
     return SD_ERR_BADREAD;
 
   // Read all data using the asm routine for speed.
-  if (sc_read_sectors[SC_FAST_ROM_MIRROR ? 1 : 0](buffer, blkcnt))
+  if (sc_read_sectors[SC_FAST_ROM_MIRROR ? 1 : 0](buffer, blkcnt, WAIT_DATA_TIMEOUT))
     return SD_ERR_BADREAD;
 
   if (!send_sdcard_command(SD_CMD12, 0, NULL, SD_MAX_RESP))
@@ -447,14 +451,14 @@ unsigned sdcard_write_blocks(const uint8_t *buffer, uint32_t blocknum, unsigned 
     if (!send_sdcard_command_noclock(SD_CMD25, sc_issdhc() ? blocknum : blocknum * 512, NULL, SD_R1_RESP))
       return SD_ERR_BADWRITE;
 
-    bool wr_ok = !sc_write_sectors[SC_FAST_ROM_MIRROR ? 1 : 0](buffer, blkcnt);
+    bool wr_ok = !sc_write_sectors[SC_FAST_ROM_MIRROR ? 1 : 0](buffer, blkcnt, WAIT_DATA_TIMEOUT);
 
     // Send CMD12 to signal the end of the write sequence!
     if (!send_sdcard_command(SD_CMD12, 0, NULL, SD_MAX_RESP))
       return SD_ERR_BADWRITE;
 
     // CMD12 pulls DAT0 low while busy (usually writing). Wait for !busy.
-    wait_dat0_idle(WAIT_READY_WRITE);
+    wait_dat0_idle(WAIT_EREADY_TIMEOUT);
 
     if (wr_ok) {
       // Check the status/error code reported by CMD13, should be zero.
