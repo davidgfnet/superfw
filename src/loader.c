@@ -393,8 +393,11 @@ unsigned flash_gba_nor(
   // Map the game to the base 32MiB address space.
   set_superchis_normap(blkmap);
 
+  bool erase_pending = false;
+  uint32_t erase_sector_offset = 0;  // Track which sector we've started erasing
+
   for (uint32_t bigoff = 0; bigoff < fs; bigoff += ssize) {
-    // Load the ROM in chunks to the scratch area. So that we can mange it.
+    // Load the ROM in chunks to the scratch area. So that we can manage it.
     for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += LOAD_BS) {
       uint32_t absoff = offset + bigoff;
       if (progress && (absoff & (128*1024-1)) == 0)
@@ -410,6 +413,59 @@ unsigned flash_gba_nor(
       }
 
       dma_memcpy32(&scratch[offset], tmp, toread/4);
+
+      // Pre-erase flash sectors while reading data
+      // Check if previous erase completed, and start new ones
+      if (erase_pending && flash_operation_complete()) {
+        // Previous erase completed, finalize it
+        if (!flash_operation_wait()) {
+          f_close(&fd);
+          reset_superchis_normap();
+          return ERR_LOAD_BADROM;
+        }
+        erase_pending = false;
+      }
+
+      // Try to start erasing more sectors if no operation is pending
+      while (!erase_pending && erase_sector_offset < fs) {
+        uint32_t sector_addr = GBA_ROM_BASE + erase_sector_offset;
+        
+        // Check if this sector needs erasing
+        if (!flash_check_erased(sector_addr, flashinfo.blksize)) {
+          flash_erase_sector_start(sector_addr);
+          erase_pending = true;
+          erase_sector_offset += flashinfo.blksize;
+          break;  // Start one erase at a time
+        } else {
+          erase_sector_offset += flashinfo.blksize;
+        }
+      }
+    }
+
+    // After reading, continue erasing sectors until we cover the current chunk
+    uint32_t chunk_end = bigoff + ssize;
+    if (chunk_end > fs) chunk_end = fs;
+    
+    while (erase_sector_offset < chunk_end) {
+      // Wait for previous erase if needed
+      if (erase_pending) {
+        if (!flash_operation_wait()) {
+          f_close(&fd);
+          reset_superchis_normap();
+          return ERR_LOAD_BADROM;
+        }
+        erase_pending = false;
+      }
+
+      uint32_t sector_addr = GBA_ROM_BASE + erase_sector_offset;
+      
+      // Check if this sector needs erasing
+      if (!flash_check_erased(sector_addr, flashinfo.blksize)) {
+        flash_erase_sector_start(sector_addr);
+        erase_pending = true;
+      }
+      
+      erase_sector_offset += flashinfo.blksize;
     }
 
     // Patch ROM, don't need WAITCNT patches
@@ -422,19 +478,22 @@ unsigned flash_gba_nor(
     if (ingame_menu && igm_flashoffset)
       payload_apply_rom(scratch, ssize, bigoff, ingame_trampoline_payload, ingame_trampoline_payload_size, igm_flashoffset);
 
-    // Go ahead and erase the blocks, then program them.
+    // Wait for the last erase to complete before programming
+    if (erase_pending) {
+      if (!flash_operation_wait()) {
+        f_close(&fd);
+        reset_superchis_normap();
+        return ERR_LOAD_BADROM;
+      }
+      erase_pending = false;
+    }
+
+    // Program the blocks (all erasures are complete now)
     for (uint32_t offset = 0; offset < ssize && offset + bigoff < fs; offset += flashinfo.blksize) {
       uint32_t absoff = offset + bigoff;
       uint32_t flashaddr = GBA_ROM_BASE + absoff;
       if (progress && (absoff & (128*1024-1)) == 0)
         progress((bigoff + ssize / 4 + offset * 3/4) >> 8, fs >> 8);
-
-      if (!flash_check_erased(flashaddr, flashinfo.blksize))
-        if (!flash_erase_sector(flashaddr)) {
-          f_close(&fd);
-          reset_superchis_normap();
-          return ERR_FLASH_OP;
-        }
 
       unsigned toflash = MIN(flashinfo.blksize, fs - absoff);
       if (!flash_program_buffered(flashaddr, &scratch[offset], toflash, flashinfo.blkwrite)) {

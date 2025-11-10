@@ -189,8 +189,8 @@ bool flash_check_erased(uintptr_t addr, unsigned size) {
   return true;
 }
 
-// Performs a flash sector erase.
-bool flash_erase_sector(uintptr_t addr) {
+// Starts a flash sector erase operation without waiting for completion.
+void flash_erase_sector_start(uintptr_t addr) {
   FLASH_WE_MODE();
 
   // Reset any previous command that might be ongoing.
@@ -204,12 +204,31 @@ bool flash_erase_sector(uintptr_t addr) {
   SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
 
   *(volatile uint16_t*)(addr) = 0x0030; // Erase sector
+  
+  // Don't wait, just return to allow background erase
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
 
+// Checks if a flash erase/program operation is complete.
+// Returns true if complete, false if still in progress.
+bool flash_operation_complete() {
+  FLASH_WE_MODE();
+  // Check Q6 toggling - if it's stable, operation is complete
+  uint16_t a = SLOT2_BASE_U16[0];
+  uint16_t b = SLOT2_BASE_U16[0];
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return (a == b);
+}
+
+// Waits for flash operation to complete and finalizes it.
+// Returns true on success, false on timeout.
+bool flash_operation_wait() {
+  FLASH_WE_MODE();
   // Wait for the erase operation to finish. We rely on Q6 toggling:
   for (unsigned i = 0; i < 60*100; i++) {
-    wait_ms(10);    // Wait for a bit, erase can take a while.
     if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
       break;
+    wait_ms(10);    // Wait for a bit, erase can take a while.
   }
   bool retok = (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0]);
 
@@ -218,6 +237,12 @@ bool flash_erase_sector(uintptr_t addr) {
 
   set_supercard_mode(MAPPED_SDRAM, true, true);
   return retok;
+}
+
+// Performs a flash sector erase (blocking version).
+bool flash_erase_sector(uintptr_t addr) {
+  flash_erase_sector_start(addr);
+  return flash_operation_wait();
 }
 
 // Deletes a bunch of sectors of a given size.

@@ -372,6 +372,9 @@ bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize);
 
 bool flash_identify(t_flash_info *info);
 bool flash_erase_chip();
+void flash_erase_sector_start(uintptr_t addr);
+bool flash_operation_complete();
+bool flash_operation_wait();
 bool flash_erase_sector(uintptr_t addr);
 bool flash_erase_sectors(uint32_t baseaddr, unsigned sectsize, unsigned sectcount);
 void flash_read(uint32_t baseaddr, uint8_t *buf, unsigned size);
