@@ -29,7 +29,7 @@
 #define SAFE_OP_ROUTINE_SIZE    12   // Number of insts (32 bit insts)
 #define SAFE_OP_INST_OFF         5   // Instruction number (from 0) in the routine
 
-#define STACK_IRESV     (4*SAFE_OP_ROUTINE_SIZE + 4) // Extra slot for saving LR
+#define STACK_IRESV     (4*SAFE_OP_ROUTINE_SIZE + 8) // Extra slot for saving R0 and LR
 
 // Jump table in ARM mode to simplify instruction sizes.
 .section    .directsave, "ax"
@@ -621,7 +621,8 @@ send_sdcard_commandbuf:
 // Supercard SD interface "safe" read/write operation
 #define SD_OPERATION(fn_name, ...)                                            \
   fn_name:                                                                    \
-    str lr, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];   /* Preserve LR */              \
+    str lr, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];       /* Preserve LR */          \
+    str r0, [sp, #(SAFE_OP_ROUTINE_SIZE*4 + 4)];   /* Preserve R0 */          \
                                                                               \
     /* Insert operation instruction */                                        \
     ldr r11, 1f;                                                              \
@@ -631,13 +632,23 @@ send_sdcard_commandbuf:
     mov r11, $0;                                                              \
     swp r10, r11, [r7]; /* Writes zero to REG_IME, preserve previous value */ \
                                                                               \
+    /* Load and update WAITCNT, ensure we use the right WS */                 \
+    mov r11, $0x04000000;                                                     \
+    ldr r0, [r11, #REG_WAITCNT];                                              \
+    str r11, [r11, #REG_WAITCNT];    /* Writes zero essentially */            \
+                                                                              \
     /* Actually call the routine */                                           \
     mov lr, pc;                                                               \
     mov pc, sp;                                                               \
                                                                               \
+    /* Reload original WAITCNT value */                                       \
+    mov r11, $0x04000000;                                                     \
+    str r0, [r11, #REG_WAITCNT];                                              \
+                                                                              \
     /* (maybe) re-enable IRQs */                                              \
     str r10, [r7];                                                            \
                                                                               \
+    ldr r0, [sp, #(SAFE_OP_ROUTINE_SIZE*4 + 4)];   /* Restore R0 */           \
     ldr pc, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];   /* Restore LR directly */      \
   1:                                                                          \
     __VA_ARGS__;                                                              \
