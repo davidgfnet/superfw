@@ -189,8 +189,8 @@ bool flash_check_erased(uintptr_t addr, unsigned size) {
   return true;
 }
 
-// Performs a flash sector erase.
-bool flash_erase_sector(uintptr_t addr) {
+// Starts a flash sector erase operation without waiting for completion.
+void flash_erase_sector_start(uintptr_t addr) {
   FLASH_WE_MODE();
 
   // Reset any previous command that might be ongoing.
@@ -204,12 +204,31 @@ bool flash_erase_sector(uintptr_t addr) {
   SLOT2_BASE_U16[addr_perm(0x2AA)] = 0x0055;
 
   *(volatile uint16_t*)(addr) = 0x0030; // Erase sector
+  
+  // Don't wait, just return to allow background erase
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+}
 
+// Checks if a flash erase/program operation is complete.
+// Returns true if complete, false if still in progress.
+bool flash_operation_complete() {
+  FLASH_WE_MODE();
+  // Check Q6 toggling - if it's stable, operation is complete
+  uint16_t a = SLOT2_BASE_U16[0];
+  uint16_t b = SLOT2_BASE_U16[0];
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+  return (a == b);
+}
+
+// Waits for flash operation to complete and finalizes it.
+// Returns true on success, false on timeout.
+bool flash_operation_wait() {
+  FLASH_WE_MODE();
   // Wait for the erase operation to finish. We rely on Q6 toggling:
   for (unsigned i = 0; i < 60*100; i++) {
-    wait_ms(10);    // Wait for a bit, erase can take a while.
     if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
       break;
+    wait_ms(10);    // Wait for a bit, erase can take a while.
   }
   bool retok = (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0]);
 
@@ -218,6 +237,12 @@ bool flash_erase_sector(uintptr_t addr) {
 
   set_supercard_mode(MAPPED_SDRAM, true, true);
   return retok;
+}
+
+// Performs a flash sector erase (blocking version).
+bool flash_erase_sector(uintptr_t addr) {
+  flash_erase_sector_start(addr);
+  return flash_operation_wait();
 }
 
 // Deletes a bunch of sectors of a given size.
@@ -280,40 +305,52 @@ bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size
   SLOT2_BASE_U16[0] = 0x00F0;
   const unsigned wrsize = MIN(bufsize, 512);
 
-  for (unsigned i = 0; i < size; i += 512) {
-    uint16_t tmp[256];
+  // Allocate buffer based on wrsize
+  uint16_t tmp[256];
+
+  // Prefetch first block
+  if (size > 0) {
     set_supercard_mode(MAPPED_SDRAM, true, true);
-    memcpy(tmp, &buf[i], sizeof(tmp));
+    unsigned first_size = MIN(wrsize, size);
+    memcpy(tmp, buf, first_size);
+  }
 
-    FLASH_WE_MODE();
-    for (unsigned off = 0; off < 512 && i+off < size; off += wrsize) {
-      const uint32_t toff = (i + off);
-      const uint16_t bcnt = MIN(wrsize, size - toff);
-      volatile uint16_t *ptr = (uint16_t*)(baseaddr + toff);
+  FLASH_WE_MODE();
+  for (unsigned i = 0; i < size; i += wrsize) {
+    const uint16_t bcnt = MIN(wrsize, size - i);
+    volatile uint16_t *ptr = (uint16_t*)(baseaddr + i);
 
-      SLOT2_BASE_U16[addr_perm(0x555)]  = 0x00AA;
-      SLOT2_BASE_U16[addr_perm(0x2AA)]  = 0x0055;
-      *ptr = 0x0025;        // Write buffer command
-      *ptr = bcnt / 2 - 1;  // Word count
+    SLOT2_BASE_U16[addr_perm(0x555)]  = 0x00AA;
+    SLOT2_BASE_U16[addr_perm(0x2AA)]  = 0x0055;
+    *ptr = 0x0025;        // Write buffer command
+    *ptr = bcnt / 2 - 1;  // Word count
 
-      for (unsigned j = 0; j < bcnt / 2; j++)
-        *ptr++ = tmp[off/2+j];
+    for (unsigned j = 0; j < bcnt / 2; j++)
+      *ptr++ = tmp[j];
 
-      *(ptr-1) = 0x29;     // Confirm write buffer operation.
+    *(ptr-1) = 0x29;     // Confirm write buffer operation.
 
-      // Wait a bit for the operation to finish.
-      for (unsigned j = 0; j < 32*1024; j++) {
-        if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
-          break;
-      }
-      bool notfinished = (SLOT2_BASE_U16[0] != SLOT2_BASE_U16[0]);
-      SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
+    // Prefetch next block while waiting for write to complete
+    unsigned next_i = i + wrsize;
+    if (next_i < size) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      unsigned next_size = MIN(wrsize, size - next_i);
+      memcpy(tmp, &buf[next_i], next_size);
+      FLASH_WE_MODE();
+    }
 
-      // Timed out or the value programmed is wrong
-      if (notfinished) {
-        set_supercard_mode(MAPPED_SDRAM, true, true);
-        return false;
-      }
+    // Now wait for the write operation to finish
+    for (unsigned j = 0; j < 32*1024; j++) {
+      if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
+        break;
+    }
+    bool notfinished = (SLOT2_BASE_U16[0] != SLOT2_BASE_U16[0]);
+    SLOT2_BASE_U16[0] = 0x00F0;   // Finish operation.
+
+    // Timed out or the value programmed is wrong
+    if (notfinished) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      return false;
     }
   }
 
