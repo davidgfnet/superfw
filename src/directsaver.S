@@ -621,38 +621,12 @@ send_sdcard_commandbuf:
 // Supercard SD interface "safe" read/write operation
 #define SD_OPERATION(fn_name, ...)                                            \
   fn_name:                                                                    \
-    str lr, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];       /* Preserve LR */          \
-    str r0, [sp, #(SAFE_OP_ROUTINE_SIZE*4 + 4)];   /* Preserve R0 */          \
-                                                                              \
-    /* Insert operation instruction */                                        \
+    /* Load operation instruction */                                          \
     ldr r11, 1f;                                                              \
-    str r11, [sp, #(SAFE_OP_INST_OFF*4)];                                     \
-                                                                              \
-    /* Disable IRQs */                                                        \
-    mov r11, $0;                                                              \
-    swp r10, r11, [r7]; /* Writes zero to REG_IME, preserve previous value */ \
-                                                                              \
-    /* Load and update WAITCNT, ensure we use the right WS */                 \
-    mov r11, $0x04000000;                                                     \
-    ldr r0, [r11, #REG_WAITCNT];                                              \
-    str r11, [r11, #REG_WAITCNT];    /* Writes zero essentially */            \
-                                                                              \
-    /* Actually call the routine */                                           \
-    mov lr, pc;                                                               \
-    mov pc, sp;                                                               \
-                                                                              \
-    /* Reload original WAITCNT value */                                       \
-    mov r11, $0x04000000;                                                     \
-    str r0, [r11, #REG_WAITCNT];                                              \
-                                                                              \
-    /* (maybe) re-enable IRQs */                                              \
-    str r10, [r7];                                                            \
-                                                                              \
-    ldr r0, [sp, #(SAFE_OP_ROUTINE_SIZE*4 + 4)];   /* Restore R0 */           \
-    ldr pc, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];   /* Restore LR directly */      \
+    /* Branch to the common code */                                           \
+    b sd_operation;                                                           \
   1:                                                                          \
     __VA_ARGS__;                                                              \
-
 
 SD_OPERATION(sd_ldr,  ldr  r2, [r5]);
 SD_OPERATION(sd_ldrh, ldrh r2, [r5]);
@@ -662,6 +636,39 @@ SD_OPERATION(sd_strh, strh r2, [r5]);
 SD_OPERATION(sd_stm2, stmia r5, {r2, r3});
 SD_OPERATION(sd_ldm4, ldmia r5, {r2, r3, r6, r12});
 SD_OPERATION(sd_stm4, stmia r5, {r2, r3, r6, r12});
+
+sd_operation:
+    /* Insert operation instruction */
+    str r11, [sp, #(SAFE_OP_INST_OFF*4)];
+
+    str lr, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];       /* Preserve LR */
+    str r0, [sp, #(SAFE_OP_ROUTINE_SIZE*4 + 4)];   /* Preserve R0 */
+
+    /* Disable IRQs */
+    mov r11, $0;
+    swp r10, r11, [r7]; /* Writes zero to REG_IME, preserve previous value */
+
+    /* Load and update WAITCNT, ensure we use the right WS */
+    mov r11, $0x04000000;
+    ldr r0, [r11, #REG_WAITCNT];
+    str r11, [r11, #REG_WAITCNT];    /* Writes zero essentially */
+
+    /* Actually call the routine */
+    mov lr, pc;
+    mov pc, sp;
+
+    /* Reload original WAITCNT value */
+    mov r11, $0x04000000;
+    str r0, [r11, #REG_WAITCNT];
+
+    /* (maybe) re-enable IRQs */
+    str r10, [r7];
+
+    ldr r0, [sp, #(SAFE_OP_ROUTINE_SIZE*4 + 4)];   /* Restore R0 */
+    ldr pc, [sp, #(SAFE_OP_ROUTINE_SIZE*4)];   /* Restore LR directly */
+
+// Constant pool goes here.
+.pool
 
 
 // Actual implementation template. (12 insts, 48 bytes, see STACK_IRESV)
@@ -682,8 +689,5 @@ safe_sd_operation:
   strh r11, [r8]
 
   bx lr
-
-// Constant pool goes here.
-.pool
 
 
