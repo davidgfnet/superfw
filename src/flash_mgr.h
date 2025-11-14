@@ -71,5 +71,6 @@ _Static_assert (sizeof(t_flash_game_entry) % 4 == 0, "t_flash_game_entry must be
 bool flashmgr_load(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata);
 bool flashmgr_store(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata);
 bool flashmgr_allocate_blocks(uint8_t *blockmap, unsigned nalloc, t_reg_entry *ndata);
+bool flashmgr_wipe(uint32_t baseaddr, unsigned maxsize);
 
 

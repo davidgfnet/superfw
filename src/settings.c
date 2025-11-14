@@ -87,7 +87,8 @@ uint32_t autosave_default = 1;
 uint32_t autosave_prefer_ds = 1;
 uint32_t ingamemenu_default = 1;
 uint32_t rtcpatch_default = 1;
-t_rtc_state rtcvalue_default = { 20, 1, 26, 12, 0 };
+uint32_t rtcvalue_default = 45568800U;
+uint32_t rtcspeed_default = 3;
 
 // Setting loading/saving routines
 bool save_ui_settings() {
@@ -143,16 +144,16 @@ bool save_settings() {
     "default_patcher=%u\n"
     "default_igmenu=%lu\n"
     "default_rtcpatch=%lu\n"
-    "default_rtcval=%02u%02u%02u%02u%02u\n"
+    "default_rtcts=%lu\n"
+    "default_rtctick=%lu\n"
     "default_loadgame=%lu\n"
     "default_savegame=%lu\n"
     "prefer_directsave=%lu\n",
     hotkey_combo, boot_bios_splash, save_path_default, state_path_default,
     backup_sram_default, enable_cheats, use_slowld, use_fastew,
     (unsigned int)patcher_default, ingamemenu_default, rtcpatch_default,
-    rtcvalue_default.hour, rtcvalue_default.mins,
-    rtcvalue_default.day + 1, rtcvalue_default.month + 1, rtcvalue_default.year,
-    autoload_default, autosave_default, autosave_prefer_ds);
+    rtcvalue_default, rtcspeed_default, autoload_default, autosave_default,
+    autosave_prefer_ds);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -173,13 +174,11 @@ static void parse_settings(void *usr, const char *var, const char *value) {
     backup_sram_default = valu;
   else if (!strcmp(var, "default_patcher"))
     patcher_default = valu % PatchTotalCNT;
-  else if (!strcmp(var, "default_rtcval")) {
-    rtcvalue_default.year = valu % 100U; valu /= 100U;
-    rtcvalue_default.month = (((valu - 1) % 100U) % 12U); valu /= 100U;
-    rtcvalue_default.day = (((valu - 1) % 100U) % 31U); valu /= 100U;
-    rtcvalue_default.mins = ((valu % 100U) % 60U); valu /= 100U;
-    rtcvalue_default.hour = valu % 24U;
-  } else {
+  else if (!strcmp(var, "default_rtcts"))
+    rtcvalue_default = valu;
+  else if (!strcmp(var, "default_rtctick"))
+    rtcspeed_default = valu;
+  else {
     const struct {
       const char *s;
       uint32_t *var;
@@ -299,13 +298,8 @@ static void parse_rom_settings(void *usr, const char *var, const char *value) {
     rs->use_dsaving = valu & 1;
   else if (!strcmp(var, "patchmode"))
     rs->patch_policy = valu % 3;
-  else if (!strcmp(var, "rtcval")) {
-    rs->rtcval.year = valu % 100U; valu /= 100U;
-    rs->rtcval.month = (((valu - 1) % 100U) % 12U); valu /= 100U;
-    rs->rtcval.day = (((valu - 1) % 100U) % 31U); valu /= 100U;
-    rs->rtcval.mins = ((valu % 100U) % 60U); valu /= 100U;
-    rs->rtcval.hour = valu % 24U;
-  }
+  else if (!strcmp(var, "rtcts"))
+    rs->rtcts = valu;
 }
 
 bool load_rom_settings(const char *fn, t_rom_settings *rs) {
@@ -353,14 +347,13 @@ bool save_rom_settings(const char *fn, const t_rom_settings *rs) {
     "igm=%u\n"
     "directsaving=%u\n"
     "cheats=%u\n"
-    "rtcval=%02u%02u%02u%02u%02u\n",
+    "rtcts=%u\n",
     rs->patch_policy,
     rs->use_rtc ? 1 : 0,
     rs->use_igm ? 1 : 0,
     rs->use_dsaving ? 1 : 0,
     rs->use_cheats ? 1 : 0,
-    rs->rtcval.hour, rs->rtcval.mins,
-    rs->rtcval.day + 1, rs->rtcval.month + 1, rs->rtcval.year);
+    (unsigned int)rs->rtcts);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);

@@ -109,6 +109,26 @@ int main() {
   human_size_kb(tmp, sizeof(tmp), 1023*1024); assert(!strcmp(tmp, "1023.0MiB"));
   human_size_kb(tmp, sizeof(tmp), 1024*1024); assert(!strcmp(tmp, "1.0GiB"));
 
+  // 2000-01-01 00:00:00 (ts: 946684800)
+  const t_dec_date d1 = {.year = 0, .month = 1, .day = 1, .hour = 0, .min = 0, .sec = 0};
+  assert(0 == date2timestamp(&d1));
+  const t_dec_date d2 = {.year = 34, .month = 7, .day = 21, .hour = 14, .min = 12, .sec = 3};
+  assert(1090419123 == date2timestamp(&d2));
+  const t_dec_date d3 = {.year = 55, .month = 12, .day = 31, .hour = 23, .min = 59, .sec = 59};
+  assert(1767225599 == date2timestamp(&d3));
+  for (unsigned i = 0; i < 98; i++) {
+    t_dec_date d = {.year = i, .month = 1, .day = 1, .hour = 0, .min = 0, .sec = 0};
+    assert(86400 * ((i + 3) / 4) + 31536000 * i == date2timestamp(&d));
+  }
+
+  t_dec_date o;
+  timestamp2date(0, &o);
+  assert(!memcmp(&o, &d1, sizeof(d1)));
+  timestamp2date(1090419123, &o);
+  assert(!memcmp(&o, &d2, sizeof(d2)));
+  timestamp2date(1767225599, &o);
+  assert(!memcmp(&o, &d3, sizeof(d3)));
+
   // TODO test memcpy32 and memmove32
 }
 

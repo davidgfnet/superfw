@@ -52,8 +52,9 @@ extern char savestate_pattern[256];
 
 void reset_game();
 void reset_fw();
-void set_undef_lr(uint32_t);
+void set_undef_lrsp(uint32_t, uint32_t);
 uint32_t get_undef_lr(void);
+uint32_t get_undef_sp(void);
 void fast_mem_cpy_256(void *dst, const void *src, unsigned count);
 void fast_mem_clr_256(void *addr, uint32_t value, unsigned count);
 void set_entrypoint_hook(bool process_cheats);
@@ -83,7 +84,7 @@ uint32_t *get_cheat_table();
 
 static unsigned submenu;
 static unsigned copt;
-static uint8_t rtc_values[5];
+static t_dec_date rtc_date;
 static struct {
   const char *msg;
   void (*callback)();
@@ -623,26 +624,20 @@ void draw_save_menu(uint8_t *fb, unsigned framen) {
 }
 
 void draw_rtc_menu(uint8_t *fb, unsigned framen) {
-  unsigned hour = rtc_values[0];
-  unsigned mins = rtc_values[1];
-  unsigned days = rtc_values[2] + 1;
-  unsigned mont = rtc_values[3] + 1;
-  unsigned year = rtc_values[4];
+  char thour[3] = {'0' + rtc_date.hour/10, '0' + rtc_date.hour%10, 0};
+  char tmins[3] = {'0' + rtc_date.min /10, '0' + rtc_date.min%10, 0};
+  char tdays[3] = {'0' + rtc_date.day /10, '0' + rtc_date.day%10, 0};
+  char tmont[3] = {'0' + rtc_date.month/10, '0' + rtc_date.month%10, 0};
+  char tyear[5] = {'2', '0', '0' + rtc_date.year/10, '0' + rtc_date.year%10, 0};
 
-  char thour[3] = {'0' + hour/10, '0' + hour%10, 0};
-  char tmins[3] = {'0' + mins/10, '0' + mins%10, 0};
-  char tdays[3] = {'0' + days/10, '0' + days%10, 0};
-  char tmont[3] = {'0' + mont/10, '0' + mont%10, 0};
-  char tyear[5] = {'2', '0', '0' + year/10, '0' + year%10, 0};
-
-  draw_text(thour, fb,  40, 70, copt == 0 ? HI_COLOR : FG_COLOR);
-  draw_text(":",   fb,  60, 70, FG_COLOR);
-  draw_text(tmins, fb,  68, 70, copt == 1 ? HI_COLOR : FG_COLOR);
-  draw_text(tdays, fb, 110, 70, copt == 2 ? HI_COLOR : FG_COLOR);
-  draw_text("-",   fb, 130, 70, FG_COLOR);
-  draw_text(tmont, fb, 140, 70, copt == 3 ? HI_COLOR : FG_COLOR);
-  draw_text("-",   fb, 160, 70, FG_COLOR);
-  draw_text(tyear, fb, 170, 70, copt == 4 ? HI_COLOR : FG_COLOR);
+  draw_text(tyear, fb,  46, 70, copt == 0 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb,  78, 70, FG_COLOR);
+  draw_text(tmont, fb,  87, 70, copt == 1 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb, 103, 70, FG_COLOR);
+  draw_text(tdays, fb, 112, 70, copt == 2 ? HI_COLOR : FG_COLOR);
+  draw_text(thour, fb, 140, 70, copt == 3 ? HI_COLOR : FG_COLOR);
+  draw_text(":",   fb, 157, 70, FG_COLOR);
+  draw_text(tmins, fb, 162, 70, copt == 4 ? HI_COLOR : FG_COLOR);
 
   draw_text_center(msgs[ingame_menu_lang][IMENU_UPDAT_RTC], fb, SCREEN_WIDTH/2, 120, copt == 5 ? HI_COLOR : FG_COLOR);
 }
@@ -745,15 +740,6 @@ void draw_states_menu(uint8_t *fb, unsigned framen) {
   }
 }
 
-
-void rtc_fix() {
-  // Correct any out of range values
-  rtc_values[0] %= 24;    // Hour
-  rtc_values[1] %= 60;    // Min
-  rtc_values[2] %= 31;    // Day
-  rtc_values[3] %= 12;    // Month
-  rtc_values[4] %= 100;   // Year
-}
 
 enum { MenuMain = 0, MenuReset = 1, MenuSave = 2, MenuSState = 3, MenuRTC = 4, MenuCheats = 5 };
 typedef void(*menu_draw_fn)(uint8_t *fb, unsigned framen);
@@ -1029,25 +1015,21 @@ void sstkey(uint16_t keyp) {
 }
 
 void rtckey(uint16_t keyp) {
-  static const uint8_t rtc_decv[] = { 23, 59, 30, 11, 99 };
-
   if (copt < 5) {
+    uint8_t *rval = (uint8_t*)&rtc_date;
     if (keyp & KEY_BUTTUP)
-      rtc_values[copt]++;
+      rval[copt]++;
     if (keyp & KEY_BUTTDOWN)
-      rtc_values[copt] += rtc_decv[copt];
+      rval[copt]--;
 
-    rtc_fix();
+    fixdate(&rtc_date);
   }
 }
 
 bool action_write_rtc() {
-  // Write to the GPIO buffer, assuming R/W mode!
-  set_undef_lr((rtc_values[0] <<  0) |
-               (rtc_values[1] <<  6) |
-               (rtc_values[2] << 12) |
-               (rtc_values[3] << 18) |
-               (rtc_values[4] << 24));
+  // Write to the emulated RTC register
+  // TODO: Allow changing the RTC speed.
+  set_undef_lrsp(date2timestamp(&rtc_date), get_undef_sp());
 
   submenu = MenuMain;
   copt = 0;
@@ -1202,12 +1184,7 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
   num_dsk_savestates = savestate_pattern[0] ? MAX_DISK_SLOTS : 0;
 
   // Read RTC values
-  uint32_t rval = get_undef_lr();
-  rtc_values[0] = (rval >>  0) & 0x3f;
-  rtc_values[1] = (rval >>  6) & 0x3f;
-  rtc_values[2] = (rval >> 12) & 0x3f;
-  rtc_values[3] = (rval >> 18) & 0x3f;
-  rtc_values[4] = (rval >> 24) & 0xff;
+  timestamp2date(get_undef_lr(), &rtc_date);
 
   // Lazy intialization of the SD card, to avoid blocking the menu
   FATFS fs;
@@ -1260,7 +1237,8 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
         unsigned cbnum = menudata[submenu].opt_count ? copt : 0;
 
         set_supercard_mode(MAPPED_SDRAM, true, true);
-        bool retn = menudata[submenu].actions[cbnum]();
+        const menu_action_fn cb = menudata[submenu].actions[cbnum];
+        bool retn = cb ? cb() : false;
         set_supercard_mode(MAPPED_SDRAM, true, false);
         if (retn)
           break;
