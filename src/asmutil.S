@@ -70,6 +70,34 @@ START_THUMB_FUNC(set_abort_lr)
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 
+#ifdef SUPPORT_NORGAMES
+// Performs a quick check on a buffer for 0xFF values (aligned in 32 byte blocks)
+START_THUMB_FUNC(check_erased_32xff)
+  push {r4, r5, r6}
+
+1:
+  ldmia r0!, {r2, r3, r4, r5}
+  and r2, r3
+  and r4, r5
+  and r2, r4
+  ldmia r0!, {r3, r4, r5, r6}
+  and r3, r4
+  and r5, r6
+  and r3, r5
+  and r2, r3
+  add r2, $1
+  bne 2f
+  sub r1, $1
+  bne 1b
+
+  pop {r4, r5, r6}
+  mov r0, $1
+  bx lr
+2:
+  pop {r4, r5, r6}
+  mov r0, $0
+  bx lr
+#endif
 
 #define WAIT_SYNC(value, wcnt)  \
   1:                            \

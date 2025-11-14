@@ -69,6 +69,7 @@ extern const uint32_t ingame_trampoline_payload_size;
 
 // In-game menu requires ~1MB of free space. Lives in the last MB of ROM.
 #define GBA_ROM_BASE              0x08000000
+#define GBA_ROM_BASE_WS1          0x0A000000
 #define MAX_GBA_ROM_SIZE          (32*1024*1024)
 #define MIN_IGM_ROMGAP_SIZE       (896*1024)           // This is a rough upperbound
 #define MAX_ROM_SIZE_IGM          (32*1024*1024 - MIN_IGM_ROMGAP_SIZE)
@@ -91,6 +92,7 @@ extern const uint32_t ingame_trampoline_payload_size;
 // Memory map for flash assets
 #define ROM_OFF_FLAHFIRMW         0x00000000     // At 0x0, the ROM boot address
 #define ROM_OFF_FLASHMETA         0x00200000     // At 0x08200000, 2MiB offset
+#define ROM_OFF_FLASHDATA         0x00400000     // At 0x08400000, 4MiB offset
 
 #define ROM_FLASHFIRMW_ADDR     ((0x08000000 + ROM_OFF_FLAHFIRMW))
 #define ROM_FLASHMETA_ADDR      ((0x08000000 + ROM_OFF_FLASHMETA))
@@ -182,6 +184,7 @@ void nds_launch();
 void gba_irq_handler();
 void set_irq_enable(bool enable);
 void rom_copy_write16(void *dst, const void *src, unsigned cnt);
+int check_erased_32xff(const void *buffer, unsigned blk32cnt);
 void set_undef_lr(uint32_t value);
 void set_abort_lr(uint32_t value);
 
@@ -199,6 +202,7 @@ typedef struct {
 } t_patchdb_info;
 extern t_patchdb_info pdbinfo;
 extern volatile unsigned frame_count;
+uint32_t systime();
 
 // Patch information for direct save mode.
 typedef struct {
@@ -206,14 +210,10 @@ typedef struct {
   uint32_t sector_lba;                 // Sector number (we limit it to 32 bits)
 } t_dirsave_info;
 
-struct struct_t_rtc_state {
-  uint8_t year, month, day, hour, mins;
-};
-typedef struct struct_t_rtc_state t_rtc_state;
 
 // ROM config settings
 typedef struct {
-  t_rtc_state rtcval;
+  uint32_t rtcts;
   unsigned patch_policy;     // Can only be PatchDatabase, PatchEngine or PatchNone
   bool use_dsaving;
   bool use_igm;
@@ -276,14 +276,14 @@ unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh);
 // Loads a ROM file and launches it.
 unsigned load_gba_rom(const char *fn, uint32_t fs, const struct struct_t_patch *ptch,
                       const t_dirsave_info *dsinfo, bool ingame_menu,
-                      const t_rtc_state *rtc_clock, unsigned cheats, progress_fn progress);
+                      uint32_t rtc_ts, unsigned cheats, progress_fn progress);
 // Launch from NOR
 unsigned  flash_gba_nor(const char *fn, uint32_t fs, const t_rom_header *rom_header,
                         const struct struct_t_patch *ptch, bool dirsaving, bool ingame_menu, bool rtc_patches,
                         const uint8_t *blkmap, progress_fn progress, uint8_t *scratch, unsigned ssize);
 unsigned launch_gba_nor(
   const char *romfn, const uint8_t *normap, unsigned blkcnts, const t_dirsave_info *dsinfo,
-  const t_rtc_state *rtc_clock, bool ingame_menu, unsigned cheats);
+  uint32_t rtc_ts, bool ingame_menu, unsigned cheats);
 
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress);
 bool validate_gba_header(const uint8_t *header);
@@ -370,6 +370,14 @@ extern t_flash_info flashinfo;
 bool check_superfw(const uint8_t *h, uint32_t *ver);
 bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize);
 
+typedef struct {
+  uint32_t baseaddr;
+  uint32_t sectorsize;
+  uint32_t sectorcount;
+  uint32_t currsect;
+  uint32_t timeout;
+} t_flash_erase_state;
+
 bool flash_identify(t_flash_info *info);
 bool flash_erase_chip();
 bool flash_erase_sector(uintptr_t addr);
@@ -379,6 +387,8 @@ bool flash_check_erased(uintptr_t addr, unsigned size);
 bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size);
 bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize);
 bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size);
+void flash_erase_fsm_start(t_flash_erase_state *st, uint32_t baseaddr, unsigned sectsize, unsigned sectorcnt);
+int flash_erase_fsm_step(t_flash_erase_state *st);
 
 // Test/validation stuff
 unsigned sram_test();

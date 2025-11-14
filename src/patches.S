@@ -666,13 +666,13 @@ END_FUNC(patch_rtc_getstatus)
 START_FUNC(patch_rtc_gettimedate)
   // TODO: Advance RTC?
 
-  push {r4, r5, r6, lr}
+  push {r4, r5, lr}
 
   mov r4, r0           // Save buffer pointer
 
   // Switch to ARM mode.
-  adr r2, 1f
-  bx r2
+  bx pc
+  nop
 
 .balign 4
 .arm
@@ -686,41 +686,74 @@ START_FUNC(patch_rtc_gettimedate)
   bx r2
 
 .thumb
-  mov r6, $0x3f
 
-  // Copy date/time in to the struct format.
-  mov r3, $0           // Seconds always zero
-  strb r3, [r4, #6]
+  mov r1, $60                  // Get seconds
+  bl div_ts_bcd
+  strb r0, [r4, #6]
 
-  mov r0, r5           // Hours
-  and r0, r6
-  bl bcdconv
-  strb r0, [r4, #4]
-
-  lsr r0, r5, $6       // Minutes
-  and r0, r6
-  bl bcdconv
+  mov r1, $60                  // Get minutes
+  bl div_ts_bcd
   strb r0, [r4, #5]
 
-  lsr r0, r5, $12      // Day
-  and r0, r6
-  bl bcdconv
-  strb r0, [r4, #2]
+  mov r1, $24                  // Get hours
+  bl div_ts_bcd
+  strb r0, [r4, #4]
 
-  lsr r0, r5, $18      // Month
-  and r0, r6
-  add r0, $1           // 0-11 -> 1-12
-  bl bcdconv
-  strb r0, [r4, #1]
+  // r5 contains the number of days since 2000-01-01
+  // it's a bit trickier to get year/month/day now.
 
-  lsr r0, r1, $24      // Year
-  bl bcdconv
+  mov r0, $0         // Start on year 2000 (0)
+  1:
+    mov r1, $180     // Assume non-leap year
+    add r1, $185
+    adr r2, months
+    lsl r3, r0, $30
+    bne 2f
+      add r1, $1     // Leap year!
+      add r2, $12    // Jump 12 months in the table
+    2:
+    sub r5, r1       // Decrement 365 or 366
+    bcs 1b           // Keep looping if the result was 0+
+
+  add r5, r1  // r5 underflowed, re-add r1 to go back one iteration
+
+  // r0 is the year, r5 contains the day offset (in the year), r2 points to the month table.
+
+  bl bcdconv         // Calculate year and store it
   strb r0, [r4, #0]
 
-  pop {r4, r5, r6}
-  mov r0, $1                 // Return true
+  mov r0, $0         // Start on month 0
+  1:
+    ldrb r1, [r2, r0]
+    add r0, $1
+    sub r5, r1       // Subtract the day count for that month
+    bcs 1b           // Keep iterating if the result was 0+
+
+  add r5, r1         // Go back 1 iteration.
+
+  // r0 contains month number (1-12), r5 the day in the month (0-30)
+
+  bl bcdconv                   // Get month
+  strb r0, [r4, #1]
+
+  mov r0, r5
+  bl bcdconv                   // Get day
+  strb r0, [r4, #2]
+
+  pop {r4, r5}
+  mov r0, $1                   // Return true
   pop {r1}
   bx r1
+
+// Division by N routine, divides r5 by r1.
+// Quotient stored back to r5, the remainder r0 is BCD converted.
+// r1-r3 are clobbered
+div_ts_bcd:
+  mov r0, r5
+  swi 0x6
+  mov r5, r0
+  mov r0, r1
+  // fallback to bcdconv
 
 // Potential BCD conversion routine r0 number
 bcdconv:
@@ -729,6 +762,12 @@ bcdconv:
   lsl r0, $4
   orr r0, r1
   bx lr
+
+.balign 4
+months:
+  .byte 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+  .byte 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+
 END_FUNC(patch_rtc_gettimedate)
 
 

@@ -39,6 +39,14 @@ unsigned parseuint(const char *s);
 void human_size(char *s, unsigned ml, uint32_t sz);
 void human_size_kb(char *s, unsigned ml, uint32_t sz);
 
+// Date conversion/management routines.
+typedef struct {
+  int8_t year, month, day, hour, min, sec;
+} t_dec_date;
+uint32_t date2timestamp(const t_dec_date *d);
+void timestamp2date(uint32_t ts, t_dec_date *out);
+void fixdate(t_dec_date *d);
+
 // Just checks that a file exists.
 bool check_file_exists(const char *fn);
 

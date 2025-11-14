@@ -124,6 +124,10 @@ void irq_handler_fn() {
   frame_count++;
 }
 
+uint32_t systime() {
+  return (frame_count * 50) / 3;
+}
+
 static int main_gba() {
   // Setup WAITCNT for faster SD-card access.
   REG_WAITCNT = 0x40c0;    // 0x8-0x9: Use 4/2 waitstates (default, slow for SDRAM)

@@ -225,11 +225,14 @@ en_strings = [
   }),
   ("SUPPORT_NORGAMES", {
   "MSG_Q5_DELNORG": "Delete this game from flash memory?",
+  "MSG_Q6_CLRNOR":  "Do you want to format the internal flash memory?",
   "MSG_ERR_NORUPD": "Flash write failed!",                 # alertmsg
   "MSG_ERR_NORSPC": "Insufficient disk space!",            # alertmsg
   "MSG_NOR_WRITE":  "Write game to flash",
   "MSG_NOR_LAUNCH": "Launch flash game",
-  "MSG_NOR_WROK":   "Game flashed successfully!",
+  "MSG_NOR_WROK":   "Game flashed successfully!",          # alertmsg
+  "MSG_NOR_CLOK":   "Flash erased successfully!",          # alertmsg
+  "MSG_TOOLS5_FCLR":"Erase flash",
   }),
 ]
 
@@ -298,22 +301,26 @@ if len(sys.argv) > 1 and sys.argv[1] == "json":
 elif len(sys.argv) > 1 and sys.argv[1] == "h":
   todump = en_menu_strings if sys.argv[2] == "menu" else en_strings
 
-  print("enum TranslationID {")
+  strlist = []
   for c, entries in todump:
+    for k, v in entries.items():
+      strlist.append((k, v, c))
+  strlist = sorted(strlist)
+
+  print("enum TranslationID {")
+  for k, _, c in strlist:
     if c:
       print("#ifdef %s" % c)
-    for k in sorted(entries):
-      print("  %s," % k)
+    print("  %s," % k)
     if c:
       print("#endif")
   print("};")
 
   print("const char * const msg_en[] = {")
-  for c, entries in todump:
+  for k, v, c in strlist:
     if c:
       print("#ifdef %s" % c)
-    for k, v in sorted(entries.items()):
-      print('  /* %s */ "%s",' % (k.ljust(20), v))
+    print('  /* %s */ "%s",' % (k.ljust(20), v))
     if c:
       print("#endif")
   print("};")
@@ -323,12 +330,11 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
   for l in OTHER_LANGS:
     d = json.load(open(os.path.join(langdir, "%s.json" % l)))
     print("const char * const msg_%s[] = {" % l)
-    for c, entries in todump:
+    for k, en_v, c in strlist:
       if c:
         print("#ifdef %s" % c)
-      for k, en_v in sorted(entries.items()):
-        v = d[k] if k in d and d[k] else en_v
-        print('  /* %s */ "%s",' % (k.ljust(20), v))
+      v = d[k] if k in d and d[k] else en_v
+      print('  /* %s */ "%s",' % (k.ljust(20), v))
       if c:
         print("#endif")
     print("};")

@@ -465,11 +465,20 @@ ingame_menu_entry:
     ldr r3, [r1, #(64 + 4 + off*12 + 8)]; \
     msr spsr, r3;
 
-  reload_regs(0x12, 0);              // SPSR IRQ mode
-  reload_regs(0x11, 1);              // SPSR FIQ mode
-  reload_regs(0x13, 2);              // SPSR supervisor mode
-  reload_regs(0x17, 3);              // SPSR abort mode
-  reload_regs(0x1B, 4);              // SPSR undefined mode
+  // We store some data in LR sometimes!
+  #define reload_part_regs(mode, off)     \
+    mov r0, $(0xC0 | (mode));             \
+    msr cpsr_c, r0;                       \
+    ldr sp, [r1, #(64 + 4 + off*12 + 0)]; \
+    ldr r3, [r1, #(64 + 4 + off*12 + 8)]; \
+    msr spsr, r3;
+
+
+  reload_regs(0x12, 0);              // IRQ mode
+  reload_regs(0x11, 1);              // FIQ mode
+  reload_regs(0x13, 2);              // supervisor mode
+  reload_part_regs(0x17, 3);         // abort mode
+  reload_part_regs(0x1B, 4);         // undefined mode
 
   ldr r3, [r1, #(64 + 0)]            // CPSR (IRQ mode)
   msr cpsr, r3                       // Load CPSR, changes to IRQ mode too.

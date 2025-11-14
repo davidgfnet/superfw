@@ -143,6 +143,11 @@ bool flashmgr_store(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
   return true;
 }
 
+// Wipes flash metadata block.
+bool flashmgr_wipe(uint32_t baseaddr, unsigned maxsize) {
+  return flashmgr_erase(baseaddr, maxsize);
+}
+
 // Allocates blocks based on wear and updates write cycles information.
 bool flashmgr_allocate_blocks(uint8_t *blockmap, unsigned nalloc, t_reg_entry *ndata) {
   // Check which blocks are free and allocate some free blocks to use.

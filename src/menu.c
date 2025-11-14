@@ -100,12 +100,15 @@ enum {
 };
 
 enum {
-  ToolsSDRAMTest   = 0,
-  ToolsSRAMTest    = 1,
-  ToolsBatteryTest = 2,
-  ToolsSDBench     = 3,
-  ToolsFlashBak    = 4,
-  ToolsMAX         = 4,
+  ToolsSDRAMTest = 0,
+  ToolsSRAMTest,
+  ToolsBatteryTest,
+  ToolsSDBench,
+  ToolsFlashBak,
+  #ifdef SUPPORT_NORGAMES
+  ToolsFlashClr,
+  #endif
+  ToolsMAX,
 };
 
 enum {
@@ -232,7 +235,7 @@ typedef struct {
   char savefn[MAX_FN_LEN];            // Save file path.
   bool savefile_found;                // Whether there's a .sav file.
   // RTC config
-  t_rtc_state rtcval;                 // Initial RTC value.
+  uint32_t rtcval;                    // Initial RTC value.
   // Cheats policy
   bool use_cheats;                    // Whether we want to load cheats to use them.
   bool cheats_found;                  // Whether there's a cheats file (not parsed tho!)
@@ -316,7 +319,7 @@ static struct {
 
   // RTC time set pop up, a bit special.
   struct {
-    t_rtc_state val;
+    t_dec_date val;
     int selector;
     void (*callback)();                   // Function to call on "save"
   } rtcpop;
@@ -586,6 +589,7 @@ void sram_battery_test_callback(bool confirm) {
   }
 }
 
+
 static const t_patch * get_game_patch(const t_load_gba_info *info) {
   return info->patch_type == PatchDatabase && info->patches_datab_found ? &info->patches_datab :
          info->patch_type == PatchEngine   && info->patches_cache_found ? &info->patches_cache : NULL;
@@ -767,7 +771,7 @@ static void prepare_gba_settings(t_load_gba_lcfg *data, const t_rom_settings *st
     data->sram_save_type = autosave_default && !game_no_save ? SaveReboot : SaveDisable;
   }
 
-  data->rtcval = st->rtcval;
+  data->rtcval = st->rtcts;
 }
 
 
@@ -778,7 +782,7 @@ static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) 
   } else {
     // Default to global settings (in case the file is not found).
     t_rom_settings savedcfg = {
-      .rtcval = rtcvalue_default,
+      .rtcts = rtcvalue_default,
       .patch_policy = patcher_default,
       .use_dsaving = autosave_prefer_ds,
       .use_igm = ingamemenu_default,
@@ -1574,9 +1578,10 @@ static const char *render_gbarom_loading(volatile uint8_t *frame, const t_load_g
   draw_central_text(msgs[lang_id][MSG_LOADER_SAVEP0 + data->sram_save_type], frame, 170, 62);
   draw_text_ovf(msgs[lang_id][MSG_DEF_RTCVAL], frame, 12, 80, 224);
   if (rtc_patching) {
+    t_dec_date d;
+    timestamp2date(data->rtcval, &d);
     npf_snprintf(tmp, sizeof(tmp), "20%02d/%02d/%02d %02d:%02d",
-      data->rtcval.year, data->rtcval.month + 1, data->rtcval.day + 1,
-      data->rtcval.hour, data->rtcval.mins);
+      d.year, d.month, d.day, d.hour, d.min);
     draw_central_text(tmp, frame, 170, 80);
   }
   else
@@ -1746,11 +1751,11 @@ void render_rtcpop(volatile uint8_t *frame) {
 
   draw_central_text(msgs[lang_id][MSG_DEF_RTCVAL], frame, SCREEN_WIDTH/2, 32);
 
-  const t_rtc_state *v = &spop.rtcpop.val;
-  char thour[3] = {'0' + v->hour/10, '0' + v->hour % 10, 0};
-  char tmins[3] = {'0' + v->mins/10, '0' + v->mins % 10, 0};
-  char tdays[3] = {'0' + (v->day + 1)/10, '0' + (v->day + 1)  % 10, 0};
-  char tmont[3] = {'0' + (v->month + 1)/10, '0' + (v->month + 1) % 10, 0};
+  const t_dec_date *v = &spop.rtcpop.val;
+  char thour[3] = {'0' + v->hour /10, '0' + v->hour  % 10, 0};
+  char tmins[3] = {'0' + v->min  /10, '0' + v->min   % 10, 0};
+  char tdays[3] = {'0' + v->day  /10, '0' + v->day   % 10, 0};
+  char tmont[3] = {'0' + v->month/10, '0' + v->month % 10, 0};
   char tyear[5] = {'2', '0', '0' + v->year/10, '0' + v->year % 10, 0};
 
   draw_central_text(tyear, frame,  60, 70);
@@ -1861,9 +1866,10 @@ void render_settings(volatile uint8_t *frame) {
   }
 
   if (msk & 0x02000) {
+    t_dec_date d;
+    timestamp2date(rtcvalue_default, &d);
     npf_snprintf(tmp, sizeof(tmp), "20%02d/%02d/%02d %02d:%02d",
-      rtcvalue_default.year, rtcvalue_default.month + 1, rtcvalue_default.day + 1,
-      rtcvalue_default.hour, rtcvalue_default.mins);
+      d.year, d.month, d.day, d.hour, d.min);
     draw_text_ovf(msgs[lang_id][MSG_DEF_RTCVAL], frame, 8, offy + rowh*optcnt, 224);
     draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
   }
@@ -2005,10 +2011,10 @@ void render_info(volatile uint8_t *frame) {
 }
 
 void render_tools(volatile uint8_t *frame) {
-  for (unsigned i = 0; i <= ToolsMAX; i++) {
-    draw_text_ovf(msgs[lang_id][MSG_TOOLS0_SDRAM + i], frame, 12, 24 + 2 + 24 * i, 144);
-    draw_button_box(frame, 150, 232, 24 + 24 * i, 24 + 20 + 24 * i, smenu.tools.selector == i);
-    draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 191, 24 + 2 + 24 * i);
+  for (unsigned i = 0; i < ToolsMAX; i++) {
+    draw_text_ovf(msgs[lang_id][MSG_TOOLS0_SDRAM + i], frame, 12, 24 + 2 + 22 * i, 144);
+    draw_button_box(frame, 150, 232, 24 + 22 * i, 24 + 20 + 22 * i, smenu.tools.selector == i);
+    draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 191, 24 + 2 + 22 * i);
   }
 }
 
@@ -2364,10 +2370,10 @@ static void keypress_popup_loadgba(unsigned newkeys) {
   if (newkeys & KEY_BUTTA) {
     if (spop.submenu == GbaLoadPopLoadS && spop.selector == GBALdSetRTC && spop.p.load.i.rtc_patch_enabled) {
       void accept_rtc() {
-        spop.p.load.l.rtcval = spop.rtcpop.val;
+        spop.p.load.l.rtcval = date2timestamp(&spop.rtcpop.val);
       }
       if (spop.p.load.i.rtc_patch_enabled) {
-        spop.rtcpop.val = spop.p.load.l.rtcval;
+        timestamp2date(spop.p.load.l.rtcval, &spop.rtcpop.val);
         spop.rtcpop.callback = accept_rtc;
       }
     }
@@ -2380,7 +2386,7 @@ static void keypress_popup_loadgba(unsigned newkeys) {
     else if (spop.submenu == GbaLoadPopLoadS && spop.selector == GBALdRemember) {
       // Save settings to disk now!
       t_rom_settings savedcfg = {
-        .rtcval = spop.p.load.l.rtcval,
+        .rtcts = spop.p.load.l.rtcval,
         .patch_policy = spop.p.load.i.patch_type,
         .use_dsaving = spop.p.load.i.use_dsaving,
         .use_igm = spop.p.load.i.ingame_menu_enabled,
@@ -2417,7 +2423,7 @@ static void keypress_popup_loadgba(unsigned newkeys) {
         spop.p.load.i.romfn, spop.p.load.i.romfs, p,
         spop.p.load.l.sram_save_type == SaveDirect ? &dsinfo : NULL,
         spop.p.load.i.ingame_menu_enabled,
-        spop.p.load.i.rtc_patch_enabled ? &spop.p.load.l.rtcval : NULL,
+        spop.p.load.i.rtc_patch_enabled ? spop.p.load.l.rtcval : ~0U,
         spop.p.load.l.use_cheats ? spop.p.load.l.cheats_size : 0,
         loadrom_progress);
       if (err) {
@@ -2671,16 +2677,16 @@ static void keypress_popup_norload(unsigned newkeys) {
         e->game_name,
         e->blkmap, e->numblks,
         uses_dsave ? &dsinfo : NULL,
-        uses_rtc ? &spop.p.norld.l.rtcval : NULL,
+        uses_rtc ? spop.p.norld.l.rtcval : ~0U,
         uses_igm,
         spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0);
 
     } else if (spop.selector == GBALdSetRTC) {
       void accept_rtc() {
-        spop.p.norld.l.rtcval = spop.rtcpop.val;
+        spop.p.norld.l.rtcval = date2timestamp(&spop.rtcpop.val);
       }
       if (uses_rtc) {
-        spop.rtcpop.val = spop.p.norld.l.rtcval;
+        timestamp2date(spop.p.norld.l.rtcval, &spop.rtcpop.val);
         spop.rtcpop.callback = accept_rtc;
       }
     }
@@ -2739,7 +2745,7 @@ static void keypress_popup_filemgr(unsigned newkeys) {
         strcpy(path, smenu.browser.cpath);
         strcat(path, e->fname);
         const t_rom_settings defcfg = {
-          .rtcval = rtcvalue_default,
+          .rtcts = rtcvalue_default,
           .patch_policy = patcher_default,
           .use_dsaving = autosave_prefer_ds,
           .use_igm = ingamemenu_default,
@@ -2989,9 +2995,9 @@ static void keypress_menu_settings(unsigned newkeys) {
 
   if (newkeys & KEY_BUTTA && smenu.set.selector == DefsRTCVal) {
     void accept_rtc() {
-      rtcvalue_default = spop.rtcpop.val;
+      rtcvalue_default = date2timestamp(&spop.rtcpop.val);
     }
-    spop.rtcpop.val = rtcvalue_default;
+    timestamp2date(rtcvalue_default, &spop.rtcpop.val);
     spop.rtcpop.callback = accept_rtc;
   }
   if (newkeys & KEY_BUTTA && smenu.set.selector == SettSave) {
@@ -3044,7 +3050,7 @@ static void keypress_menu_tools(unsigned newkeys) {
   if (newkeys & KEY_BUTTUP)
     smenu.tools.selector = MAX(0, smenu.tools.selector - 1);
   if (newkeys & KEY_BUTTDOWN)
-    smenu.tools.selector = MIN(ToolsMAX, smenu.tools.selector + 1);
+    smenu.tools.selector = MIN(ToolsMAX - 1, smenu.tools.selector + 1);
 
   if (newkeys & KEY_BUTTA) {
     if (smenu.tools.selector == ToolsSDRAMTest) {
@@ -3091,7 +3097,31 @@ static void keypress_menu_tools(unsigned newkeys) {
         spop.alert_msg = msgs[lang_id][MSG_FLASH_READOK];
       else
         spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+
+      browser_reload();
     }
+    #ifdef SUPPORT_NORGAMES
+    else if (smenu.tools.selector == ToolsFlashClr) {
+      void flash_clear_callback(bool confirm) {
+        if (confirm) {
+          // Delete all metadata (data is not really wiped, takes too long)
+          if (flashmgr_wipe(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE))
+            spop.alert_msg = msgs[lang_id][MSG_NOR_CLOK];
+          else
+            spop.alert_msg = msgs[lang_id][MSG_ERR_NORUPD];
+
+          flashbrowser_reload();     // Ensure we clear the NOR entries from RAM.
+        }
+      }
+      // Prompt the user for clearing the memory.
+      spop.qpop.message = msgs[lang_id][MSG_Q6_CLRNOR];
+      spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+      spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+      spop.qpop.option = 0;
+      spop.qpop.callback = flash_clear_callback;
+      spop.qpop.clear_popup_ok = true;
+    }
+    #endif
   }
 }
 
@@ -3125,7 +3155,6 @@ void menu_keypress(unsigned newkeys) {
     }
   }
   else if (spop.rtcpop.callback) {
-    const uint8_t rmax[] = { 99, 11, 30, 23, 59 };
     if (newkeys & KEY_BUTTLEFT)
       spop.rtcpop.selector = MAX(0, spop.rtcpop.selector - 1);
     if (newkeys & KEY_BUTTRIGHT)
@@ -3134,14 +3163,10 @@ void menu_keypress(unsigned newkeys) {
     if (newkeys & KEY_BUTTUP)
       ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector]++;
     if (newkeys & KEY_BUTTDOWN)
-      ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector] += rmax[spop.rtcpop.selector];
-    if (newkeys & (KEY_BUTTUP|KEY_BUTTDOWN)) {
-      spop.rtcpop.val.year %= 100;
-      spop.rtcpop.val.month %= 12;
-      spop.rtcpop.val.day %= 31;
-      spop.rtcpop.val.hour %= 24;
-      spop.rtcpop.val.mins %= 60;
-    }
+      ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector]--;
+
+    if (newkeys & (KEY_BUTTUP|KEY_BUTTDOWN))
+      fixdate(&spop.rtcpop.val);
 
     if (newkeys & KEY_BUTTB) {
       spop.rtcpop.selector = 0;
