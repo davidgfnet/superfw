@@ -126,11 +126,12 @@ enum {
   DefsGamMenu  = 11,
   DefsRTCEnb   = 12,
   DefsRTCVal   = 13,
-  DefsLoadPol  = 14,
-  DefsSavePol  = 15,
-  DefsPrefDS   = 16,
-  SettSave     = 17,
-  SettMAX      = 17,
+  DefsRTCSpeed = 14,
+  DefsLoadPol  = 15,
+  DefsSavePol  = 16,
+  DefsPrefDS   = 17,
+  SettSave     = 18,
+  SettMAX      = 18,
 };
 
 enum {
@@ -1875,21 +1876,28 @@ void render_settings(volatile uint8_t *frame) {
   }
 
   if (msk & 0x04000) {
+    unsigned spdmsg = rtcspeed_default ? (MSG_UIS_SPD0 + rtcspeed_default - 1) :
+                                          MSG_STILLRTC;
+    draw_text_ovf(msgs[lang_id][MSG_DEF_SPEED], frame, 8, offy + rowh*optcnt, 224);
+    draw_central_text(msgs[lang_id][spdmsg], frame, colx, offy + rowh*optcnt++);
+  }
+
+  if (msk & 0x08000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_LOADP], frame, 8, offy + rowh*optcnt, 224);
     draw_central_text(msgs[lang_id][MSG_DEF_LOADP0 + (autoload_default ^ 1)], frame, colx, offy + rowh*optcnt++);
   }
 
-  if (msk & 0x08000) {
+  if (msk & 0x10000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_SAVEP], frame, 8, offy + rowh*optcnt, 224);
     draw_central_text(msgs[lang_id][autosave_default ? MSG_DEF_SAVEP0 : MSG_DEF_SAVEP1], frame, colx, offy + rowh*optcnt++);
   }
 
-  if (msk & 0x10000) {
+  if (msk & 0x20000) {
     draw_text_ovf(msgs[lang_id][MSG_LOADER_PREFDS], frame, 8, offy + rowh*optcnt, 224);
     draw_central_text(msgs[lang_id][autosave_prefer_ds ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, offy + rowh*optcnt++);
   }
 
-  if (msk & 0x20000) {
+  if (msk & 0x40000) {
     if (smenu.set.selector != SettSave)
       draw_box_outline(frame, 20, 220, 112, 132, FG_COLOR);
     else
@@ -2419,11 +2427,16 @@ static void keypress_popup_loadgba(unsigned newkeys) {
         return;
       }
 
+      t_rtc_info rtci = {
+        .timestamp = spop.p.load.l.rtcval,
+        .ts_step = rtc_speed(rtcspeed_default)
+      };
+
       unsigned err = load_gba_rom(
         spop.p.load.i.romfn, spop.p.load.i.romfs, p,
         spop.p.load.l.sram_save_type == SaveDirect ? &dsinfo : NULL,
         spop.p.load.i.ingame_menu_enabled,
-        spop.p.load.i.rtc_patch_enabled ? spop.p.load.l.rtcval : ~0U,
+        spop.p.load.i.rtc_patch_enabled ? &rtci : NULL,
         spop.p.load.l.use_cheats ? spop.p.load.l.cheats_size : 0,
         loadrom_progress);
       if (err) {
@@ -2671,13 +2684,17 @@ static void keypress_popup_norload(unsigned newkeys) {
         spop.alert_msg = msgs[lang_id][errmsg];
         return;
       }
+      t_rtc_info rtci = {
+        .timestamp = spop.p.norld.l.rtcval,
+        .ts_step = rtc_speed(rtcspeed_default)
+      };
 
       // TODO Handle errors, finish missing stuff.
       unsigned err = launch_gba_nor(
         e->game_name,
         e->blkmap, e->numblks,
         uses_dsave ? &dsinfo : NULL,
-        uses_rtc ? spop.p.norld.l.rtcval : ~0U,
+        uses_rtc ? &rtci : NULL,
         uses_igm,
         spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0);
 
@@ -2959,6 +2976,8 @@ static void keypress_menu_settings(unsigned newkeys) {
       backup_sram_default = backup_sram_default ? backup_sram_default - 1 : 0;
     else if (smenu.set.selector == DefsPatchEng)
       patcher_default = (patcher_default + PatchTotalCNT - 1) % PatchTotalCNT;
+    else if (smenu.set.selector == DefsRTCSpeed)
+      rtcspeed_default = (rtcspeed_default + rtc_speed_cnt() - 1) % rtc_speed_cnt();
   }
   if (newkeys & KEY_BUTTRIGHT) {
     if (smenu.set.selector == SettHotkey)
@@ -2971,6 +2990,8 @@ static void keypress_menu_settings(unsigned newkeys) {
       backup_sram_default = MIN(16, backup_sram_default + 1);
     else if (smenu.set.selector == DefsPatchEng)
       patcher_default = (patcher_default + 1) % PatchTotalCNT;
+    else if (smenu.set.selector == DefsRTCSpeed)
+      rtcspeed_default = (rtcspeed_default + 1) % rtc_speed_cnt();
   }
   if (newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) {
     if (smenu.set.selector == SettBootType)

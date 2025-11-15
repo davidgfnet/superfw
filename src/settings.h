@@ -63,6 +63,7 @@ extern uint32_t autosave_prefer_ds;
 extern uint32_t ingamemenu_default;
 extern uint32_t rtcpatch_default;
 extern uint32_t rtcvalue_default;
+extern uint32_t rtcspeed_default;
 
 // Setting load/store
 bool save_ui_settings();

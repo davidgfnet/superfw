@@ -52,8 +52,9 @@ extern char savestate_pattern[256];
 
 void reset_game();
 void reset_fw();
-void set_undef_lr(uint32_t);
+void set_undef_lrsp(uint32_t, uint32_t);
 uint32_t get_undef_lr(void);
+uint32_t get_undef_sp(void);
 void fast_mem_cpy_256(void *dst, const void *src, unsigned count);
 void fast_mem_clr_256(void *addr, uint32_t value, unsigned count);
 void set_entrypoint_hook(bool process_cheats);
@@ -1027,7 +1028,8 @@ void rtckey(uint16_t keyp) {
 
 bool action_write_rtc() {
   // Write to the emulated RTC register
-  set_undef_lr(date2timestamp(&rtc_date));
+  // TODO: Allow changing the RTC speed.
+  set_undef_lrsp(date2timestamp(&rtc_date), get_undef_sp());
 
   submenu = MenuMain;
   copt = 0;

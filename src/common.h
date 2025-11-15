@@ -185,7 +185,7 @@ void gba_irq_handler();
 void set_irq_enable(bool enable);
 void rom_copy_write16(void *dst, const void *src, unsigned cnt);
 int check_erased_32xff(const void *buffer, unsigned blk32cnt);
-void set_undef_lr(uint32_t value);
+void set_undef_lrsp(uint32_t lr, uint32_t sp);
 void set_abort_lr(uint32_t value);
 
 // Decompress (WRAM version), returns written bytes
@@ -209,6 +209,11 @@ typedef struct {
   uint32_t save_size;                  // The file size must be at least this size or bad things can happen
   uint32_t sector_lba;                 // Sector number (we limit it to 32 bits)
 } t_dirsave_info;
+// RTC config data
+typedef struct {
+  uint32_t timestamp;                  // RTC current (boot) timestamp.
+  uint32_t ts_step;                    // Number of seconds to advance the RTC on events.
+} t_rtc_info;
 
 
 // ROM config settings
@@ -250,6 +255,16 @@ static inline unsigned savetype_size(EnumSavetype st) {
   return 1 << lut[st];
 }
 
+static inline unsigned rtc_speed(unsigned speed_class) {
+  const uint8_t lut[] = {
+    0, 4, 8, 16, 24, 36
+  };
+  return lut[speed_class];
+}
+static inline unsigned rtc_speed_cnt() {
+  return 6;
+}
+
 typedef void (*progress_fn)(unsigned done, unsigned total);
 typedef bool (*progress_abort_fn)(unsigned done, unsigned total);
 
@@ -276,14 +291,14 @@ unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh);
 // Loads a ROM file and launches it.
 unsigned load_gba_rom(const char *fn, uint32_t fs, const struct struct_t_patch *ptch,
                       const t_dirsave_info *dsinfo, bool ingame_menu,
-                      uint32_t rtc_ts, unsigned cheats, progress_fn progress);
+                      const t_rtc_info *rtcinfo, unsigned cheats, progress_fn progress);
 // Launch from NOR
 unsigned  flash_gba_nor(const char *fn, uint32_t fs, const t_rom_header *rom_header,
                         const struct struct_t_patch *ptch, bool dirsaving, bool ingame_menu, bool rtc_patches,
                         const uint8_t *blkmap, progress_fn progress, uint8_t *scratch, unsigned ssize);
 unsigned launch_gba_nor(
   const char *romfn, const uint8_t *normap, unsigned blkcnts, const t_dirsave_info *dsinfo,
-  uint32_t rtc_ts, bool ingame_menu, unsigned cheats);
+  const t_rtc_info *rtcinfo, bool ingame_menu, unsigned cheats);
 
 unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo, progress_fn progress);
 bool validate_gba_header(const uint8_t *header);

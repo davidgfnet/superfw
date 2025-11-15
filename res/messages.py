@@ -86,6 +86,8 @@ en_strings = [
   "MSG_UIS_SPD3":  "< Fast >",
   "MSG_UIS_SPD4":  "< Very fast >",
 
+  "MSG_STILLRTC":    "< Frozen >",
+
   "MSG_GBALOAD_MINFO":  "ROM information",
   "MSG_GBALOAD_OPTS":   "Loading options",
   "MSG_GBALOAD_MPATCH": "Patching options",
@@ -157,6 +159,7 @@ en_strings = [
   "MSG_LOADER_RTCE": "Emulated RTC",
   "MSG_LOADER_PTCH": "PatchEngine",
   "MSG_DEF_RTCVAL":  "RTC time",
+  "MSG_DEF_SPEED":   "RTC speed",
   "MSG_LOAD_GBA":    "Load GBA game ROM",
 
   "MSG_LOADINFO_GAME": "GameID: %s | Version: %d",

@@ -49,13 +49,14 @@
 .section .text
 
 // Writes the LR register for CPU undef mode (RTC register)
-START_THUMB_FUNC(set_undef_lr)
+START_THUMB_FUNC(set_undef_lrsp)
   mov r2, pc; bx r2    // Go into arm mode
   .arm
 
   mrs r2, CPSR         // Save the current CPSR
   msr CPSR_c, $0x9B    // Move to undefined mode
   mov lr, r0           // Store in UNDEF[LR]
+  mov sp, r1           // Store in UNDEF[SP]
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 

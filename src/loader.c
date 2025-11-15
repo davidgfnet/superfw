@@ -185,8 +185,8 @@ void load_directsave_config(const t_dirsave_info *dsinfo) {
   write_sram_buffer((uint8_t*)(&cfg), 64*1024 - sizeof(cfg), sizeof(cfg));
 }
 
-void load_rtcclock_data(uint32_t rtc_timestamp) {
-  set_undef_lr(rtc_timestamp);
+void load_rtcclock_data(const t_rtc_info *rtcinfo) {
+  set_undef_lrsp(rtcinfo->timestamp, rtcinfo->ts_step);
 }
 
 // Loads ROM header from disk for inspection.
@@ -209,12 +209,12 @@ unsigned load_gba_rom(
   const t_patch *ptch,
   const t_dirsave_info *dsinfo,
   bool ingame_menu,
-  uint32_t rtc_ts,
+  const t_rtc_info *rtcinfo,
   unsigned cheats,
   progress_fn progress
 ) {
 
-  bool use_rtc_patches = rtc_ts != ~0U;
+  bool use_rtc_patches = rtcinfo != NULL;
 
   // Determine how much ROM space we need for the IGM and DirSav payloads
   const unsigned igm_reqsz = ingame_menu_payload.menu_rsize + font_block_size();
@@ -337,7 +337,8 @@ unsigned load_gba_rom(
   if (ptch) {
     patch_apply_rom(GBA_ROM_ADDR, MAX_GBA_ROM_SIZE, 0, true, ptch, use_rtc_patches,
                     ingame_menu ? igm_addr : 0, dsinfo ? ds_addr : 0);
-    load_rtcclock_data(rtc_ts);
+    if (rtcinfo)
+      load_rtcclock_data(rtcinfo);
   }
 
   // Fix header checksum unconditionally (just in case we boot to BIOS).
@@ -462,12 +463,12 @@ unsigned launch_gba_nor(
   const char *romfn,
   const uint8_t *normap, unsigned blkcnts,
   const t_dirsave_info *dsinfo,
-  uint32_t rtc_ts,
+  const t_rtc_info *rtcinfo,
   bool ingame_menu,
   unsigned cheats
 ) {
 
-  bool use_rtc_patches = rtc_ts != ~0U;
+  bool use_rtc_patches = rtcinfo != NULL;
 
   // Now the IGM: it sits along in the SDRAM (at 0x0 offset)
   uint32_t igm_addr = GBA_ROM_BASE;
@@ -493,7 +494,8 @@ unsigned launch_gba_nor(
   if (dsinfo)
     load_directsave_config(dsinfo);
 
-  load_rtcclock_data(rtc_ts);
+  if (rtcinfo)
+    load_rtcclock_data(rtcinfo);
 
   // Map the game NOR blocks. Unused blocks are zero mapped (to firmware)
   set_superchis_normap(normap);

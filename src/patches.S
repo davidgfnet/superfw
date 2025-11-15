@@ -664,8 +664,6 @@ END_FUNC(patch_rtc_getstatus)
 
 // Max size should be 176 bytes (88 insts)
 START_FUNC(patch_rtc_gettimedate)
-  // TODO: Advance RTC?
-
   push {r4, r5, lr}
 
   mov r4, r0           // Save buffer pointer
@@ -679,6 +677,7 @@ START_FUNC(patch_rtc_gettimedate)
 1:
   mrs r3, CPSR                 // Save the current CPSR
   msr CPSR_c, $(0x1B | 0x80)   // Move to undefined mode, no interrupts
+  add lr, lr, sp               // UNDEF[SP] contains the read-increment
   mov r5, lr                   // Read UNDEF[LR]
   msr CPSR_c, r3               // Restore original model and CPSR
 

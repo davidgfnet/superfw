@@ -88,6 +88,7 @@ uint32_t autosave_prefer_ds = 1;
 uint32_t ingamemenu_default = 1;
 uint32_t rtcpatch_default = 1;
 uint32_t rtcvalue_default = 45568800U;
+uint32_t rtcspeed_default = 3;
 
 // Setting loading/saving routines
 bool save_ui_settings() {
@@ -144,13 +145,15 @@ bool save_settings() {
     "default_igmenu=%lu\n"
     "default_rtcpatch=%lu\n"
     "default_rtcts=%lu\n"
+    "default_rtctick=%lu\n"
     "default_loadgame=%lu\n"
     "default_savegame=%lu\n"
     "prefer_directsave=%lu\n",
     hotkey_combo, boot_bios_splash, save_path_default, state_path_default,
     backup_sram_default, enable_cheats, use_slowld, use_fastew,
     (unsigned int)patcher_default, ingamemenu_default, rtcpatch_default,
-    rtcvalue_default, autoload_default, autosave_default, autosave_prefer_ds);
+    rtcvalue_default, rtcspeed_default, autoload_default, autosave_default,
+    autosave_prefer_ds);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -173,6 +176,8 @@ static void parse_settings(void *usr, const char *var, const char *value) {
     patcher_default = valu % PatchTotalCNT;
   else if (!strcmp(var, "default_rtcts"))
     rtcvalue_default = valu;
+  else if (!strcmp(var, "default_rtctick"))
+    rtcspeed_default = valu;
   else {
     const struct {
       const char *s;
