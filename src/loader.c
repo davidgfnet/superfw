@@ -275,13 +275,18 @@ unsigned load_gba_rom(
   if (res != FR_OK)
     return ERR_LOAD_BADROM;
 
+  // Calculate progress bar steps, carefully consider the gap (if any).
+  const uint32_t load_steps = (gap_end <= fs  ? (fs - (gap_end - gap_start)) :
+                               gap_start < fs ? (fs - gap_start)             : fs) / LOAD_BS;
+  uint32_t steps = 0;
+
   // Honor fast loading (switch mirror if appropriate)
   slowsd = use_slowld;
 
   uint8_t *ptr = (uint8_t*)(GBA_ROM_ADDR);
-  for (uint32_t offset = 0; offset < gap_start; offset += LOAD_BS) {
-    if (progress && (offset & (256*1024-1)) == 0)
-      progress(offset >> 8, fs >> 8);
+  for (uint32_t offset = 0; offset < gap_start; offset += LOAD_BS, steps++) {
+    if (progress && (steps & (31)) == 0)
+      progress(steps, load_steps);
 
     unsigned toread = MIN(LOAD_BS, gap_start - offset);
     UINT rdbytes;
@@ -299,9 +304,15 @@ unsigned load_gba_rom(
       dma_memcpy32(&ptr[offset], tmp, toread/4);
     set_supercard_mode(MAPPED_SDRAM, true, true);
   }
-  for (uint32_t offset = gap_end; offset < fs; offset += LOAD_BS) {
-    if (progress && (offset & (256*1024-1)) == 0)
-      progress(offset >> 8, fs >> 8);
+  // Skip over the gap
+  if (FR_OK != f_lseek(&fd, gap_end)) {
+    slowsd = true;
+    f_close(&fd);
+    return ERR_LOAD_BADROM;
+  }
+  for (uint32_t offset = gap_end; offset < fs; offset += LOAD_BS, steps++) {
+    if (progress && (steps & (31)) == 0)
+      progress(steps, load_steps);
 
     unsigned toread = MIN(LOAD_BS, fs - offset);
     UINT rdbytes;
