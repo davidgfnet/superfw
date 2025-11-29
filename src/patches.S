@@ -771,7 +771,7 @@ END_FUNC(patch_rtc_gettimedate)
 
 
 // Resets current time and date to Jan 1st 2000, at midnight.
-// Max size should be ~130 bytes (65 insts)
+// Max size should be ~130 bytes (65 insts). Newer builds are ~28bytes!
 START_FUNC(patch_rtc_reset)
   mov r0, pc
   bx r0
