@@ -156,7 +156,11 @@ entry_point:
   .word VERSION_WORD           @ Version (as a 32 bit word)
   .word VERSION_SLUG_WORD      @ Commit ID as 32 bits
   .word 0                      @ 32 bit firmware file size (patched)
-  .fill 32, 1, 0               @ 32 byte hash (patched)
+  .ascii FW_FLAVOUR; .balign 4 @ Device variant
+  .ascii "WRLD"                @ Firmware variant (no variants atm.)
+  .word 0                      @ Unused
+  .word 0                      @ Unused
+  .fill 16, 1, 0               @ 16 byte hash (patched)
   .asciz "SUPERFW~DAVIDGF"     @ Name/author
 
 main:

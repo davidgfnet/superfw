@@ -425,40 +425,54 @@ bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
   return true;
 }
 
-
-#define FW_VERSION_OFFSET       0xC4
-#define FW_GITVERS_OFFSET       0xC8
-#define FW_IMGSIZE_OFFSET       0xCC
-#define FW_IMGHASH_OFFSET       0xD0
-#define FW_MAGICSG_OFFSET       0xF0
-
-#define FW_IMGHASH_SIZE         32
+typedef struct {
+  uint8_t  rom_head[192];
+  uint32_t branch_op;
+  uint32_t version;
+  uint32_t git_version;
+  uint32_t fw_size;
+  uint8_t  hw_variant[4];
+  uint8_t  fw_variant[4];
+  uint8_t  pad[8];
+  uint8_t  checksum[16];     // Truncated sha256 checksum
+  uint8_t  magic[16];        // SUPERFW~DAVIDGF
+} t_superfw_header;
 
 // Validates a superFW image header
 bool check_superfw(const uint8_t *h, uint32_t *ver) {
-  if (memcmp(&h[FW_MAGICSG_OFFSET], "SUPERFW~DAVIDGF", 16))
+  const t_superfw_header *header = (t_superfw_header*)h;
+
+  if (memcmp(header->magic, "SUPERFW~DAVIDGF", 16))
     return false;
   if (ver)
-    *ver = parse32le(&h[FW_VERSION_OFFSET]);
+    *ver = header->version;
   return true;
 }
 
+bool validate_superfw_variant(const uint8_t *fw) {
+  const t_superfw_header *header = (t_superfw_header*)fw;
+  return !strncmp((char*)header->hw_variant, FW_FLAVOUR, 4);
+}
+
 bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize) {
+  const t_superfw_header *header = (t_superfw_header*)fw;
+
   // Check that the file size matches the advertized size in the header
-  uint32_t hsize = parse32le(&fw[FW_IMGSIZE_OFFSET]);
+  uint32_t hsize = header->fw_size;
+
   if (hsize != fwsize || fwsize < 256)
     return false;
 
   // Calculate the SH256 checksum on a zero-ed checksum field.
-  uint8_t hash[FW_IMGHASH_SIZE] = {0};
+  uint8_t hash[32] = {0};
   SHA256_State st;
   sha256_init(&st);
-  sha256_transform(&st, &fw[0], FW_IMGHASH_OFFSET);
-  sha256_transform(&st, hash, sizeof(hash));
-  sha256_transform(&st, &fw[FW_MAGICSG_OFFSET], fwsize - FW_MAGICSG_OFFSET);
+  sha256_transform(&st, &fw[0], offsetof(t_superfw_header, checksum));
+  sha256_transform(&st, hash, sizeof(header->checksum));
+  sha256_transform(&st, &fw[offsetof(t_superfw_header, magic)], fwsize - offsetof(t_superfw_header, magic));
   sha256_finalize(&st, hash);
 
-  if (memcmp(&fw[FW_IMGHASH_OFFSET], hash, sizeof(hash)))
+  if (memcmp(header->checksum, hash, sizeof(header->checksum)))
     return false;
 
   return true;

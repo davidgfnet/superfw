@@ -350,6 +350,7 @@ static struct {
       char fn[MAX_FN_LEN];                // FW file to load and flash
       bool issfw;                         // The firmware is a superFW image.
       uint32_t superfw_ver;               // Reported FW version.
+      uint8_t superfw_variant[4];         // Reported FW variant.
       uint32_t fw_size;                   // Size in bytes reported by stat.
       unsigned curr_state;                // Flashing FSM state.
     } update;
@@ -2205,7 +2206,9 @@ void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) 
     menu_render(1); menu_flip();
 
     // Now proceed to validate the superfw if necessary.
-    if (validate_superfw && !validate_superfw_checksum(sdr_state->scratch, fwsize))
+    if (validate_superfw && !validate_superfw_variant(sdr_state->scratch))
+      spop.alert_msg = msgs[lang_id][MSG_FWUP_BADFL];
+    else if (validate_superfw && !validate_superfw_checksum(sdr_state->scratch, fwsize))
       spop.alert_msg = msgs[lang_id][MSG_FWUPD_BADCHK];
     else {
       // Can start the flashing!
@@ -2243,11 +2246,11 @@ void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) 
           else {
             // Done! Show a pop up, also go up with pop ups too.
             spop.alert_msg = msgs[lang_id][MSG_FWUPD_DONE];
-            spop.pop_num = 0;
           }
         }
       }
     }
+    spop.pop_num = 0;
   }
 }
 

@@ -199,6 +199,7 @@ en_strings = [
 
   "MSG_FWUPD_BADCHK": "Bad firmware checksum!",            # alertmsg
   "MSG_FWUP_BADHD":   "Bad FW header!",                    # alertmsg
+  "MSG_FWUP_BADFL":   "Bad FW variant!",                   # alertmsg
 
   "MSG_FWUP_ERRSZ":   "Invalid update size!",              # alertmsg
   "MSG_FWUP_ERRRD":   "Can't read file!",                  # alertmsg
