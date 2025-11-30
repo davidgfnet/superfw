@@ -208,6 +208,7 @@ const struct {
   { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) },
   { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) },
   { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) },
+  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) },
 };
 #define THEME_COUNT (sizeof(themes) / sizeof(themes[0]))
 
@@ -350,7 +351,6 @@ static struct {
       char fn[MAX_FN_LEN];                // FW file to load and flash
       bool issfw;                         // The firmware is a superFW image.
       uint32_t superfw_ver;               // Reported FW version.
-      uint8_t superfw_variant[4];         // Reported FW variant.
       uint32_t fw_size;                   // Size in bytes reported by stat.
       unsigned curr_state;                // Flashing FSM state.
     } update;
@@ -1264,6 +1264,17 @@ static void draw_text_ovf(const char *t, volatile uint8_t *frame, unsigned x, un
   }
 }
 
+static void draw_text_leftovf(const char *t, volatile uint8_t *frame, unsigned x, unsigned y, unsigned maxw) {
+  uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + x];
+  unsigned numchars = font_width_lcap(t, maxw - THREEDOTS_WIDTH);
+  if (numchars) {
+    draw_text_idx8_bus16("...", basept, SCREEN_WIDTH, FT_COLOR);
+    draw_text_idx8_bus16(&t[numchars], basept + THREEDOTS_WIDTH, SCREEN_WIDTH, FT_COLOR);
+  } else {
+    draw_text_idx8_bus16(t, basept, SCREEN_WIDTH, FT_COLOR);
+  }
+}
+
 static void draw_text_ovf_rotate(const char *t, volatile uint8_t *frame, unsigned x, unsigned y, unsigned maxw, unsigned *franim) {
   uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + x];
   unsigned twidth = font_width(t);
@@ -1382,30 +1393,38 @@ void render_recent(volatile uint8_t *frame) {
     render_icon_trans(i, (smenu.recent.selector - smenu.recent.seloff + 1)*16, 63);
 }
 
+#ifdef SUPPORT_NORGAMES
 void render_flashbrowser(volatile uint8_t *frame) {
   // Render bar below to show block info
   dma_memset16(&frame[240*144], dup8(FG_COLOR), 240*16/2);
 
   // Render the list from memory.
-  for (unsigned i = 0; i < NORGAMES_ROWS; i++) {
-    if (smenu.fbrowser.seloff + i >= smenu.fbrowser.maxentries)
-      break;
+  if (!smenu.fbrowser.maxentries)
+    draw_central_text(msgs[lang_id][MSG_NOR_EMPTY], frame, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-8);
+  else {
+    for (unsigned i = 0; i < NORGAMES_ROWS; i++) {
+      if (smenu.fbrowser.seloff + i >= smenu.fbrowser.maxentries)
+        break;
 
-    t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.seloff + i];
-    render_icon(2, (i+1)*16, ICON_GBACART);
+      t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.seloff + i];
+      render_icon(2, (i+1)*16, ICON_GBACART);
 
-    // Animate the row entries if they are too long!
-    char szstr[16];
-    human_size(szstr, sizeof(szstr), e->numblks * NOR_BLOCK_SIZE);
-    draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
+      // Animate the row entries if they are too long!
+      char szstr[16];
+      human_size(szstr, sizeof(szstr), e->numblks * NOR_BLOCK_SIZE);
+      draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
 
-    // Animate the row entries if they are too long!
-    const char *romname = &e->game_name[e->bnoffset];
-    if (i == smenu.fbrowser.selector - smenu.fbrowser.seloff)
-      draw_text_ovf_rotate(romname, frame, 20, (1 + i) * 16,
-                           SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
-    else
-      draw_text_ovf(romname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+      // Animate the row entries if they are too long!
+      const char *romname = &e->game_name[e->bnoffset];
+      if (i == smenu.fbrowser.selector - smenu.fbrowser.seloff)
+        draw_text_ovf_rotate(romname, frame, 20, (1 + i) * 16,
+                             SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
+      else
+        draw_text_ovf(romname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+    }
+
+    for (unsigned i = 0; i < 240; i += 16)
+      render_icon_trans(i, (smenu.fbrowser.selector - smenu.fbrowser.seloff + 1)*16, 63);
   }
 
   char tmp[32], tmp1[32], tmp2[32];
@@ -1416,46 +1435,49 @@ void render_flashbrowser(volatile uint8_t *frame) {
   human_size(tmp2, sizeof(tmp2), NOR_GAMEBLOCK_COUNT * NOR_BLOCK_SIZE);
   npf_snprintf(tmp, sizeof(tmp), "Flash usage: %s/%s", tmp1, tmp2);
   draw_text_ovf(tmp, frame, 8, 144, SCREEN_WIDTH - 16);
-
-  for (unsigned i = 0; i < 240; i += 16)
-    render_icon_trans(i, (smenu.fbrowser.selector - smenu.fbrowser.seloff + 1)*16, 63);
 }
+#endif
 
 void render_browser(volatile uint8_t *frame) {
   // Render bar below to show path URI
   dma_memset16(&frame[240*144], dup8(FG_COLOR), 240*16/2);
 
-  for (unsigned i = 0; i < BROWSER_ROWS; i++) {
-    if (smenu.browser.seloff + i >= smenu.browser.maxentries)
-      break;
+  if (!smenu.browser.maxentries)
+    draw_central_text(msgs[lang_id][MSG_BROW_EMPTY], frame, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-8);
+  else {
+    for (unsigned i = 0; i < BROWSER_ROWS; i++) {
+      if (smenu.browser.seloff + i >= smenu.browser.maxentries)
+        break;
 
-    t_centry *e = sdr_state->fileorder[smenu.browser.seloff + i];
+      t_centry *e = sdr_state->fileorder[smenu.browser.seloff + i];
 
-    if (e->attr & AM_DIR)
-      render_icon(2, (i+1)*16, ICON_FOLDER);
-    else
-      render_icon(2, (i+1)*16, guessicon(e->fname));
+      if (e->attr & AM_DIR)
+        render_icon(2, (i+1)*16, ICON_FOLDER);
+      else
+        render_icon(2, (i+1)*16, guessicon(e->fname));
 
-    char szstr[16];
-    human_size(szstr, sizeof(szstr), e->filesize);
-    draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
+      char szstr[16];
+      human_size(szstr, sizeof(szstr), e->filesize);
+      draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
 
-    // Animate the row entries if they are too long!
-    if (i == smenu.browser.selector - smenu.browser.seloff)
-      draw_text_ovf_rotate(e->fname, frame, 20, (1 + i) * 16,
-                           SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
-    else
-      draw_text_ovf(e->fname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+      // Animate the row entries if they are too long!
+      if (i == smenu.browser.selector - smenu.browser.seloff)
+        draw_text_ovf_rotate(e->fname, frame, 20, (1 + i) * 16,
+                             SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
+      else
+        draw_text_ovf(e->fname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+    }
+
+    for (unsigned i = 0; i < 240; i += 16)
+      render_icon_trans(i, (smenu.browser.selector - smenu.browser.seloff + 1)*16, 63);
   }
 
-  draw_text_ovf(smenu.browser.cpath, frame, 16, 144, 224);
+  // Draw path, cut left part if necessary.
+  draw_text_leftovf(smenu.browser.cpath, frame, 8, 144, SCREEN_WIDTH - 8);
 
   char selinfo[16];
   npf_snprintf(selinfo, sizeof(selinfo), "%u/%d", smenu.browser.selector + 1, smenu.browser.maxentries);
   draw_rightj_text(selinfo, frame, SCREEN_WIDTH - 1, 1);
-
-  for (unsigned i = 0; i < 240; i += 16)
-    render_icon_trans(i, (smenu.browser.selector - smenu.browser.seloff + 1)*16, 63);
 }
 
 void render_fw_flash_popup(volatile uint8_t *frame) {
@@ -1561,8 +1583,8 @@ static const char *render_gbarom_patching(volatile uint8_t *frame, const t_load_
   draw_central_text(msgs[lang_id][info->rtc_patch_enabled ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 98);
 
   draw_text_ovf(msgs[lang_id][MSG_LOADER_PTCH], frame, 12, 116, 224);
-  draw_box_outline(frame, 170 - 40, 170 + 40, 115, 133, FG_COLOR);
-  draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 170, 116);
+  draw_box_outline(frame, 170 - 20, 170 + 20, 115, 133, FG_COLOR);
+  draw_central_text("▸", frame, 170, 116);
 
   return (selector == GBALoadPatch) ? msgs[lang_id][MSG_PATCH_TYPE_I0 + info->patch_type] :
          (selector == GBASavePatch) ? msgs[lang_id][MSG_LOADER_ST_I0 + (info->use_dsaving ? 0 : 1)] :
@@ -1591,9 +1613,9 @@ static const char *render_gbarom_loading(volatile uint8_t *frame, const t_load_g
   draw_text_ovf(msgs[lang_id][MSG_SETT_LDCHT], frame, 12, 98, 224);
   draw_central_text(msgs[lang_id][data->use_cheats ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 98);
 
-  draw_box_outline(frame, 170 - 40, 170 + 40, 115, 133, FG_COLOR);
+  draw_box_outline(frame, 170 - 20, 170 + 20, 115, 133, FG_COLOR);
   draw_text_ovf(msgs[lang_id][MSG_SETT_REMEMB], frame, 12, 116, 224);
-  draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 170, 116);
+  render_icon(170-8, 116, ICON_DISK);
 
   return (selector == GBALdSetLoadP) ? msgs[lang_id][MSG_LOADER_LOADP_I0 + data->sram_load_type] :
          (selector == GBALdSetSaveP) ? msgs[lang_id][MSG_LOADER_SAVEP_I0 + data->sram_save_type] :
