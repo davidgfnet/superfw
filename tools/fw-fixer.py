@@ -19,8 +19,8 @@ fwimg = fwimg[:0xBD] + ((-(0x19 + crc)) & 0xFF).to_bytes(1, "little") + fwimg[0x
 fwimg = fwimg[:0xCC] + struct.pack("<I", len(fwimg)) + fwimg[0xD0:]
 
 # Clear the checksum before calculating it
-fwimg = fwimg[:0xD0] + (b'\x00' * 32) + fwimg[0xF0:]
-fwimg = fwimg[:0xD0] + hashlib.sha256(fwimg).digest() + fwimg[0xF0:]
+fwimg = fwimg[:0xE0] + (b'\x00' * 16) + fwimg[0xF0:]
+fwimg = fwimg[:0xE0] + hashlib.sha256(fwimg).digest()[:16] + fwimg[0xF0:]
 
 open(sys.argv[1], "r+b").write(fwimg)
 

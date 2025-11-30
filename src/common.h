@@ -383,6 +383,7 @@ typedef struct {
 extern t_flash_info flashinfo;
 
 bool check_superfw(const uint8_t *h, uint32_t *ver);
+bool validate_superfw_variant(const uint8_t *fw);
 bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize);
 
 typedef struct {
