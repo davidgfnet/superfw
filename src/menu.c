@@ -1263,6 +1263,17 @@ static void draw_text_ovf(const char *t, volatile uint8_t *frame, unsigned x, un
   }
 }
 
+static void draw_text_leftovf(const char *t, volatile uint8_t *frame, unsigned x, unsigned y, unsigned maxw) {
+  uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + x];
+  unsigned numchars = font_width_lcap(t, maxw - THREEDOTS_WIDTH);
+  if (numchars) {
+    draw_text_idx8_bus16("...", basept, SCREEN_WIDTH, FT_COLOR);
+    draw_text_idx8_bus16(&t[numchars], basept + THREEDOTS_WIDTH, SCREEN_WIDTH, FT_COLOR);
+  } else {
+    draw_text_idx8_bus16(t, basept, SCREEN_WIDTH, FT_COLOR);
+  }
+}
+
 static void draw_text_ovf_rotate(const char *t, volatile uint8_t *frame, unsigned x, unsigned y, unsigned maxw, unsigned *franim) {
   uint8_t *basept = (uint8_t*)&frame[y * SCREEN_WIDTH + x];
   unsigned twidth = font_width(t);
@@ -1460,7 +1471,8 @@ void render_browser(volatile uint8_t *frame) {
       render_icon_trans(i, (smenu.browser.selector - smenu.browser.seloff + 1)*16, 63);
   }
 
-  draw_text_ovf(smenu.browser.cpath, frame, 16, 144, 224);
+  // Draw path, cut left part if necessary.
+  draw_text_leftovf(smenu.browser.cpath, frame, 8, 144, SCREEN_WIDTH - 8);
 
   char selinfo[16];
   npf_snprintf(selinfo, sizeof(selinfo), "%u/%d", smenu.browser.selector + 1, smenu.browser.maxentries);

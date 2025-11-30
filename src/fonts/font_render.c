@@ -129,6 +129,25 @@ unsigned font_width(const char *s) {
   return pxcnt;
 }
 
+unsigned font_width_lcap(const char *s, unsigned max_width) {
+  int pxcnt = font_width(s);
+  unsigned bcnt = 0;
+  while (s[bcnt]) {
+    if (pxcnt <= (signed)max_width)
+      break;
+
+    t_char_render_info chinfo;
+    uint32_t code = utf8_decode(&s[bcnt]);
+    if (!lookup_chptr(code, &chinfo))
+      lookup_chptr(MISSING_CHAR, &chinfo);
+
+    unsigned chwidth = chinfo.char_width + chinfo.spacing_cols;
+    pxcnt -= chwidth;
+    bcnt += utf8_chlen(&s[bcnt]);
+  }
+  return bcnt;
+}
+
 unsigned font_width_cap(const char *s, unsigned max_width) {
   unsigned pxcnt = 0, bcnt = 0;
   while (s[bcnt]) {

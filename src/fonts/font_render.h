@@ -31,6 +31,7 @@ unsigned font_width(const char *s);
 // Calculates how many characters (returned as utf-8 byte count) can be
 // rendered in a framebuffer that's at least max_width in size.
 unsigned font_width_cap(const char *s, unsigned max_width);
+unsigned font_width_lcap(const char *s, unsigned max_width);
 // Same but using a space limited verison (char 0x20)
 unsigned font_width_cap_space(const char *s, unsigned max_width, unsigned *outwidth);
 
