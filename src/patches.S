@@ -653,7 +653,7 @@ START_FUNC(patch_rtc_probe)
   bx lr
 END_FUNC(patch_rtc_probe)
 
-// Have around ~200 bytes of code size (~100 insts)
+// Have around ~200 bytes of code size (~100 insts), modern versions ~26 bytes
 START_FUNC(patch_rtc_getstatus)
   mov r1, $0x40
   add r0, r0, $7             // Overwrite status only
@@ -666,11 +666,8 @@ END_FUNC(patch_rtc_getstatus)
 START_FUNC(patch_rtc_gettimedate)
   push {r4, r5, lr}
 
-  mov r4, r0           // Save buffer pointer
-
   // Switch to ARM mode.
   bx pc
-  nop
 
 .balign 4
 .arm
@@ -685,6 +682,8 @@ START_FUNC(patch_rtc_gettimedate)
   bx r2
 
 .thumb
+
+  mov r4, r0           // Save buffer pointer
 
   mov r1, $60                  // Get seconds
   bl div_ts_bcd
@@ -740,9 +739,8 @@ START_FUNC(patch_rtc_gettimedate)
   strb r0, [r4, #2]
 
   pop {r4, r5}
-  mov r0, $1                   // Return true
-  pop {r1}
-  bx r1
+  pop {r0}                     // Return non-zero (true)
+  bx r0
 
 // Division by N routine, divides r5 by r1.
 // Quotient stored back to r5, the remainder r0 is BCD converted.
