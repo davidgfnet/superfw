@@ -73,6 +73,7 @@ en_strings = [
   "MSG_TOOLS_RUN": "Run",
 
   "MSG_DEFS_PATCH":  "Patching",
+  "MSG_BROW_EMPTY":  "Empty directory",
 
   "MSG_UIS_THEME": "Theme color",
   "MSG_UIS_LANG":  "Language",
@@ -228,6 +229,7 @@ en_strings = [
   "MSG_DBPINFO":   "Patch database version info",
   }),
   ("SUPPORT_NORGAMES", {
+  "MSG_NOR_EMPTY":  "Flash is empty",
   "MSG_Q5_DELNORG": "Delete this game from flash memory?",
   "MSG_Q6_CLRNOR":  "Do you want to format the internal flash memory?",
   "MSG_ERR_NORUPD": "Flash write failed!",                 # alertmsg
