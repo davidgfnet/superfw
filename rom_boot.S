@@ -157,7 +157,7 @@ entry_point:
   .word VERSION_SLUG_WORD      @ Commit ID as 32 bits
   .word 0                      @ 32 bit firmware file size (patched)
   .ascii FW_FLAVOUR; .balign 4 @ Device variant
-  .word 0                      @ Unused
+  .ascii "WRLD"                @ Firmware variant (no variants atm.)
   .word 0                      @ Unused
   .word 0                      @ Unused
   .fill 16, 1, 0               @ 16 byte hash (patched)

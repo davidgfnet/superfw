@@ -431,8 +431,9 @@ typedef struct {
   uint32_t version;
   uint32_t git_version;
   uint32_t fw_size;
-  uint8_t  flavour[4];
-  uint8_t  pad[12];
+  uint8_t  hw_variant[4];
+  uint8_t  fw_variant[4];
+  uint8_t  pad[8];
   uint8_t  checksum[16];     // Truncated sha256 checksum
   uint8_t  magic[16];        // SUPERFW~DAVIDGF
 } t_superfw_header;
@@ -450,7 +451,7 @@ bool check_superfw(const uint8_t *h, uint32_t *ver) {
 
 bool validate_superfw_variant(const uint8_t *fw) {
   const t_superfw_header *header = (t_superfw_header*)fw;
-  return !strncmp((char*)header->flavour, FW_FLAVOUR, 4);
+  return !strncmp((char*)header->hw_variant, FW_FLAVOUR, 4);
 }
 
 bool validate_superfw_checksum(const uint8_t *fw, unsigned fwsize) {
