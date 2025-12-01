@@ -208,6 +208,7 @@ const struct {
   { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) },
   { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) },
   { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) },
+  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) },
 };
 #define THEME_COUNT (sizeof(themes) / sizeof(themes[0]))
 
@@ -1582,8 +1583,8 @@ static const char *render_gbarom_patching(volatile uint8_t *frame, const t_load_
   draw_central_text(msgs[lang_id][info->rtc_patch_enabled ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 98);
 
   draw_text_ovf(msgs[lang_id][MSG_LOADER_PTCH], frame, 12, 116, 224);
-  draw_box_outline(frame, 170 - 40, 170 + 40, 115, 133, FG_COLOR);
-  draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 170, 116);
+  draw_box_outline(frame, 170 - 20, 170 + 20, 115, 133, FG_COLOR);
+  draw_central_text("▸", frame, 170, 116);
 
   return (selector == GBALoadPatch) ? msgs[lang_id][MSG_PATCH_TYPE_I0 + info->patch_type] :
          (selector == GBASavePatch) ? msgs[lang_id][MSG_LOADER_ST_I0 + (info->use_dsaving ? 0 : 1)] :
@@ -1612,9 +1613,9 @@ static const char *render_gbarom_loading(volatile uint8_t *frame, const t_load_g
   draw_text_ovf(msgs[lang_id][MSG_SETT_LDCHT], frame, 12, 98, 224);
   draw_central_text(msgs[lang_id][data->use_cheats ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, 170, 98);
 
-  draw_box_outline(frame, 170 - 40, 170 + 40, 115, 133, FG_COLOR);
+  draw_box_outline(frame, 170 - 20, 170 + 20, 115, 133, FG_COLOR);
   draw_text_ovf(msgs[lang_id][MSG_SETT_REMEMB], frame, 12, 116, 224);
-  draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 170, 116);
+  render_icon(170-8, 116, ICON_DISK);
 
   return (selector == GBALdSetLoadP) ? msgs[lang_id][MSG_LOADER_LOADP_I0 + data->sram_load_type] :
          (selector == GBALdSetSaveP) ? msgs[lang_id][MSG_LOADER_SAVEP_I0 + data->sram_save_type] :

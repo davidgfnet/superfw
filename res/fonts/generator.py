@@ -83,7 +83,8 @@ blocks = {
   "cyrilic":  ( 0x400,  0x4FF,  8),   # russian/ukr/bul...
   "hangul-j": (0x1100, 0x11FF, 16),   # Hangul Jamo Characters
   "check":    (0x2610, 0x2611,  8),   # Symbols (ticks)
-  "arrows":   (0x2BC0, 0x2BCF,  8),   # Symbols (arrows)
+  "arrows":   (0x2BC5, 0x2BC8,  8),   # Symbols (arrows)
+  "arrows2":  (0x25B8, 0x25B8,  8),   # Right arrow small
   "cjk-sym":  (0x3000, 0x3009, 16),   # CJK Symbols and Punctuation
   "hiragana": (0x3040, 0x309F, 16),   # Hiragana block
   "katakana": (0x30A0, 0x30FF, 16),   # Katakana block
