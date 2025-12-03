@@ -216,16 +216,6 @@ typedef struct {
 } t_rtc_info;
 
 
-// ROM config settings
-typedef struct {
-  uint32_t rtcts;
-  unsigned patch_policy;     // Can only be PatchDatabase, PatchEngine or PatchNone
-  bool use_dsaving;
-  bool use_igm;
-  bool use_cheats;
-  bool use_rtc;
-} t_rom_settings;
-
 // Menu system
 void menu_init(int);    // Initializes meny system (ie. loading resources)
 void menu_render(unsigned fcnt);     // Renders the menu to the backframe

@@ -285,24 +285,29 @@ void sram_filename_calc(const char *rom, char *savefn) {
   sram_template_filename_calc(rom, ".sav", savefn);
 }
 
-static void parse_rom_settings(void *usr, const char *var, const char *value) {
-  t_rom_settings *rs = (t_rom_settings*)usr;
+static void parse_rom_load_settings(void *usr, const char *var, const char *value) {
+  t_rom_load_settings *rs = (t_rom_load_settings*)usr;
   unsigned valu = parseuint(value);
   if (!strcmp(var, "rtc"))
     rs->use_rtc = valu & 1;
-  else if (!strcmp(var, "cheats"))
-    rs->use_cheats = valu & 1;
   else if (!strcmp(var, "igm"))
     rs->use_igm = valu & 1;
   else if (!strcmp(var, "directsaving"))
     rs->use_dsaving = valu & 1;
   else if (!strcmp(var, "patchmode"))
-    rs->patch_policy = valu % 3;
+    rs->patch_policy = valu % PatchOptCNT;
+}
+
+static void parse_rom_launch_settings(void *usr, const char *var, const char *value) {
+  t_rom_launch_settings *rs = (t_rom_launch_settings*)usr;
+  unsigned valu = parseuint(value);
+  if (!strcmp(var, "cheats"))
+    rs->use_cheats = valu & 1;
   else if (!strcmp(var, "rtcts"))
     rs->rtcts = valu;
 }
 
-bool load_rom_settings(const char *fn, t_rom_settings *rs) {
+bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_settings *rlh) {
   char buf[512];
   strcpy(buf, ROMCONFIG_PATH);
   strcat(buf, file_basename(fn));
@@ -316,14 +321,17 @@ bool load_rom_settings(const char *fn, t_rom_settings *rs) {
   UINT rdbytes;
   if (FR_OK == f_read(&fd, buf, sizeof(buf) - 1, &rdbytes)) {
     buf[rdbytes] = 0;
-    parse_file(buf, parse_rom_settings, rs);
+    if (rld)
+      parse_file(buf, parse_rom_load_settings, rld);
+    if (rlh)
+      parse_file(buf, parse_rom_launch_settings, rlh);
   }
   f_close(&fd);
 
   return true;
 }
 
-bool save_rom_settings(const char *fn, const t_rom_settings *rs) {
+bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_rom_launch_settings *rlh) {
   // Create the directory (just in case it doesn't exist
   f_mkdir(SUPERFW_DIR);
   f_mkdir(ROMCONFIG_PATH);
@@ -343,17 +351,17 @@ bool save_rom_settings(const char *fn, const t_rom_settings *rs) {
   // Serialize the ROM settings
   npf_snprintf(buf, sizeof(buf),
     "patchmode=%u\n"
-    "rtc=%u\n"
     "igm=%u\n"
+    "rtc=%u\n"
     "directsaving=%u\n"
     "cheats=%u\n"
     "rtcts=%u\n",
-    rs->patch_policy,
-    rs->use_rtc ? 1 : 0,
-    rs->use_igm ? 1 : 0,
-    rs->use_dsaving ? 1 : 0,
-    rs->use_cheats ? 1 : 0,
-    (unsigned int)rs->rtcts);
+    rld->patch_policy,
+    rld->use_igm ? 1 : 0,
+    rld->use_rtc ? 1 : 0,
+    rld->use_dsaving ? 1 : 0,
+    rlh->use_cheats ? 1 : 0,
+    (unsigned int)rlh->rtcts);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
