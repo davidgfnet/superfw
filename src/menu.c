@@ -659,7 +659,7 @@ bool rtcemu_avail(const t_load_gba_info *info) {
 }
 
 static bool prepare_gba_info(
-  t_load_gba_info *info, const t_rom_settings *st,
+  t_load_gba_info *info, const t_rom_load_settings *st,
   const char *fn, uint32_t fs,
   bool load_sdram
 ) {
@@ -724,7 +724,7 @@ static bool prepare_gba_info(
   return true;
 }
 
-static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *data, bool use_cheats, const char *fn) {
+static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *data, const char *fn, bool prefer_cheats) {
   // Attempt to find a cheat file if cheats are enabled.
   data->cheats_size = 0;
   data->cheats_found = false;
@@ -751,17 +751,17 @@ static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *
       }
     }
   }
-  data->use_cheats = enable_cheats && data->cheats_found && use_cheats;
+  data->use_cheats = enable_cheats && data->cheats_found && prefer_cheats;
 }
 
-static void prepare_gba_settings(t_load_gba_lcfg *data, const t_rom_settings *st, bool game_no_save, const char *fn) {
+static void prepare_gba_settings(t_load_gba_lcfg *data, bool uses_dsaving, uint32_t rtcts, bool game_no_save, const char *fn) {
   // Calculate the .sav file name, and check its existance.
   sram_template_filename_calc(fn, ".sav", data->savefn);
   data->savefile_found = check_file_exists(data->savefn);
 
   // Use default settings (and file existance) to fill in default choice.
   // DirectSaving enabled overrides the other settings.
-  if (st->use_dsaving) {
+  if (uses_dsaving) {
     data->sram_load_type = data->savefile_found ? SaveLoadSav : SaveLoadReset;
     data->sram_save_type = SaveDirect;
   }
@@ -773,7 +773,7 @@ static void prepare_gba_settings(t_load_gba_lcfg *data, const t_rom_settings *st
     data->sram_save_type = autosave_default && !game_no_save ? SaveReboot : SaveDisable;
   }
 
-  data->rtcval = st->rtcts;
+  data->rtcval = rtcts;
 }
 
 
@@ -783,28 +783,30 @@ static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) 
     spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
   } else {
     // Default to global settings (in case the file is not found).
-    t_rom_settings savedcfg = {
-      .rtcts = rtcvalue_default,
+    t_rom_load_settings ld_sett = {
       .patch_policy = patcher_default,
-      .use_dsaving = autosave_prefer_ds,
       .use_igm = ingamemenu_default,
+      .use_rtc = rtcpatch_default,
+      .use_dsaving = autosave_prefer_ds
+    };
+    t_rom_launch_settings lh_sett = {
       .use_cheats = true,              // Defaults to true (just preferred, might be disabled/N/A)
-      .use_rtc = rtcpatch_default
+      .rtcts = rtcvalue_default
     };
     // Check for any game-specific config file, so we don't have to guess the config.
     // The config file can be partial, hence the defaults.
-    load_rom_settings(fn, &savedcfg);
+    load_rom_settings(fn, &ld_sett, &lh_sett);
 
-    if (!prepare_gba_info(&spop.p.load.i, &savedcfg, fn, fs, true))
+    if (!prepare_gba_info(&spop.p.load.i, &ld_sett, fn, fs, true))
       spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
     else {
       const t_rom_header *rmh = &spop.p.load.i.romh;
 
       // If patch engine is selected but no patches found, prompt for generation.
       // If auto is selected and no patches nor DB entries found, do prompt too.
-      bool no_patches = (savedcfg.patch_policy == PatchAuto &&
+      bool no_patches = (ld_sett.patch_policy == PatchAuto &&
                          !spop.p.load.i.patches_datab_found && !spop.p.load.i.patches_cache_found);
-      bool no_engine  = (savedcfg.patch_policy == PatchEngine && !spop.p.load.i.patches_cache_found);
+      bool no_engine  = (ld_sett.patch_policy == PatchEngine && !spop.p.load.i.patches_cache_found);
       bool issfw = is_superfw(rmh);
 
       if (prompt_patchgen && !issfw && (no_patches || no_engine)) {
@@ -824,10 +826,10 @@ static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) 
       bool game_no_save = (p && p->save_mode == SaveTypeNone) || issfw;
 
       // Attempt to find a cheat file if cheats are enabled.
-      prepare_gba_cheats((char*)&rmh->gcode[0], rmh->version, &spop.p.load.l, savedcfg.use_cheats, fn);
+      prepare_gba_cheats((char*)&rmh->gcode[0], rmh->version, &spop.p.load.l, fn, lh_sett.use_cheats);
 
       // Load and set default and sane settings honoring defaults and preferences.
-      prepare_gba_settings(&spop.p.load.l, &savedcfg, game_no_save, fn);
+      prepare_gba_settings(&spop.p.load.l, ld_sett.use_dsaving, lh_sett.rtcts, game_no_save, fn);
 
       // Show load ROM menu.
       spop.pop_num = POPUP_GBA_LOAD;
@@ -2418,15 +2420,18 @@ static void keypress_popup_loadgba(unsigned newkeys) {
     }
     else if (spop.submenu == GbaLoadPopLoadS && spop.selector == GBALdRemember) {
       // Save settings to disk now!
-      t_rom_settings savedcfg = {
-        .rtcts = spop.p.load.l.rtcval,
+      t_rom_load_settings ld_sett = {
         .patch_policy = spop.p.load.i.patch_type,
-        .use_dsaving = spop.p.load.i.use_dsaving,
         .use_igm = spop.p.load.i.ingame_menu_enabled,
-        .use_cheats = spop.p.load.l.use_cheats,
-        .use_rtc = spop.p.load.i.rtc_patch_enabled
+        .use_rtc = spop.p.load.i.rtc_patch_enabled,
+        .use_dsaving = spop.p.load.i.use_dsaving
       };
-      save_rom_settings(spop.p.load.i.romfn, &savedcfg);
+      t_rom_launch_settings lh_sett = {
+        .use_cheats = spop.p.load.l.use_cheats,
+        .rtcts = spop.p.load.l.rtcval
+      };
+
+      save_rom_settings(spop.p.load.i.romfn, &ld_sett, &lh_sett);
       spop.alert_msg = msgs[lang_id][MSG_REMEMB_CFG_OK];
     }
     else if (GbaLoadPopInfo == spop.submenu) {
@@ -2722,8 +2727,28 @@ static void keypress_popup_norload(unsigned newkeys) {
         uses_rtc ? &rtci : NULL,
         uses_igm,
         spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0);
+    }
+    else if (spop.selector == GBALdRemember) {
+      // Save settings to disk now!
+      t_rom_load_settings ld_sett = {  // Use defaults in case it doesn't really exist
+        .patch_policy = patcher_default,
+        .use_igm = ingamemenu_default,
+        .use_rtc = rtcpatch_default,
+        .use_dsaving = autosave_prefer_ds
+      };
+      t_rom_launch_settings lh_sett = {
+        .use_cheats = spop.p.norld.l.use_cheats,
+        .rtcts = spop.p.norld.l.rtcval
+      };
 
-    } else if (spop.selector == GBALdSetRTC) {
+      const t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
+
+      // We load the loading settings to ensure we do not overwrite them.
+      load_rom_settings(e->game_name, &ld_sett, NULL);
+      save_rom_settings(e->game_name, &ld_sett, &lh_sett);
+      spop.alert_msg = msgs[lang_id][MSG_REMEMB_CFG_OK];
+    }
+    else if (spop.selector == GBALdSetRTC) {
       void accept_rtc() {
         spop.p.norld.l.rtcval = date2timestamp(&spop.rtcpop.val);
       }
@@ -2786,15 +2811,17 @@ static void keypress_popup_filemgr(unsigned newkeys) {
         char path[MAX_FN_LEN];
         strcpy(path, smenu.browser.cpath);
         strcat(path, e->fname);
-        const t_rom_settings defcfg = {
-          .rtcts = rtcvalue_default,
+
+        // Load default loading settings if any.
+        t_rom_load_settings ld_sett = {
           .patch_policy = patcher_default,
-          .use_dsaving = autosave_prefer_ds,
           .use_igm = ingamemenu_default,
-          .use_cheats = enable_cheats,
-          .use_rtc = rtcpatch_default
+          .use_rtc = rtcpatch_default,
+          .use_dsaving = autosave_prefer_ds
         };
-        if (!prepare_gba_info(&spop.p.norwr.i, &defcfg, path, e->filesize, false))
+        load_rom_settings(path, &ld_sett, NULL);
+
+        if (!prepare_gba_info(&spop.p.norwr.i, &ld_sett, path, e->filesize, false))
           spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
         else {
           spop.pop_num = POPUP_GBA_NORWRITE;
@@ -2933,19 +2960,20 @@ static void keypress_menu_norbrowse(unsigned newkeys) {
       t_flash_game_entry *e = &sdr_state->nordata.games[smenu.fbrowser.selector];
 
       // Use attributes to determine patched save method.
-      bool game_no_save = GET_GATTR_SAVEM(e->gattrs) <= SaveTypeNone;
+      const bool game_no_save = GET_GATTR_SAVEM(e->gattrs) <= SaveTypeNone;
+      const bool game_uses_dsaving = (e->gattrs & GATTR_SAVEDS);
 
-      t_rom_settings savedcfg = {  // TODO FIX FIX FIX
-        //.rtcval = spop.p.load.l.rtcval,
-        .use_dsaving = (e->gattrs & GATTR_SAVEDS),
-        .use_cheats = false,
+      t_rom_launch_settings lh_sett = {
+        .use_cheats = true,              // Defaults to true (just preferred, might be disabled/N/A)
+        .rtcts = rtcvalue_default
       };
+      load_rom_settings(e->game_name, NULL, &lh_sett);
 
       // Attempt to find a cheat file if cheats are enabled.
-      prepare_gba_cheats((char*)&e->gamecode, e->gamever, &spop.p.norld.l, savedcfg.use_cheats, e->game_name);
+      prepare_gba_cheats((char*)&e->gamecode, e->gamever, &spop.p.norld.l, e->game_name, lh_sett.use_cheats);
 
       // Load and set default and sane settings honoring defaults and preferences.
-      prepare_gba_settings(&spop.p.norld.l, &savedcfg, game_no_save, e->game_name);
+      prepare_gba_settings(&spop.p.norld.l, game_uses_dsaving, lh_sett.rtcts, game_no_save, e->game_name);
 
       // Show load ROM menu.
       spop.pop_num = POPUP_GBA_NORLOAD;

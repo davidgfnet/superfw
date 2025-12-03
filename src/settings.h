@@ -41,6 +41,19 @@ enum { StateSavestateDir = 0, StateRomName = 1, StateDirCNT = 2 };
 extern const char *save_paths[2];
 extern const char *savestates_paths[1];
 
+// ROM loading and launching config settings
+typedef struct {
+  unsigned patch_policy;     // Can only be PatchDatabase, PatchEngine or PatchNone
+  bool use_igm;
+  bool use_rtc;
+  bool use_dsaving;
+} t_rom_load_settings;
+
+typedef struct {
+  bool use_cheats;
+  uint32_t rtcts;
+} t_rom_launch_settings;
+
 // Menu settings
 extern uint32_t menu_theme;
 extern uint32_t lang_id;
@@ -71,8 +84,8 @@ bool save_settings();
 void load_settings();
 
 // ROM-specific setting load/store
-bool load_rom_settings(const char *fn, t_rom_settings *rs);
-bool save_rom_settings(const char *fn, const t_rom_settings *rs);
+bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_settings *rlh);
+bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_rom_launch_settings *rlh);
 
 #endif
 
