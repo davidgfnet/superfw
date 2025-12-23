@@ -95,8 +95,9 @@ enum {
   UiSetLang  = 1,
   UiSetRect  = 2,
   UiSetASpd  = 3,
-  UiSetSave  = 4,
-  UiSetMAX   = 4,
+  UiSetHid   = 4,
+  UiSetSave  = 5,
+  UiSetMAX   = 5,
 };
 
 enum {
@@ -267,6 +268,7 @@ static struct {
     int selector;                 // Pointed file offset
     int seloff;                   // Entry at the top of the list
     int maxentries;               // Total file/dir count in current dir
+    int dispentries;              // Maximum number of visible entries (filtered)
     uint16_t selhist[16];         // History of directory offsets
   } browser;
 
@@ -1156,6 +1158,25 @@ static void browser_open(const char *fn, uint32_t fs) {
   }
 }
 
+static void browser_reload_filter() {
+  // Instead of sorting the actual list of files, which requires moving lots
+  // of memory, we use a list of pointers.
+  unsigned fcount = 0;
+  for (unsigned i = 0; i < smenu.browser.maxentries; i++) {
+    if ((sdr_state->fentries[i].attr & AM_HID) && hide_hidden)
+      continue;
+
+    sdr_state->fileorder[fcount++] = &sdr_state->fentries[i];
+  }
+
+  heapsort4(sdr_state->fileorder, fcount, sizeof(t_centry*) / sizeof(uint32_t), filesort);
+
+  if (smenu.browser.selector >= fcount)
+    smenu.browser.selector = fcount - 1;
+  smenu.browser.seloff = MAX(0, smenu.browser.selector - BROWSER_ROWS / 2);
+  smenu.browser.dispentries = fcount;
+}
+
 // Loads a new directory list in the ROM browser.
 // TODO: Implement filtering (.gba/.rom/.bin... etc) using settings
 static void browser_reload() {
@@ -1181,18 +1202,10 @@ static void browser_reload() {
     dma_memcpy16(e->fname, info.fname, MAX_FN_LEN/2);
     sortable_utf8_u16(info.fname, e->sortname);
   }
-
-  // Instead of sorting the actual list of files, which requires moving lots
-  // of memory, we use a list of pointers.
-  for (unsigned i = 0; i < fcount; i++)
-    sdr_state->fileorder[i] = &sdr_state->fentries[i];
-
-  heapsort4(sdr_state->fileorder, fcount, sizeof(t_centry*) / sizeof(uint32_t), filesort);
-
   smenu.browser.maxentries = fcount;
-  if (smenu.browser.selector >= fcount)
-    smenu.browser.selector = fcount - 1;
-  smenu.browser.seloff = MAX(0, smenu.browser.selector - BROWSER_ROWS / 2);
+
+  // Filter and sort list of files/dirs
+  browser_reload_filter();
 }
 
 // Loads NOR game entries so they can be browsed.
@@ -1444,19 +1457,20 @@ void render_browser(volatile uint8_t *frame) {
   // Render bar below to show path URI
   dma_memset16(&frame[240*144], dup8(FG_COLOR), 240*16/2);
 
-  if (!smenu.browser.maxentries)
+  if (!smenu.browser.dispentries)
     draw_central_text(msgs[lang_id][MSG_BROW_EMPTY], frame, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-8);
   else {
     for (unsigned i = 0; i < BROWSER_ROWS; i++) {
-      if (smenu.browser.seloff + i >= smenu.browser.maxentries)
+      if (smenu.browser.seloff + i >= smenu.browser.dispentries)
         break;
 
       t_centry *e = sdr_state->fileorder[smenu.browser.seloff + i];
 
-      if (e->attr & AM_DIR)
-        render_icon(2, (i+1)*16, ICON_FOLDER);
-      else
-        render_icon(2, (i+1)*16, guessicon(e->fname));
+      unsigned iconidx = (e->attr & AM_HID) ? ((e->attr & AM_DIR) ? ICON_HFOLDER : ICON_HFILE) :
+                         (e->attr & AM_DIR) ? ICON_FOLDER :
+                         guessicon(e->fname);
+
+      render_icon(2, (i+1)*16, iconidx);
 
       char szstr[16];
       human_size(szstr, sizeof(szstr), e->filesize);
@@ -1478,7 +1492,7 @@ void render_browser(volatile uint8_t *frame) {
   draw_text_leftovf(smenu.browser.cpath, frame, 8, 144, SCREEN_WIDTH - 8);
 
   char selinfo[16];
-  npf_snprintf(selinfo, sizeof(selinfo), "%u/%d", smenu.browser.selector + 1, smenu.browser.maxentries);
+  npf_snprintf(selinfo, sizeof(selinfo), "%u/%d", smenu.browser.selector + 1, smenu.browser.dispentries);
   draw_rightj_text(selinfo, frame, SCREEN_WIDTH - 1, 1);
 }
 
@@ -1974,6 +1988,9 @@ void render_ui_settings(volatile uint8_t *frame) {
 
   draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 60, 224);
   draw_central_text(msgs[lang_id][MSG_UIS_SPD0 + anim_speed], frame, colx, 22 + 60 );
+
+  draw_text_ovf(msgs[lang_id][MSG_UIS_BHID], frame, 8, 22 + 80, 224);
+  draw_central_text(msgs[lang_id][hide_hidden ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, 22 + 80 );
 
   if (smenu.uiset.selector != UiSetSave)
     for (unsigned i = 0; i < 240; i += 16)
@@ -2795,11 +2812,16 @@ static void keypress_popup_filemgr(unsigned newkeys) {
       }
       break;
     case FiMgrHide:
-      if (FR_OK == f_chmod(SUPERFW_DIR, e->attr ^ AM_HID, AM_HID))
-        e->attr ^= AM_HID;
-      else
-        spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+      {
+        char tmpfn[MAX_FN_LEN];
+        strcpy(tmpfn, smenu.browser.cpath);
+        strcat(tmpfn, sdr_state->fileorder[smenu.browser.selector]->fname);
 
+        if (FR_OK == f_chmod(tmpfn, e->attr ^ AM_HID, AM_HID))
+          e->attr ^= AM_HID;
+        else
+          spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+      }
       spop.pop_num = POPUP_NONE;
       break;
 
@@ -2882,19 +2904,19 @@ static void keypress_menu_recent(unsigned newkeys) {
 }
 
 static void keypress_menu_browse(unsigned newkeys) {
-  if (smenu.browser.maxentries) {
+  if (smenu.browser.dispentries) {
     // Move menu up and down
     if (newkeys & KEY_BUTTUP)
       smenu.browser.selector = MAX(0, smenu.browser.selector - 1);
     if (newkeys & KEY_BUTTDOWN)
-      smenu.browser.selector = MIN(smenu.browser.maxentries - 1, smenu.browser.selector + 1);
+      smenu.browser.selector = MIN(smenu.browser.dispentries - 1, smenu.browser.selector + 1);
     if (newkeys & KEY_BUTTLEFT) {
       smenu.browser.selector = MAX(0, smenu.browser.selector - BROWSER_ROWS);
       smenu.browser.seloff   = MAX(0, smenu.browser.seloff - BROWSER_ROWS);
     }
     if (newkeys & KEY_BUTTRIGHT) {
-      smenu.browser.selector = MIN(smenu.browser.maxentries - 1, smenu.browser.selector + BROWSER_ROWS);
-      smenu.browser.seloff   = MIN(smenu.browser.maxentries - 1, smenu.browser.seloff   + BROWSER_ROWS);
+      smenu.browser.selector = MIN(smenu.browser.dispentries - 1, smenu.browser.selector + BROWSER_ROWS);
+      smenu.browser.seloff   = MIN(smenu.browser.dispentries - 1, smenu.browser.seloff   + BROWSER_ROWS);
     }
     // Move into a new dir and/or open a file
     if (newkeys & KEY_BUTTA) {
@@ -3093,6 +3115,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       menu_theme = menu_theme ? menu_theme - 1 : 0;
     else if (smenu.uiset.selector == UiSetASpd)
       anim_speed = anim_speed ? anim_speed - 1 : 0;
+    else if (smenu.uiset.selector == UiSetHid)
+      hide_hidden ^= 1;
     else if (smenu.uiset.selector == UiSetRect)
       recent_menu ^= 1;
     else if (smenu.uiset.selector == UiSetLang)
@@ -3103,6 +3127,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       menu_theme = MIN(THEME_COUNT - 1, menu_theme + 1);
     else if (smenu.uiset.selector == UiSetASpd)
       anim_speed = MIN(animspd_cnt - 1, anim_speed + 1);
+    else if (smenu.uiset.selector == UiSetHid)
+      hide_hidden ^= 1;
     else if (smenu.uiset.selector == UiSetRect)
       recent_menu ^= 1;
     else if (smenu.uiset.selector == UiSetLang)

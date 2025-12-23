@@ -4,11 +4,28 @@ import sys, PIL.Image
 def cc(r, g, b):
   return ( ((r >> 3) << 0) | ((g >> 3) << 5) | ((b >> 3) << 10) )
 
+def ccor(r, g, b):
+  # Round to nearest
+  r = (r + 4) // 8 * 8
+  g = (g + 4) // 8 * 8
+  b = (b + 4) // 8 * 8
+  return (r, g, b)
+
 im = PIL.Image.open(sys.argv[1])
+pixels = im.load()
+
+# Remove color precision
+for y in range(im.height):
+  for x in range(im.width):
+    r, g, b, a = pixels[x, y]
+    if a > 128:
+      pixels[x, y] = (*ccor(r, g, b), 255)
+    else:
+      pixels[x, y] = (0,0,0,0)
 
 nicons = im.size[0] // 16
 
-pal = [x[1] for x in im.getcolors()]
+pal = sorted(set([x[1] for x in im.getcolors() if x[1][3] > 128]))
 
 iconlst = [
   ("ICON_FOLDER", None),
@@ -26,6 +43,8 @@ iconlst = [
   ("ICON_UILANG_SETTINGS", None),
   ("ICON_TOOLS", None),
   ("ICON_INFO", None),
+  ("ICON_HFOLDER", None),
+  ("ICON_HFILE", None),
 ]
 
 print("enum {")

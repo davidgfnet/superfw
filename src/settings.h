@@ -58,6 +58,7 @@ typedef struct {
 extern uint32_t menu_theme;
 extern uint32_t lang_id;
 extern uint32_t recent_menu;
+extern uint32_t hide_hidden;
 extern uint32_t anim_speed;
 
 // Defaults/Settings
