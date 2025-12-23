@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Launch flash game",
     "MSG_NOR_WROK": "Game flashed successfully!",
     "MSG_NOR_CLOK": "Flash erased successfully!",
-    "MSG_TOOLS5_FCLR": "Erase flash"
+    "MSG_TOOLS5_FCLR": "Erase flash",
+    "MSG_UIS_BHID": "Show hidden files"
 }

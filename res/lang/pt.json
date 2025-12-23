@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Iniciar jogo",
     "MSG_NOR_WROK": "Jogo instalado!",
     "MSG_NOR_CLOK": "Flash Deletado!",
-    "MSG_TOOLS5_FCLR": "Apagar flash"
+    "MSG_TOOLS5_FCLR": "Apagar flash",
+    "MSG_UIS_BHID": "Show hidden files"
 }

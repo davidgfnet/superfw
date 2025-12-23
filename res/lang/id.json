@@ -87,7 +87,7 @@
     "MSG_LOAD_GBA": "Mulai ROM GBA",
     "MSG_LOADINFO_GAME": "ID Permainan: %s | Versi: %d",
     "MSG_LOADINFO_SAVE": "Jenis simpanan: %s (%s)",
-    "MSG_LOADINFO_UNKW": "Unknown save type!",
+    "MSG_LOADINFO_UNKW": "ROM tak dikenal!",
     "MSG_ERR_GENERIC": "Terjadi galat!",
     "MSG_ERR_SETSAVE": "Galat simpan pengaturan!",
     "MSG_ERR_DELFILE": "Galat menghapus berkas!",
@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Launch flash game",
     "MSG_NOR_WROK": "Game flashed successfully!",
     "MSG_NOR_CLOK": "Flash erased successfully!",
-    "MSG_TOOLS5_FCLR": "Erase flash"
+    "MSG_TOOLS5_FCLR": "Erase flash",
+    "MSG_UIS_BHID": "Show hidden files"
 }

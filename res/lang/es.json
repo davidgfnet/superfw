@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Lanzar juego de flash",
     "MSG_NOR_WROK": "¡El juego ha sido grabado!",
     "MSG_NOR_CLOK": "¡Flash borrada correctamente!",
-    "MSG_TOOLS5_FCLR": "Borrar memoria flash"
+    "MSG_TOOLS5_FCLR": "Borrar memoria flash",
+    "MSG_UIS_BHID": "Ver ocultos"
 }

@@ -87,7 +87,7 @@
     "MSG_LOAD_GBA": "Charger la ROM pour GBA",
     "MSG_LOADINFO_GAME": "GameID: %s | Version : %d",
     "MSG_LOADINFO_SAVE": "Type de sauv. : %s (%s)",
-    "MSG_LOADINFO_UNKW": "Unknown save type!",
+    "MSG_LOADINFO_UNKW": "Jeu inconnu !",
     "MSG_ERR_GENERIC": "Une erreur est survenue !",
     "MSG_ERR_SETSAVE": "Échec enreg. des paramètres !",
     "MSG_ERR_DELFILE": "Échec suppr. du fichier !",
@@ -200,7 +200,7 @@
     "MSG_NEXTTO_ROM": "< Avec ROM >",
     "MSG_SAVE_TYPE_NR": ".sav dans le même répertoire que la ROM",
     "MSG_SAVE_TYPE_PT": "Le fichier de sauvegarde est enregistré dans le répertoire %s",
-    "MSG_BROW_EMPTY": "Empty directory",
+    "MSG_BROW_EMPTY": "Ce dossier est vide",
     "MSG_STILLRTC": "< Frozen >",
     "MSG_GBALOAD_OPTS": "Loading options",
     "MSG_DEF_SPEED": "RTC speed",
@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Launch flash game",
     "MSG_NOR_WROK": "Game flashed successfully!",
     "MSG_NOR_CLOK": "Flash erased successfully!",
-    "MSG_TOOLS5_FCLR": "Erase flash"
+    "MSG_TOOLS5_FCLR": "Erase flash",
+    "MSG_UIS_BHID": "Show hidden files"
 }

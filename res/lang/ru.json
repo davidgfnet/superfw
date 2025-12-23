@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Запустить игру из памяти",
     "MSG_NOR_WROK": "Игра записана успешно!",
     "MSG_NOR_CLOK": "Память успешно очищена!",
-    "MSG_TOOLS5_FCLR": "Стереть память"
+    "MSG_TOOLS5_FCLR": "Стереть память",
+    "MSG_UIS_BHID": "Show hidden files"
 }

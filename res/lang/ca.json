@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "Iniciar joc de la flash",
     "MSG_NOR_WROK": "Gravat del joc completat!",
     "MSG_NOR_CLOK": "Esborrat Flash completat!",
-    "MSG_TOOLS5_FCLR": "Esborrar flash"
+    "MSG_TOOLS5_FCLR": "Esborrar flash",
+    "MSG_UIS_BHID": "Veure ocults"
 }

@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "运行NOR中的游戏",
     "MSG_NOR_WROK": "游戏成功刷入NOR!",
     "MSG_NOR_CLOK": "成功擦除NOR!",
-    "MSG_TOOLS5_FCLR": "擦除NOR"
+    "MSG_TOOLS5_FCLR": "擦除NOR",
+    "MSG_UIS_BHID": "Show hidden files"
 }

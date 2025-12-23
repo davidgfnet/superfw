@@ -218,5 +218,6 @@
     "MSG_NOR_LAUNCH": "FLASH 게임 실행",
     "MSG_NOR_WROK": "FLASH 쓰기 성공!",
     "MSG_NOR_CLOK": "FLASH 삭제 성공!",
-    "MSG_TOOLS5_FCLR": "FLASH 삭제"
+    "MSG_TOOLS5_FCLR": "FLASH 삭제",
+    "MSG_UIS_BHID": "Show hidden files"
 }
