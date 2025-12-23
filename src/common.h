@@ -77,7 +77,7 @@ extern const uint32_t ingame_trampoline_payload_size;
 
 // Memory map for assets/objects in SDRAM
 #define ROM_OFF_SCRATCH           0x00000000     // At 0x08000000
-#define ROM_OFF_FONTS_BASE        0x00F00000     // At 0x08F00000
+#define ROM_OFF_FONTS_BASE        0x00E80000     // At 0x08E80000
 #define ROM_OFF_HISCRATCH         0x01000000     // At 0x09000000
 #define ROM_OFF_USRPATCH_DB       0x01C00000     // At 0x09C00000
 #define ROM_OFF_PATCH_DB          0x01D00000     // At 0x09D00000

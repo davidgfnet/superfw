@@ -396,7 +396,7 @@ typedef struct {
   t_reg_entry_max nordata;
 } t_sdram_state;
 
-_Static_assert (sizeof(t_sdram_state) <= 15*1024*1024, "scratch SDRAM doesn't exceed 15MB");
+_Static_assert (sizeof(t_sdram_state) <= 14.5*1024*1024, "scratch SDRAM doesn't exceed 14.5MB");
 
 t_sdram_state *sdr_state = (t_sdram_state*)0x08000000;
 uint8_t *hiscratch = (uint8_t*)ROM_HISCRATCH_U8;

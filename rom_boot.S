@@ -52,7 +52,7 @@
 #define WRAM_BOOTM_ADDR  0x03800000     /* WRAM were boot code is copied */
 #define GAMEPAK_BASEADDR 0x08000000
 
-#define FONT_BASE_ADDR   0x08F00000     @ Unpacked font glyph database
+#define FONT_BASE_ADDR   0x08E80000     @ Unpacked font glyph database (1.5MiB)
 #define HISCRATCH_ADDR   0x09000000     @ Place here any temporary data
 #define PATCH_DB_ADDR    0x09D00000     @ Where patch db lives
 #define ASSETS_ADDR      0x09E00000     @ Where assets (emu/menu) live
@@ -333,11 +333,11 @@ _main_end:
     mov r0, $0x5
     bl set_sd_mode                     @ Map SDRAM so we can unpack it.
     mov r0, $HISCRATCH_ADDR
-    mov r1, $FONT_BASE_ADDR
+    ldr r1, =FONT_BASE_ADDR
     bl apunpack16                      @ Unpack font assets
   #else
     mov r2, $(((font_end - font_start + 8191) / 8192) * 4)
-    mov r1, $FONT_BASE_ADDR
+    ldr r1, =FONT_BASE_ADDR
     bl sdram_copy                      @ Copy fonts directly (no unpacking)
   #endif
 
@@ -706,6 +706,8 @@ patches_end:
 font_start:
   #if defined(COMPRESS_FONTS)
     .incbin "res/fonts.pack.comp"
+  #elif defined(FONTS_EXT)
+    .incbin "res/fonts-ext.pack"
   #else
     .incbin "res/fonts.pack"
   #endif
@@ -758,11 +760,11 @@ assets_end:
 
 #if defined(SUPPORT_NORGAMES)
   // We place a mirror copy of the DirSave payload so it can be used by NOR games.
-  .org 0x00140000
+  .org 0x00190000
   .incbin "directsave.payload"
 
   // The IGM trampoline handles IRQs and switches to SDRAM-IGM
-  .org 0x00150000
+  .org 0x00198000
   .incbin "ingame_trampoline.payload"
 #endif
 
