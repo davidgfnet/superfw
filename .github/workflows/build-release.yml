@@ -11,6 +11,10 @@ on:
 jobs:
   build-firmware:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        board: [sd, lite, chis]
+
     steps:
       - name: Install dependencies
         run: sudo apt-get install gcc-arm-none-eabi
@@ -21,65 +25,52 @@ jobs:
       - name: Get short SHA
         id: slug
         run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
-      - name: Get release version
-        id: tagversion
-        if: startsWith(github.ref, 'refs/tags/')
-        run: fullref="${{ github.ref }}"; tagversion=${fullref#"refs/tags/"}; echo "tagversion=${tagversion}" >> $GITHUB_OUTPUT
       - name: Arrange files
         run: |
           cp res/patches.db patches.db
-      - name: Build firmware image (SD)
+      - name: Build firmware
         run: |
-          make BOARD=sd clean && make BOARD=sd COMPRESSION_RATIO=9
-          mv superfw.gba superfw-sd.fw
-          cp superfw.dldi.payload superfw-sd.dldi
-      - name: Upload debug artifacts (SD)
-        if: ${{ success() }}
+          make BOARD=${{ matrix.board }} clean
+          make BOARD=${{ matrix.board }} COMPRESSION_RATIO=9
+          mv superfw.gba superfw-${{ matrix.board }}.fw
+          cp superfw.dldi.payload superfw-${{ matrix.board }}.dldi
+      - name: Upload debug artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: superfw-sd-debug-${{ steps.slug.outputs.sha8 }}
+          name: superfw-${{ matrix.board }}-debug-${{ steps.slug.outputs.sha8 }}
           path: |
-            superfw-*.fw
+            superfw-${{ matrix.board }}.fw
             directsave.elf
             firmware.elf
             firmware.ewram.elf
             ingamemenu.elf
             superfw.dldi.elf
-      - name: Build firmware image (Lite)
-        run: |
-          make BOARD=lite clean && make BOARD=lite COMPRESSION_RATIO=9
-          mv superfw.gba superfw-lite.fw
-          cp superfw.dldi.payload superfw-lite.dldi
-      - name: Upload debug artifacts (Lite)
-        if: ${{ success() }}
+      - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: superfw-lite-debug-${{ steps.slug.outputs.sha8 }}
+          name: superfw-${{ matrix.board }}-${{ steps.slug.outputs.sha8 }}
           path: |
-            superfw-*.fw
-            directsave.elf
-            firmware.elf
-            firmware.ewram.elf
-            ingamemenu.elf
-            superfw.dldi.elf
-      - name: Upload firmware build
-        if: ${{ success() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: superfw-${{ steps.slug.outputs.sha8 }}
-          path: superfw-*.fw
+            superfw-${{ matrix.board }}.fw
       - name: Upload extra artifacts
         if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
-          name: superfw-dev-${{ steps.slug.outputs.sha8 }}
+          name: superfw-dev-${{ matrix.board }}-${{ steps.slug.outputs.sha8 }}
           path: |
-            superfw-*.fw
-            superfw-*.dldi
+            superfw-${{ matrix.board }}.fw
+            superfw-${{ matrix.board }}.dldi
             patches.db
+
+  release:
+    needs: build-firmware
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
       - name: Create release
-        id: create_release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,24 +79,10 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-      - name: Upload Release Asset (SD)
-        uses: actions/upload-release-asset@v1
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload all firmware
+        run: |
+          gh release upload "${GITHUB_REF#refs/tags/}" artifacts/**/**/*.fw
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./superfw-sd.fw
-          asset_name: superfw-sd-${{ steps.tagversion.outputs.tagversion }}.fw
-          asset_content_type: application/octet-stream
-      - name: Upload Release Asset (Lite)
-        uses: actions/upload-release-asset@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./superfw-lite.fw
-          asset_name: superfw-lite-${{ steps.tagversion.outputs.tagversion }}.fw
-          asset_content_type: application/octet-stream
+
 
