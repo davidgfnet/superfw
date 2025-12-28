@@ -16,6 +16,8 @@ Find the website and documentation at https://superfw.davidgf.net/
 Installation
 ------------
 
+Check https://superfw.davidgf.net/docs/install/flash/ for more details.
+
 The firmware can be chain-loaded using another firmware (ie. the default
 SuperCard firmware or SCFW) and loaded as a regular game. It can also be
 installed on the internal flash device. Installing it enables some nice
@@ -34,35 +36,17 @@ https://github.com/davidgfnet/superfw-nds-flasher-tool/releases/ and launch
 it with your Supercard on your Slot-2. You should be able to flash (as well
 as backup) your flash.
 
-
-Files and configuration on the SD card
---------------------------------------
-
-All SuperFW related files are stored under "/.superfw" at the root of the card.
-The following files are usually created:
-
- - .superfw/settings.txt: User settings, loaded on startup.
- - .superfw/ui-settings.txt: UI settings, loaded on startup.
- - .superfw/recent.txt: Recently played ROMs, in order.
- - .superfw/pending-save.txt: SRAM save information (temp file).
- - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
-
-Other noteworthy paths:
-
- - .superfw/config/: Per-ROM load configuration.
- - .superfw/patches/: Patch cache (created by PatchEngine).
- - .superfw/cheats/: Cheat database, contains .cht files.
- - .superfw/emulators/: Emulator ROMs, used to play other device's ROMs.
-
 GB/GBC Emulation
 ----------------
 
 GameBoy and GameBoy Color ROMs can be played by using the built-in Goombacolor
-emulator binary. Picking any .gb/.gbc file will load the emulator and the ROM
-and start its execution.
+emulator binary (the Lite build doesn't ship any emulator though).Picking any
+.gb/.gbc file will load the emulator and the ROM and start its execution.
 
 Other devices can also be played as long as the right emulator is installed in
 the SD card (and supported by SuperFW).
+
+Check https://superfw.davidgf.net/docs/usermanual/emulators/ for details.
 
 ROM patching
 ------------
@@ -81,8 +65,12 @@ and improvements can be added). The patches contain information about:
  - RTC patches: Used for games that contained an RTC IC in theri cart, to keep
    track of time (both time and date). There's only a handful such ROMs.
 
+More information at https://superfw.davidgf.net/docs/usermanual/patches/
+
 These patches are generated mostly automatically, check out the patch repo at:
 https://github.com/davidgfnet/gba-patch-gen
+It is also possible to use the web-based patch generator for better patches:
+https://patchtool.superfw.davidgf.net/
 
 In-game menu
 ------------
@@ -127,6 +115,25 @@ save game, this is called Direct-Saving mode. This makes saving more reliable
 (no need for a battery!) and simpler to use (no need to reboot to ensure
 saving or using the in-game menu). Games that use Flash or EEPROM will display
 an option for direct-saving (this is the default choice in Auto mode).
+
+Files and configuration on the SD card
+--------------------------------------
+
+All SuperFW related files are stored under "/.superfw" at the root of the card.
+The following files are usually created:
+
+ - .superfw/settings.txt: User settings, loaded on startup.
+ - .superfw/ui-settings.txt: UI settings, loaded on startup.
+ - .superfw/recent.txt: Recently played ROMs, in order.
+ - .superfw/pending-save.txt: SRAM save information (temp file).
+ - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
+
+Other noteworthy paths:
+
+ - .superfw/config/: Per-ROM load configuration.
+ - .superfw/patches/: Patch cache (created by PatchEngine).
+ - .superfw/cheats/: Cheat database, contains .cht files.
+ - .superfw/emulators/: Emulator ROMs, used to play other device's ROMs.
 
 Limits
 ------
