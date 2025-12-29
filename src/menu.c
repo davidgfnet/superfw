@@ -2061,11 +2061,14 @@ void render_info(volatile uint8_t *frame) {
 }
 
 void render_tools(volatile uint8_t *frame) {
-  for (unsigned i = 0; i < ToolsMAX; i++) {
-    draw_text_ovf(msgs[lang_id][MSG_TOOLS0_SDRAM + i], frame, 12, 24 + 2 + 22 * i, 144);
-    draw_button_box(frame, 150, 232, 24 + 22 * i, 24 + 20 + 22 * i, smenu.tools.selector == i);
-    draw_central_text(msgs[lang_id][MSG_TOOLS_RUN], frame, 191, 24 + 2 + 22 * i);
-  }
+  for (unsigned i = 0; i < ToolsMAX; i++)
+    draw_text_ovf(msgs[lang_id][MSG_TOOLS0_SDRAM + i], frame, 22, 26 + 22 * i, 144);
+
+  smenu.anim_state = (smenu.anim_state + 1) & 255;
+  draw_central_text("▸", frame, 11 + (smenu.anim_state >> 6), 26 + 22 * smenu.tools.selector);
+
+  for (unsigned i = 0; i < 240; i += 16)
+    render_icon_trans(i, 26 + smenu.tools.selector * 22, 63);
 }
 
 void reload_theme(unsigned thnum) {
