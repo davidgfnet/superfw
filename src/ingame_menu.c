@@ -630,14 +630,22 @@ void draw_rtc_menu(uint8_t *fb, unsigned framen) {
   char tmont[3] = {'0' + rtc_date.month/10, '0' + rtc_date.month%10, 0};
   char tyear[5] = {'2', '0', '0' + rtc_date.year/10, '0' + rtc_date.year%10, 0};
 
-  draw_text(tyear, fb,  46, 70, copt == 0 ? HI_COLOR : FG_COLOR);
-  draw_text("-",   fb,  78, 70, FG_COLOR);
-  draw_text(tmont, fb,  87, 70, copt == 1 ? HI_COLOR : FG_COLOR);
-  draw_text("-",   fb, 103, 70, FG_COLOR);
-  draw_text(tdays, fb, 112, 70, copt == 2 ? HI_COLOR : FG_COLOR);
-  draw_text(thour, fb, 140, 70, copt == 3 ? HI_COLOR : FG_COLOR);
-  draw_text(":",   fb, 157, 70, FG_COLOR);
-  draw_text(tmins, fb, 162, 70, copt == 4 ? HI_COLOR : FG_COLOR);
+  draw_text(tyear, fb,  54, 70, copt == 0 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb,  86, 70, FG_COLOR);
+  draw_text(tmont, fb,  95, 70, copt == 1 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb, 111, 70, FG_COLOR);
+  draw_text(tdays, fb, 120, 70, copt == 2 ? HI_COLOR : FG_COLOR);
+  draw_text(thour, fb, 148, 70, copt == 3 ? HI_COLOR : FG_COLOR);
+  draw_text(":",   fb, 165, 70, FG_COLOR);
+  draw_text(tmins, fb, 170, 70, copt == 4 ? HI_COLOR : FG_COLOR);
+
+  if (copt < 5) {
+    const uint8_t cox[] = {
+      68, 103, 127, 156, 178
+    };
+    draw_text_center("⯅", fb, cox[copt], 54, HI_COLOR);
+    draw_text_center("⯆", fb, cox[copt], 84, HI_COLOR);
+  }
 
   draw_text_center(msgs[ingame_menu_lang][IMENU_UPDAT_RTC], fb, SCREEN_WIDTH/2, 120, copt == 5 ? HI_COLOR : FG_COLOR);
 }
