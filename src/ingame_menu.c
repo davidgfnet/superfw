@@ -60,6 +60,8 @@ void fast_mem_clr_256(void *addr, uint32_t value, unsigned count);
 void set_entrypoint_hook(bool process_cheats);
 uint32_t *get_cheat_table();
 
+#define MAX_SPEED_OPTS      6   // Sync with common.h
+
 #define MAX_DISK_SLOTS      5
 #define MAX_MEM_SLOTS      32
 
@@ -85,6 +87,7 @@ uint32_t *get_cheat_table();
 static unsigned submenu;
 static unsigned copt;
 static t_dec_date rtc_date;
+static unsigned rtc_speed;
 static struct {
   const char *msg;
   void (*callback)();
@@ -630,24 +633,33 @@ void draw_rtc_menu(uint8_t *fb, unsigned framen) {
   char tmont[3] = {'0' + rtc_date.month/10, '0' + rtc_date.month%10, 0};
   char tyear[5] = {'2', '0', '0' + rtc_date.year/10, '0' + rtc_date.year%10, 0};
 
-  draw_text(tyear, fb,  54, 70, copt == 0 ? HI_COLOR : FG_COLOR);
-  draw_text("-",   fb,  86, 70, FG_COLOR);
-  draw_text(tmont, fb,  95, 70, copt == 1 ? HI_COLOR : FG_COLOR);
-  draw_text("-",   fb, 111, 70, FG_COLOR);
-  draw_text(tdays, fb, 120, 70, copt == 2 ? HI_COLOR : FG_COLOR);
-  draw_text(thour, fb, 148, 70, copt == 3 ? HI_COLOR : FG_COLOR);
-  draw_text(":",   fb, 165, 70, FG_COLOR);
-  draw_text(tmins, fb, 170, 70, copt == 4 ? HI_COLOR : FG_COLOR);
+  draw_text(tyear, fb,  54, 56, copt == 0 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb,  86, 56, FG_COLOR);
+  draw_text(tmont, fb,  95, 56, copt == 1 ? HI_COLOR : FG_COLOR);
+  draw_text("-",   fb, 111, 56, FG_COLOR);
+  draw_text(tdays, fb, 120, 56, copt == 2 ? HI_COLOR : FG_COLOR);
+  draw_text(thour, fb, 148, 56, copt == 3 ? HI_COLOR : FG_COLOR);
+  draw_text(":",   fb, 165, 56, FG_COLOR);
+  draw_text(tmins, fb, 170, 56, copt == 4 ? HI_COLOR : FG_COLOR);
 
   if (copt < 5) {
     const uint8_t cox[] = {
       68, 103, 127, 156, 178
     };
-    draw_text_center("⯅", fb, cox[copt], 54, HI_COLOR);
-    draw_text_center("⯆", fb, cox[copt], 84, HI_COLOR);
+    draw_text_center("⯅", fb, cox[copt], 40, HI_COLOR);
+    draw_text_center("⯆", fb, cox[copt], 70, HI_COLOR);
+  } else if (copt == 5) {
+    draw_text_center("⯅", fb, SCREEN_WIDTH/2, 77, HI_COLOR);
+    draw_text_center("⯆", fb, SCREEN_WIDTH/2, 107, HI_COLOR);
   }
 
-  draw_text_center(msgs[ingame_menu_lang][IMENU_UPDAT_RTC], fb, SCREEN_WIDTH/2, 120, copt == 5 ? HI_COLOR : FG_COLOR);
+  char tmp[64];
+  npf_snprintf(tmp, sizeof(tmp), "%s: %s",
+    msgs[ingame_menu_lang][IMENU_RTCSPD],
+    msgs[ingame_menu_lang][rtc_speed ? (IMENU_SPD0 + rtc_speed - 1) : IMENU_FRZRTC]);
+  draw_text_center(tmp, fb, SCREEN_WIDTH/2, 92, copt == 5 ? HI_COLOR : FG_COLOR);
+
+  draw_text_center(msgs[ingame_menu_lang][IMENU_UPDAT_RTC], fb, SCREEN_WIDTH/2, 130, copt == 6 ? HI_COLOR : FG_COLOR);
 }
 
 void draw_cheats_menu(uint8_t *fb, unsigned framen) {
@@ -1031,13 +1043,19 @@ void rtckey(uint16_t keyp) {
       rval[copt]--;
 
     fixdate(&rtc_date);
+  } else if (copt == 5) {
+    if (keyp & KEY_BUTTUP)
+      rtc_speed++;
+    if (keyp & KEY_BUTTDOWN)
+      rtc_speed--;
+
+    rtc_speed = rtc_speed % MAX_SPEED_OPTS;
   }
 }
 
 bool action_write_rtc() {
   // Write to the emulated RTC register
-  // TODO: Allow changing the RTC speed.
-  set_undef_lrsp(date2timestamp(&rtc_date), get_undef_sp());
+  set_undef_lrsp(date2timestamp(&rtc_date), rtc_speed);
 
   submenu = MenuMain;
   copt = 0;
@@ -1078,6 +1096,7 @@ const menu_action_fn rtcacts[] = {
   NULL,
   NULL,
   NULL,
+  NULL,
   action_write_rtc,  // Apply RTC time.
 };
 
@@ -1103,7 +1122,7 @@ const t_menu_def menudata [] = {
   { draw_reset_menu,  resetacts,  NULL,   4, NULL,  true },
   { draw_save_menu,   saveacts,   NULL,   4, NULL,  true },
   { draw_states_menu, statesacts, sstkey, 3, NULL,  true },
-  { draw_rtc_menu,    rtcacts,    rtckey, 6, NULL, false },
+  { draw_rtc_menu,    rtcacts,    rtckey, 7, NULL, false },
   { draw_cheats_menu, cheatsacts, NULL,   0, cheats_cnt,  true },
 };
 
@@ -1191,8 +1210,9 @@ void ingame_menu_loop(uint32_t *use_cheats_hook) {
   num_mem_savestates = MIN(MAX_MEM_SLOTS, (scratch_size >> 10) / SAVESTATE_SIZE_KB);
   num_dsk_savestates = savestate_pattern[0] ? MAX_DISK_SLOTS : 0;
 
-  // Read RTC values
+  // Read RTC values and speed
   timestamp2date(get_undef_lr(), &rtc_date);
+  rtc_speed = get_undef_sp();
 
   // Lazy intialization of the SD card, to avoid blocking the menu
   FATFS fs;

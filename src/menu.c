@@ -2481,7 +2481,7 @@ static void keypress_popup_loadgba(unsigned newkeys) {
 
       t_rtc_info rtci = {
         .timestamp = spop.p.load.l.rtcval,
-        .ts_step = rtc_speed(rtcspeed_default)
+        .ts_step = rtcspeed_default
       };
 
       unsigned err = load_gba_rom(
@@ -2738,7 +2738,7 @@ static void keypress_popup_norload(unsigned newkeys) {
       }
       t_rtc_info rtci = {
         .timestamp = spop.p.norld.l.rtcval,
-        .ts_step = rtc_speed(rtcspeed_default)
+        .ts_step = rtcspeed_default
       };
 
       // TODO Handle errors, finish missing stuff.

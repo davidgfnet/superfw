@@ -674,7 +674,7 @@ START_FUNC(patch_rtc_gettimedate)
 1:
   mrs r3, CPSR                 // Save the current CPSR
   msr CPSR_c, $(0x1B | 0x80)   // Move to undefined mode, no interrupts
-  add lr, lr, sp               // UNDEF[SP] contains the read-increment
+  add lr, lr, sp, lsl #3       // UNDEF[SP] contains the RTC speed (0 to 5 -> 0,8,16,24,32,40)
   mov r5, lr                   // Read UNDEF[LR]
   msr CPSR_c, r3               // Restore original model and CPSR
 

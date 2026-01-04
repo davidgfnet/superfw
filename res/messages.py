@@ -295,6 +295,15 @@ en_menu_strings = [
   "IMENU_PLD_ERR":          "Corrupted savestate!",      # igm-alertmsg
 
   "IMENU_SAVING_BLOCKED":   "Saving in progress!",
+
+  "IMENU_RTCSPD": "~main.MSG_DEF_SPEED",
+  "IMENU_SPD0": "~main.MSG_UIS_SPD0",
+  "IMENU_SPD1": "~main.MSG_UIS_SPD1",
+  "IMENU_SPD2": "~main.MSG_UIS_SPD2",
+  "IMENU_SPD3": "~main.MSG_UIS_SPD3",
+  "IMENU_SPD4": "~main.MSG_UIS_SPD4",
+  "IMENU_FRZRTC": "~main.MSG_STILLRTC",
+
   }),
 ]
 
@@ -303,19 +312,31 @@ if len(sys.argv) > 1 and sys.argv[1] == "json":
   allentries = {}
   for e in [en_strings, en_menu_strings]:
     for _, d in e:
-      allentries |= d
+      for k, v in d.items():
+        if not v.startswith("~"):
+          allentries[k] = v
   print(json.dumps(allentries, indent=2))
 elif len(sys.argv) > 1 and sys.argv[1] == "h":
-  todump = en_menu_strings if sys.argv[2] == "menu" else en_strings
+  all_entries = {
+    "main": en_strings,
+    "menu": en_menu_strings,
+  }
 
-  strlist = []
-  for c, entries in todump:
-    for k, v in entries.items():
-      strlist.append((k, v, c))
-  strlist = sorted(strlist)
+  strlist = {}
+  strall = {}
+
+  # Flatten all strings
+  for mname, smenu in all_entries.items():
+    tmp = {}
+    for c, entries in smenu:
+      for k, v in entries.items():
+        if mname == sys.argv[2]:
+          strlist[k] = (v, c)
+        tmp[k] = (v, c)
+    strall[mname] = tmp
 
   print("enum TranslationID {")
-  for k, _, c in strlist:
+  for k, (_, c) in sorted(strlist.items()):
     if c:
       print("#ifdef %s" % c)
     print("  %s," % k)
@@ -324,9 +345,13 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
   print("};")
 
   print("const char * const msg_en[] = {")
-  for k, v, c in strlist:
+  for k, (v, c) in sorted(strlist.items()):
     if c:
       print("#ifdef %s" % c)
+    # Could be a reference to another menu, resolve it
+    if v.startswith("~"):
+      mn, mk = v[1:].split(".")
+      v = strall[mn][mk][0]
     print('  /* %s */ "%s",' % (k.ljust(20), v))
     if c:
       print("#endif")
@@ -337,10 +362,14 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
   for l in OTHER_LANGS:
     d = json.load(open(os.path.join(langdir, "%s.json" % l)))
     print("const char * const msg_%s[] = {" % l)
-    for k, en_v, c in strlist:
+    for k, (en_v, c) in sorted(strlist.items()):
       if c:
         print("#ifdef %s" % c)
-      v = d[k] if k in d and d[k] else en_v
+      if en_v.startswith("~"):
+        mn, mk = en_v[1:].split(".")
+        v = d[mk] if mk in d and d[mk] else en_v
+      else:
+        v = d[k] if k in d and d[k] else en_v
       print('  /* %s */ "%s",' % (k.ljust(20), v))
       if c:
         print("#endif")
