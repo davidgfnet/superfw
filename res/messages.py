@@ -82,13 +82,13 @@ en_strings = [
   "MSG_UIS_BHID":  "Show hidden files",
   "MSG_UIS_SAVE":  "Save to SD card",
 
-  "MSG_UIS_SPD0":  "< Very slow >",
-  "MSG_UIS_SPD1":  "< Slow >",
-  "MSG_UIS_SPD2":  "< Regular >",
-  "MSG_UIS_SPD3":  "< Fast >",
-  "MSG_UIS_SPD4":  "< Very fast >",
+  "MSG_UIS_SPD0":  "Very slow",
+  "MSG_UIS_SPD1":  "Slow",
+  "MSG_UIS_SPD2":  "Regular",
+  "MSG_UIS_SPD3":  "Fast",
+  "MSG_UIS_SPD4":  "Very fast",
 
-  "MSG_STILLRTC":    "< Frozen >",
+  "MSG_STILLRTC":    "Frozen",
 
   "MSG_GBALOAD_MINFO":  "ROM information",
   "MSG_GBALOAD_OPTS":   "Loading options",

@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "Ke ROM terkini",
     "MSG_UIS_ANSPD": "Kelajuan teks",
     "MSG_UIS_SAVE": "Simpan ke kad SD",
-    "MSG_UIS_SPD0": "< Amat lambat >",
-    "MSG_UIS_SPD1": "< Lambat >",
-    "MSG_UIS_SPD2": "< Biasa >",
-    "MSG_UIS_SPD3": "< Laju >",
-    "MSG_UIS_SPD4": "< Amat laju >",
     "MSG_GBALOAD_MINFO": "Maklumat ROM",
     "MSG_GBALOAD_MSAVE": "Opsi simpanan permainan",
     "MSG_GBALOAD_MPATCH": "Opsi penambalan",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": ".sav dalam satu folder dengan ROM",
     "MSG_SAVE_TYPE_PT": "Simpanan berada dalam %s",
     "MSG_BROW_EMPTY": "Empty directory",
-    "MSG_STILLRTC": "< Frozen >",
     "MSG_GBALOAD_OPTS": "Loading options",
     "MSG_DEF_SPEED": "RTC speed",
     "MSG_FMGR_DEL": "Delete file/directory",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "Game flashed successfully!",
     "MSG_NOR_CLOK": "Flash erased successfully!",
     "MSG_TOOLS5_FCLR": "Erase flash",
-    "MSG_UIS_BHID": "Show hidden files"
+    "MSG_UIS_BHID": "Show hidden files",
+    "MSG_UIS_SPD0": "Amat lambat",
+    "MSG_UIS_SPD1": "Lambat",
+    "MSG_UIS_SPD2": "Biasa",
+    "MSG_UIS_SPD3": "Laju",
+    "MSG_UIS_SPD4": "Amat laju",
+    "MSG_STILLRTC": "Frozen"
 }

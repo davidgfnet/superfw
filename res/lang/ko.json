@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "최근 실행한 게임",
     "MSG_UIS_ANSPD": "텍스트 속도",
     "MSG_UIS_SAVE": "SD 카드에 저장",
-    "MSG_UIS_SPD0": "< 매우 느림 >",
-    "MSG_UIS_SPD1": "< 느림 >",
-    "MSG_UIS_SPD2": "< 보통 >",
-    "MSG_UIS_SPD3": "< 빠름 >",
-    "MSG_UIS_SPD4": "< 매우 빠름 >",
     "MSG_GBALOAD_MINFO": "롬 정보",
     "MSG_GBALOAD_MSAVE": "저장 옵션",
     "MSG_GBALOAD_MPATCH": "패치 옵션",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": ".sav 파일을 ROM과 같은 폴더에 작성",
     "MSG_SAVE_TYPE_PT": "저장 파일은 %s 폴더에 작성됨",
     "MSG_BROW_EMPTY": "비어있는 폴더",
-    "MSG_STILLRTC": "< 멈춤 >",
     "MSG_GBALOAD_OPTS": "불러오기 설정",
     "MSG_DEF_SPEED": "RTC 속도",
     "MSG_FMGR_DEL": "파일/폴더 삭제",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "FLASH 쓰기 성공!",
     "MSG_NOR_CLOK": "FLASH 삭제 성공!",
     "MSG_TOOLS5_FCLR": "FLASH 삭제",
-    "MSG_UIS_BHID": "숨긴 파일 표시"
+    "MSG_UIS_BHID": "숨긴 파일 표시",
+    "MSG_UIS_SPD0": "매우 느림",
+    "MSG_UIS_SPD1": "느림",
+    "MSG_UIS_SPD2": "보통",
+    "MSG_UIS_SPD3": "빠름",
+    "MSG_UIS_SPD4": "매우 빠름",
+    "MSG_STILLRTC": "멈춤"
 }

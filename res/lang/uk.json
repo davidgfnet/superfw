@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "Недавні",
     "MSG_UIS_ANSPD": "Прокр. тексту",
     "MSG_UIS_SAVE": "Зберегти налаштування",
-    "MSG_UIS_SPD0": "< Дуже повільно >",
-    "MSG_UIS_SPD1": "< Повільно >",
-    "MSG_UIS_SPD2": "< Звичайно >",
-    "MSG_UIS_SPD3": "< Швидко >",
-    "MSG_UIS_SPD4": "< Дуже швидко >",
     "MSG_GBALOAD_MINFO": "Інформація",
     "MSG_GBALOAD_MSAVE": "Опції збереження",
     "MSG_GBALOAD_MPATCH": "Опції патчингу",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": "Зберегти у ту ж теку де знаходиться файл",
     "MSG_SAVE_TYPE_PT": "Зберегти файли в теку %s",
     "MSG_BROW_EMPTY": "Порожня тека",
-    "MSG_STILLRTC": "< Заморожено >",
     "MSG_GBALOAD_OPTS": "Опції завантаження",
     "MSG_DEF_SPEED": "Швидкість RTC",
     "MSG_FMGR_DEL": "Видалити файл/теку",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "Гра записана успішно!",
     "MSG_NOR_CLOK": "Пам'ять успішно стерто!",
     "MSG_TOOLS5_FCLR": "Стерти пам'ять",
-    "MSG_UIS_BHID": "Показ. приховані"
+    "MSG_UIS_BHID": "Показ. приховані",
+    "MSG_UIS_SPD0": "Дуже повільно",
+    "MSG_UIS_SPD1": "Повільно",
+    "MSG_UIS_SPD2": "Звичайно",
+    "MSG_UIS_SPD3": "Швидко",
+    "MSG_UIS_SPD4": "Дуже швидко",
+    "MSG_STILLRTC": "Заморожено"
 }

@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "Kürzliche ROMs",
     "MSG_UIS_ANSPD": "Textspeed",
     "MSG_UIS_SAVE": "Auf SD-Karte speichern",
-    "MSG_UIS_SPD0": "< Sehr langsam >",
-    "MSG_UIS_SPD1": "< Langsam >",
-    "MSG_UIS_SPD2": "< Normal >",
-    "MSG_UIS_SPD3": "< Schnell >",
-    "MSG_UIS_SPD4": "< Sehr schnell >",
     "MSG_GBALOAD_MINFO": "ROM-Informationen",
     "MSG_GBALOAD_MSAVE": "Spielstand-Einstellungen",
     "MSG_GBALOAD_MPATCH": "Patch-Optionen",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": ".sav im gleichen Ordner wie ROM",
     "MSG_SAVE_TYPE_PT": "Spielstand liegt im %s-Ordner",
     "MSG_BROW_EMPTY": "Leerer Ordner",
-    "MSG_STILLRTC": "< Eingefroren >",
     "MSG_GBALOAD_OPTS": "Ladeoptionen",
     "MSG_DEF_SPEED": "RTC Schritte",
     "MSG_FMGR_DEL": "Lösche Datei/Ordner",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "Spiel erfolgreich geschrieben!",
     "MSG_NOR_CLOK": "FLASH erfolgreich gelöscht!",
     "MSG_TOOLS5_FCLR": "Lösche FLASH",
-    "MSG_UIS_BHID": "Ausgebl. anzeigen"
+    "MSG_UIS_BHID": "Ausgebl. anzeigen",
+    "MSG_UIS_SPD0": "Sehr langsam",
+    "MSG_UIS_SPD1": "Langsam",
+    "MSG_UIS_SPD2": "Normal",
+    "MSG_UIS_SPD3": "Schnell",
+    "MSG_UIS_SPD4": "Sehr schnell",
+    "MSG_STILLRTC": "Eingefroren"
 }

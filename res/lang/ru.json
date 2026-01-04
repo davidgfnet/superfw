@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "Недавние",
     "MSG_UIS_ANSPD": "Скорость прокр.",
     "MSG_UIS_SAVE": "Сохранить настройки",
-    "MSG_UIS_SPD0": "< Оч. медленно >",
-    "MSG_UIS_SPD1": "< Медленно >",
-    "MSG_UIS_SPD2": "< Обычно >",
-    "MSG_UIS_SPD3": "< Быстро >",
-    "MSG_UIS_SPD4": "< Оч. быстро >",
     "MSG_GBALOAD_MINFO": "Информация",
     "MSG_GBALOAD_MSAVE": "Опции сохранения",
     "MSG_GBALOAD_MPATCH": "Опции патчинга",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": "Сохранить в ту же папку, что и файл",
     "MSG_SAVE_TYPE_PT": "Сохранять файлы в папке %s",
     "MSG_BROW_EMPTY": "Пустая папка",
-    "MSG_STILLRTC": "< Заморожено >",
     "MSG_GBALOAD_OPTS": "Опции загрузки",
     "MSG_DEF_SPEED": "Скорость RTC",
     "MSG_FMGR_DEL": "Удалить файл/папку",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "Игра записана успешно!",
     "MSG_NOR_CLOK": "Память успешно очищена!",
     "MSG_TOOLS5_FCLR": "Стереть память",
-    "MSG_UIS_BHID": "Показать скрытые"
+    "MSG_UIS_BHID": "Показать скрытые",
+    "MSG_UIS_SPD0": "Оч. медленно",
+    "MSG_UIS_SPD1": "Медленно",
+    "MSG_UIS_SPD2": "Обычно",
+    "MSG_UIS_SPD3": "Быстро",
+    "MSG_UIS_SPD4": "Оч. быстро",
+    "MSG_STILLRTC": "Заморожено"
 }
