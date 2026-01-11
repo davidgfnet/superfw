@@ -2277,7 +2277,7 @@ void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) 
         bool programmed_ok;
         #ifdef SUPPORT_NORGAMES
         if (flashinfo.size && flashinfo.blksize && flashinfo.blkcount && flashinfo.blkwrite)
-          programmed_ok = flash_program_buffered(ROM_FLASHFIRMW_ADDR, sdr_state->scratch, fwsize, flashinfo.blkwrite);
+          programmed_ok = flash_program_buffered(ROM_FLASHFIRMW_ADDR, sdr_state->scratch, fwsize, flashinfo.blkwrite, use_slowld);
         else
         #endif
           programmed_ok = flash_program(ROM_FLASHFIRMW_ADDR, sdr_state->scratch, fwsize);

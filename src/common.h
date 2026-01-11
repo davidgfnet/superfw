@@ -391,7 +391,7 @@ bool flash_erase_sectors(uint32_t baseaddr, unsigned sectsize, unsigned sectcoun
 void flash_read(uint32_t baseaddr, uint8_t *buf, unsigned size);
 bool flash_check_erased(uintptr_t addr, unsigned size);
 bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size);
-bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize);
+bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize, bool precopy);
 bool flash_verify(uint32_t baseaddr, const uint8_t *buf, unsigned size);
 void flash_erase_fsm_start(t_flash_erase_state *st, uint32_t baseaddr, unsigned sectsize, unsigned sectorcnt);
 int flash_erase_fsm_step(t_flash_erase_state *st);
