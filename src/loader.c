@@ -400,6 +400,8 @@ unsigned flash_gba_nor(
   // Map the game to the base 32MiB address space.
   set_superchis_normap(blkmap);
 
+  slowsd = use_slowld;
+
   t_flash_erase_state erst;
   for (uint32_t bigoff = 0; bigoff < fs; bigoff += ssize) {
     // Start clearing the flash block we will be writing to!
@@ -412,13 +414,14 @@ unsigned flash_gba_nor(
         if (progress)
           progress((bigoff + offset / 4) >> 8, fs >> 8);
 
-        flash_erase_fsm_step(&erst);
+        if (!slowsd) flash_erase_fsm_step(&erst);
       }
 
       unsigned toread = MIN(LOAD_BS, fs - absoff);
       UINT rdbytes;
       uint32_t tmp[LOAD_BS/4];
       if (FR_OK != f_read(&fd, tmp, toread, &rdbytes)) {
+        slowsd = true;
         f_close(&fd);
         reset_superchis_normap();
         return ERR_LOAD_BADROM;
@@ -457,7 +460,7 @@ unsigned flash_gba_nor(
         progress((bigoff + ssize / 4 + offset * 3/4) >> 8, fs >> 8);
 
       unsigned toflash = MIN(flashinfo.blksize, fs - absoff);
-      if (!flash_program_buffered(flashaddr, &scratch[offset], toflash, flashinfo.blkwrite)) {
+      if (!flash_program_buffered(flashaddr, &scratch[offset], toflash, flashinfo.blkwrite, !slowsd)) {
         f_close(&fd);
         reset_superchis_normap();
         return ERR_FLASH_OP;
@@ -465,6 +468,9 @@ unsigned flash_gba_nor(
     }
   }
 
+  slowsd = true;
+
+  f_close(&fd);
   reset_superchis_normap();
   return 0;
 }
