@@ -484,7 +484,7 @@ unsigned launch_gba_nor(
   // Now the IGM: it sits along in the SDRAM (at 0x0 offset)
   uint32_t igm_addr = GBA_ROM_BASE;
   // IGM can use as much SDRAM as it needs, use 16MiB for now
-  uint32_t igm_space = 16*1024*102;
+  uint32_t igm_space = 16*1024*1024;
 
   // Install the menu before loading the ROM, otherwise we overwrite relevant assets.
   if (ingame_menu) {
