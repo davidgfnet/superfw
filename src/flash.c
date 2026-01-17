@@ -28,7 +28,7 @@
 // Supercard internal flash routines
 // Assumes the code runs from IW/EWRAM!
 
-#define SECTOR_ERASE_TIMEOUTMS     1000    // ~1s timeout for 1 sector erase.
+#define SECTOR_ERASE_TIMEOUTMS     4000    // ~4s timeout for 1 sector erase.
 
 // Supercard's internal flash is a regular 512KiB flash, mapped to
 // 0x08000000 (whenever the CPLD is not mapping the SDRAM of course).
