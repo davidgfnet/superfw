@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "ROMs recientes",
     "MSG_UIS_ANSPD": "Velocidad texto",
     "MSG_UIS_SAVE": "Guardar en tarjeta SD",
-    "MSG_UIS_SPD0": "< Muy lento >",
-    "MSG_UIS_SPD1": "< Lento >",
-    "MSG_UIS_SPD2": "< Normal >",
-    "MSG_UIS_SPD3": "< Rápido >",
-    "MSG_UIS_SPD4": "< Muy rápido >",
     "MSG_GBALOAD_MINFO": "Información del ROM",
     "MSG_GBALOAD_MSAVE": "Opciones de guardado",
     "MSG_GBALOAD_MPATCH": "Opciones de parcheo",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": "El archivo .sav se ubica en el mismo directorio que la ROM",
     "MSG_SAVE_TYPE_PT": "El archivo de guardado se ubica en el directorio %s",
     "MSG_BROW_EMPTY": "Carpeta vacía",
-    "MSG_STILLRTC": "< Congelado >",
     "MSG_GBALOAD_OPTS": "Opciones de carga",
     "MSG_DEF_SPEED": "Velocidad RTC",
     "MSG_FMGR_DEL": "Eliminar archivo/carpeta",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "¡El juego ha sido grabado!",
     "MSG_NOR_CLOK": "¡Flash borrada correctamente!",
     "MSG_TOOLS5_FCLR": "Borrar memoria flash",
-    "MSG_UIS_BHID": "Ver ocultos"
+    "MSG_UIS_BHID": "Ver ocultos",
+    "MSG_UIS_SPD0": "Muy lento",
+    "MSG_UIS_SPD1": "Lento",
+    "MSG_UIS_SPD2": "Normal",
+    "MSG_UIS_SPD3": "Rápido",
+    "MSG_UIS_SPD4": "Muy rápido",
+    "MSG_STILLRTC": "Congelado"
 }

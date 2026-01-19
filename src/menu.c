@@ -1917,8 +1917,9 @@ void render_settings(volatile uint8_t *frame) {
   if (msk & 0x04000) {
     unsigned spdmsg = rtcspeed_default ? (MSG_UIS_SPD0 + rtcspeed_default - 1) :
                                           MSG_STILLRTC;
+    npf_snprintf(tmp, sizeof(tmp), "< %s >", msgs[lang_id][spdmsg]);
     draw_text_ovf(msgs[lang_id][MSG_DEF_SPEED], frame, 8, offy + rowh*optcnt, 224);
-    draw_central_text(msgs[lang_id][spdmsg], frame, colx, offy + rowh*optcnt++);
+    draw_central_text(tmp, frame, colx, offy + rowh*optcnt++);
   }
 
   if (msk & 0x08000) {
@@ -1986,8 +1987,9 @@ void render_ui_settings(volatile uint8_t *frame) {
   draw_text_ovf(msgs[lang_id][MSG_UIS_RECNT], frame, 8, 22 + 40, 224);
   draw_central_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 40 );
 
+  npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %s >", msgs[lang_id][MSG_UIS_SPD0 + anim_speed]);
   draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 60, 224);
-  draw_central_text(msgs[lang_id][MSG_UIS_SPD0 + anim_speed], frame, colx, 22 + 60 );
+  draw_central_text(tmpbuf, frame, colx, 22 + 60 );
 
   draw_text_ovf(msgs[lang_id][MSG_UIS_BHID], frame, 8, 22 + 80, 224);
   draw_central_text(msgs[lang_id][hide_hidden ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, 22 + 80 );
@@ -2479,7 +2481,7 @@ static void keypress_popup_loadgba(unsigned newkeys) {
 
       t_rtc_info rtci = {
         .timestamp = spop.p.load.l.rtcval,
-        .ts_step = rtc_speed(rtcspeed_default)
+        .ts_step = rtcspeed_default
       };
 
       unsigned err = load_gba_rom(
@@ -2736,7 +2738,7 @@ static void keypress_popup_norload(unsigned newkeys) {
       }
       t_rtc_info rtci = {
         .timestamp = spop.p.norld.l.rtcval,
-        .ts_step = rtc_speed(rtcspeed_default)
+        .ts_step = rtcspeed_default
       };
 
       // TODO Handle errors, finish missing stuff.

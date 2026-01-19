@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "显示最近的ROM",
     "MSG_UIS_ANSPD": "文本速度",
     "MSG_UIS_SAVE": "将设置保存到SD卡",
-    "MSG_UIS_SPD0": "< 非常慢>",
-    "MSG_UIS_SPD1": "< 慢 >",
-    "MSG_UIS_SPD2": "< 常规 >",
-    "MSG_UIS_SPD3": "< 快 >",
-    "MSG_UIS_SPD4": "< 非常快 >",
     "MSG_GBALOAD_MINFO": "ROM 信息",
     "MSG_GBALOAD_MSAVE": "存档选项",
     "MSG_GBALOAD_MPATCH": "补丁选项",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": ".sav与ROM放在同一目录",
     "MSG_SAVE_TYPE_PT": "将存档放置在%s目录",
     "MSG_BROW_EMPTY": "空白目录",
-    "MSG_STILLRTC": "静止",
     "MSG_GBALOAD_OPTS": "读取选项",
     "MSG_DEF_SPEED": "时钟速率",
     "MSG_FMGR_DEL": "删除文件或目录",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "游戏成功刷入NOR!",
     "MSG_NOR_CLOK": "成功擦除NOR!",
     "MSG_TOOLS5_FCLR": "擦除NOR",
-    "MSG_UIS_BHID": "显示隐藏文件"
+    "MSG_UIS_BHID": "显示隐藏文件",
+    "MSG_UIS_SPD0": "非常慢",
+    "MSG_UIS_SPD1": "慢",
+    "MSG_UIS_SPD2": "常规",
+    "MSG_UIS_SPD3": "快",
+    "MSG_UIS_SPD4": "非常快",
+    "MSG_STILLRTC": "静止"
 }

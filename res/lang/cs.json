@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "Poslední ROM",
     "MSG_UIS_ANSPD": "Rychlost textu",
     "MSG_UIS_SAVE": "Uložit na SD",
-    "MSG_UIS_SPD0": "< Velmi pomalá >",
-    "MSG_UIS_SPD1": "< Pomalá >",
-    "MSG_UIS_SPD2": "< Normální >",
-    "MSG_UIS_SPD3": "< Rychlá >",
-    "MSG_UIS_SPD4": "< Velmi rychlá >",
     "MSG_GBALOAD_MINFO": "Informace o ROM",
     "MSG_GBALOAD_MSAVE": "Nastavení uložených pozic",
     "MSG_GBALOAD_MPATCH": "Nastavení Patchů",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": ".sav je ve stejné složce jako ROM",
     "MSG_SAVE_TYPE_PT": "uložená hra je ve složce %s",
     "MSG_BROW_EMPTY": "Empty directory",
-    "MSG_STILLRTC": "< Frozen >",
     "MSG_GBALOAD_OPTS": "Loading options",
     "MSG_DEF_SPEED": "RTC speed",
     "MSG_FMGR_DEL": "Delete file/directory",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "Game flashed successfully!",
     "MSG_NOR_CLOK": "Flash erased successfully!",
     "MSG_TOOLS5_FCLR": "Erase flash",
-    "MSG_UIS_BHID": "Show hidden files"
+    "MSG_UIS_BHID": "Show hidden files",
+    "MSG_UIS_SPD0": "Velmi pomalá",
+    "MSG_UIS_SPD1": "Pomalá",
+    "MSG_UIS_SPD2": "Normální",
+    "MSG_UIS_SPD3": "Rychlá",
+    "MSG_UIS_SPD4": "Velmi rychlá",
+    "MSG_STILLRTC": "Frozen"
 }

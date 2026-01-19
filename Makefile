@@ -1,5 +1,5 @@
 
-VERSION_WORD := 0x00000012
+VERSION_WORD := 0x00000013
 VERSION_SLUG_WORD := $(shell git rev-parse --short=8 HEAD || echo FFFFFFFF)
 
 PREFIX		:= arm-none-eabi-

@@ -212,7 +212,7 @@ typedef struct {
 // RTC config data
 typedef struct {
   uint32_t timestamp;                  // RTC current (boot) timestamp.
-  uint32_t ts_step;                    // Number of seconds to advance the RTC on events.
+  uint32_t ts_step;                    // Speed factor to advance the RTC on events.
 } t_rtc_info;
 
 
@@ -245,12 +245,6 @@ static inline unsigned savetype_size(EnumSavetype st) {
   return 1 << lut[st];
 }
 
-static inline unsigned rtc_speed(unsigned speed_class) {
-  const uint8_t lut[] = {
-    0, 4, 8, 16, 24, 36
-  };
-  return lut[speed_class];
-}
 static inline unsigned rtc_speed_cnt() {
   return 6;
 }

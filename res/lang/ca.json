@@ -35,11 +35,6 @@
     "MSG_UIS_RECNT": "ROMs recents",
     "MSG_UIS_ANSPD": "Velocitat text",
     "MSG_UIS_SAVE": "Guarda a la targeta SD",
-    "MSG_UIS_SPD0": "< Molt lent >",
-    "MSG_UIS_SPD1": "< Lent >",
-    "MSG_UIS_SPD2": "< Normal >",
-    "MSG_UIS_SPD3": "< Ràpid >",
-    "MSG_UIS_SPD4": "< Molt ràpid >",
     "MSG_GBALOAD_MINFO": "Informació del ROM",
     "MSG_GBALOAD_MSAVE": "Opcions de guardat",
     "MSG_GBALOAD_MPATCH": "Opcions de patching",
@@ -201,7 +196,6 @@
     "MSG_SAVE_TYPE_NR": "Guarda el .sav al mateix directori que la ROM",
     "MSG_SAVE_TYPE_PT": "El fitxer de partida (savegame) es guarda al directori %s",
     "MSG_BROW_EMPTY": "Carpeta buida",
-    "MSG_STILLRTC": "< Congelat >",
     "MSG_GBALOAD_OPTS": "Opcions de càrrega",
     "MSG_DEF_SPEED": "Velocitat RTC",
     "MSG_FMGR_DEL": "Eliminar arxiu/carpeta",
@@ -219,5 +213,11 @@
     "MSG_NOR_WROK": "Gravat del joc completat!",
     "MSG_NOR_CLOK": "Esborrat Flash completat!",
     "MSG_TOOLS5_FCLR": "Esborrar flash",
-    "MSG_UIS_BHID": "Veure ocults"
+    "MSG_UIS_BHID": "Veure ocults",
+    "MSG_UIS_SPD0": "Molt lent",
+    "MSG_UIS_SPD1": "Lent",
+    "MSG_UIS_SPD2": "Normal",
+    "MSG_UIS_SPD3": "Ràpid",
+    "MSG_UIS_SPD4": "Molt ràpid",
+    "MSG_STILLRTC": "Congelat"
 }
