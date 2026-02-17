@@ -744,7 +744,7 @@ static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *
       if (data->cheats_found) {
         // Load the cheats to the ROM area, just after the font pack. This is for easier relocation.
         uint8_t *cheat_area = (uint8_t*)(ROM_FONTBASE_U8 + font_block_size());
-        unsigned max_area = 1024*1024 - font_block_size();    // 1MB is reserved at the ROM end.
+        unsigned max_area = 1536*1024 - font_block_size();    // 1.5MB is reserved at the end.
         int cheatsz = open_read_cheats(cheat_area, max_area, data->cheatsfn);
         if (cheatsz < 0)
           data->cheats_found = false;
