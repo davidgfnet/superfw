@@ -35,7 +35,8 @@
 //
 //   I/O regs + CPU regs  (partial reg dump only)
 //   Palette RAM (1KB)
-//   VRAM (first 80KB)
+//   OAM RAM (1KB)
+//   VRAM (first 81KB)
 //   IWRAM (first 16KB)
 //   EWRAM (first 62KB)
 //
@@ -121,7 +122,7 @@ scratch_base:          .word 0x0    // Buffer reserved for scratch space.
 scratch_size:          .word 0x0
 has_rtc_support:       .word 0x0    // Filled with a boolean to allow tweaking RTC values
 menu_anim_speed:       .word 0x0    // Menu animation speed
-ingame_menu_palette:   .fill 4,2,0  // Filled with background, foreground and select colors
+ingame_menu_palette:   .fill 8,2,0  // Filled with background, foreground and select colors
 savefile_backups:      .word 0x0    // Fill the number of backups to preserve.
 
 savefile_pattern:      .fill 256, 1, 0          // File name pattern (NULL terminated)
@@ -314,8 +315,12 @@ ingame_menu_entry:
 
   msr cpsr, r2                           // Restore original mode/cpsr
 
-  // Copy Palette and VRAM to the spill area (OAM is preserved since unused)
+  // Copy Palette, OAM and VRAM to the spill area
   mov r0, $0x05000000
+  mov r2, $(1024 / 8 / 4)
+  bl do_spill_data
+
+  mov r0, $0x07000000
   mov r2, $(1024 / 8 / 4)
   bl do_spill_data
 
@@ -381,8 +386,12 @@ ingame_menu_entry:
   ldr r1, spill_addr
   add r1, $(8 + 8 + 16 + 2+2 + 64 + 64)   // Skip register save to RAM buffers.
 
-  // Restore palette
+  // Restore palette and OAM
   mov r0, $0x05000000
+  mov r2, $(1024 / 8 / 4)
+  bl restore_spill_data
+
+  mov r0, $0x07000000
   mov r2, $(1024 / 8 / 4)
   bl restore_spill_data
 

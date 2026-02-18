@@ -81,10 +81,11 @@ enum {
 #define BG_COLOR         17
 #define FT_COLOR         18
 #define HI_COLOR         19
-#define INGMENU_PAL_FG  240
-#define INGMENU_PAL_BG  241
-#define INGMENU_PAL_HI  242
-#define INGMENU_PAL_SH  243
+#define IGM_PAL_FG      240
+#define IGM_PAL_BG      241
+#define IGM_PAL_HI      242
+#define IGM_PAL_SH      243
+#define IGM_PAL_BL      244
 #define SEL_COLOR       255
 
 #define FLASH_UNLOCK_KEYS      (KEY_BUTTDOWN|KEY_BUTTB|KEY_BUTTSTA)
@@ -205,11 +206,12 @@ const struct {
   uint16_t hi_blend;     // Menu highlight color (browser)
   uint16_t sh_color;     // Menu shadow/disabled color
 } themes[] = {
-  { RGB2GBA(0xeca551), RGB2GBA(0xe7c092), RGB2GBA(0x000000), RGB2GBA(0xbda27b), RGB2GBA(0x90816e), RGB2GBA(0x615d58) },
-  { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) },
-  { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) },
-  { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) },
-  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) },
+  { RGB2GBA(0xaaaaaa), RGB2GBA(0xffffff), RGB2GBA(0x000000), RGB2GBA(0xcccccc), RGB2GBA(0x9999bb), RGB2GBA(0xc08888) }, // White
+  { RGB2GBA(0xeca551), RGB2GBA(0xe7c092), RGB2GBA(0x000000), RGB2GBA(0xbda27b), RGB2GBA(0x90816e), RGB2GBA(0x615d58) }, // Orange
+  { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) }, // Blue
+  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) }, // Green
+  { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) }, // Purple
+  { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) }, // Dark
 };
 #define THEME_COUNT (sizeof(themes) / sizeof(themes[0]))
 
@@ -1529,16 +1531,10 @@ void render_sav_menu_popup(volatile uint8_t *frame) {
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
   for (unsigned i = 0; i < 3; i++) {
-    if (spop.selector == i)
-      draw_box_full(frame, 20, 220, 32 + 28 * i, 32 + 28 * i + 20, FG_COLOR, HI_COLOR);
-    else
-      draw_box_outline(frame, 20, 220, 32 + 28 * i, 32 + 28 * i + 20, FG_COLOR);
+    draw_button_box(frame, 20, 220, 32 + 28 * i, 32 + 28 * i + 20, spop.selector == i);
     draw_central_text(msgs[lang_id][MSG_SAVOPT_OPT0 + i], frame, 120, 34 + 28 * i);
   }
-  if (spop.selector == SavQuit)
-      draw_box_full(frame, 20, 220, 124, 144, FG_COLOR, HI_COLOR);
-  else
-    draw_box_outline(frame, 20, 220, 124, 144, FG_COLOR);
+  draw_button_box(frame, 20, 220, 124, 144, spop.selector == SavQuit);
   draw_central_text(msgs[lang_id][MSG_CANCEL], frame, 120, 126);
 }
 
@@ -1694,10 +1690,7 @@ void render_filemgr(volatile uint8_t *frame) {
     draw_central_text_ovf(bn, frame, SCREEN_WIDTH/2, 32, SCREEN_WIDTH - 20);
 
   for (unsigned i = 0; i < FiMgrCNT; i++)
-    if (i == spop.selector)
-      draw_box_full(frame, 20, 220, 60 + i*30, 80 + i*30, FG_COLOR, HI_COLOR);
-    else
-      draw_box_outline(frame, 20, 220, 60 + i*30, 80 + i*30, FG_COLOR);
+    draw_button_box(frame, 20, 220, 60 + i*30, 80 + i*30, i == spop.selector);
 
   draw_central_text(msgs[lang_id][MSG_FMGR_DEL], frame, 120, 62 + 30*FiMgrDelete);
   draw_central_text(msgs[lang_id][(e->attr & AM_HID) ? MSG_FMGR_UNHIDE : MSG_FMGR_HIDE], frame, 120, 62 + 30*FiMgrHide);
@@ -1938,10 +1931,7 @@ void render_settings(volatile uint8_t *frame) {
   }
 
   if (msk & 0x40000) {
-    if (smenu.set.selector != SettSave)
-      draw_box_outline(frame, 20, 220, 112, 132, FG_COLOR);
-    else
-      draw_box_full(frame, 20, 220, 112, 132, FG_COLOR, HI_COLOR);
+    draw_button_box(frame, 20, 220, 112, 132, smenu.set.selector == SettSave);
     draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 132, 114);
   }
 
@@ -1998,10 +1988,7 @@ void render_ui_settings(volatile uint8_t *frame) {
     for (unsigned i = 0; i < 240; i += 16)
       render_icon_trans(i, 22 + smenu.uiset.selector * 20, 63);
 
-  if (smenu.uiset.selector != UiSetSave)
-    draw_box_outline(frame, 20, 220, 132, 152, FG_COLOR);
-  else
-    draw_box_full(frame, 20, 220, 132, 152, FG_COLOR, HI_COLOR);
+  draw_button_box(frame, 20, 220, 132, 152, smenu.uiset.selector == UiSetSave);
   draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 134);
 }
 
@@ -2080,10 +2067,11 @@ void reload_theme(unsigned thnum) {
   MEM_PALETTE[FT_COLOR] = themes[thnum].ft_color;
   MEM_PALETTE[HI_COLOR] = themes[thnum].hi_color;
   // In-game menu palette
-  MEM_PALETTE[INGMENU_PAL_FG] = themes[thnum].fg_color;
-  MEM_PALETTE[INGMENU_PAL_BG] = themes[thnum].bg_color;
-  MEM_PALETTE[INGMENU_PAL_HI] = themes[thnum].ft_color;
-  MEM_PALETTE[INGMENU_PAL_SH] = themes[thnum].sh_color;
+  MEM_PALETTE[IGM_PAL_FG] = themes[thnum].fg_color;
+  MEM_PALETTE[IGM_PAL_BG] = themes[thnum].bg_color;
+  MEM_PALETTE[IGM_PAL_HI] = themes[thnum].ft_color;
+  MEM_PALETTE[IGM_PAL_SH] = themes[thnum].sh_color;
+  MEM_PALETTE[IGM_PAL_BL] = themes[thnum].hi_blend;
 
   // Palette entries for icons and other objects
   MEM_PALETTE[256 + SEL_COLOR] = themes[thnum].hi_blend;

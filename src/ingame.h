@@ -17,11 +17,11 @@
  */
 
 
-#define MIN_SCRATCH_SPACE       (160*1024)        // IWRAM/EWRAM/VRAM + regs
+#define MIN_SCRATCH_SPACE       (162*1024)        // IWRAM/EWRAM/VRAM + regs
 
 #define EWRAM_SPILL_SIZE        (62 * 1024)
 #define IWRAM_SPILL_SIZE        (16 * 1024)
-#define VRAM_SPILL_SIZE         (80 * 1024)
+#define VRAM_SPILL_SIZE         (81 * 1024)       // Two frames + 1KiB for OBJs
 
 #define IGM_ENTRYPOINT_NOCHEATS_OFF     ( 8*4)    // Offsets in ingame.S
 #define IGM_ENTRYPOINT_CHEATS_OFF       (12*4)
@@ -54,7 +54,7 @@ typedef struct {
   uint32_t scratch_space_size;
   uint32_t menu_has_rtc_support;       // Whether the game is running with RTC patches
   uint32_t menu_anim_speed;            // Menu animation speed
-  uint16_t menu_palette[4];            // Palette colors for the menu
+  uint16_t menu_palette[8];            // Palette colors for the menu
   uint32_t savefile_backups;           // Backup count
   char savefile_pattern[256];          // File name (without the .sav) pattern
   char statefile_pattern[256];         // File name (without the .X.state) pattern
@@ -87,6 +87,7 @@ typedef struct {
   uint32_t und_regs[3];        // SP, LR and SPSR for undefined mode
 
   uint8_t palette[1024];
+  uint8_t oam[1024];
   uint8_t low_vram[VRAM_SPILL_SIZE];
   uint8_t low_iwram[IWRAM_SPILL_SIZE];
   uint8_t low_ewram[EWRAM_SPILL_SIZE];

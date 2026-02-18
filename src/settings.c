@@ -107,7 +107,7 @@ bool save_ui_settings() {
   uint16_t lc = lang_getcode();
   char buf[512];
   npf_snprintf(buf, sizeof(buf),
-    "menu_theme=%lu\n"
+    "theme=%lu\n"
     "langcode=%c%c\n"
     "recent_menu=%lu\n"
     "anim_speed=%lu\n"
@@ -205,7 +205,7 @@ static void parse_settings(void *usr, const char *var, const char *value) {
 
 static void parse_ui_settings(void *usr, const char *var, const char *value) {
   unsigned valu = parseuint(value);
-  if (!strcmp(var, "menu_theme"))
+  if (!strcmp(var, "theme"))
     menu_theme = valu;
   else if (!strcmp(var, "recent_menu"))
     recent_menu = valu;
