@@ -833,7 +833,7 @@ static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) 
       prepare_gba_cheats((char*)&rmh->gcode[0], rmh->version, &spop.p.load.l, fn, lh_sett.use_cheats);
 
       // Load and set default and sane settings honoring defaults and preferences.
-      prepare_gba_settings(&spop.p.load.l, ld_sett.use_dsaving, lh_sett.rtcts, game_no_save, fn);
+      prepare_gba_settings(&spop.p.load.l, spop.p.load.i.use_dsaving, lh_sett.rtcts, game_no_save, fn);
 
       // Show load ROM menu.
       spop.pop_num = POPUP_GBA_LOAD;
