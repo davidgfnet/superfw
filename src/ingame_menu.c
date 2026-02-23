@@ -1158,7 +1158,7 @@ void setup_video_frame() {
   MEM_PALETTE[ICON_PAL] = MEM_PALETTE[BG_COLOR]; // Transparent color to BG color
 
   // Initialize OAM (to display a selection bar)
-  fast_mem_clr_256((uint16_t*)MEM_OAM, 0, 512);
+  fast_mem_clr_256((uint16_t*)MEM_OAM, 0, 1024);
   // Fill selector object tile with some solid color.
   fast_mem_clr_256((uint16_t*)&MEM_VRAM_OBJS[0], dup16(dup8(BL_COLOR)), 256);
 }
