@@ -57,12 +57,12 @@
 #define REG_DISPCNT      (*((volatile uint16_t *) 0x04000000))
 #define REG_DISPSTAT     (*((volatile uint16_t *) 0x04000004))
 #define REG_VCOUNT       (*((volatile uint16_t *) 0x04000006))
-#define REG_BGxCNT(n)    (*((volatile uint16_t *) 0x04000008 + 2*(n)))
+#define REG_BGxCNT(n)    (*((volatile uint16_t *)(0x04000008 + 2*(n))))
 #define REG_BLDCNT       (*((volatile uint16_t *) 0x04000050))
 #define REG_BLDALPHA     (*((volatile uint16_t *) 0x04000052))
 #define REG_BLDY         (*((volatile uint16_t *) 0x04000054))
-#define REG_BGxHOFS(n)   (*((volatile uint16_t *) 0x04000010 + 4*(n)))
-#define REG_BGxVOFS(n)   (*((volatile uint16_t *) 0x04000012 + 4*(n)))
+#define REG_BGxHOFS(n)   (*((volatile uint16_t *)(0x04000010 + 4*(n))))
+#define REG_BGxVOFS(n)   (*((volatile uint16_t *)(0x04000012 + 4*(n))))
 #define REG_BG2PA        (*((volatile uint16_t *) 0x04000020))
 #define REG_BG2PB        (*((volatile uint16_t *) 0x04000022))
 #define REG_BG2PC        (*((volatile uint16_t *) 0x04000024))
@@ -79,9 +79,9 @@
 
 #define REG_IE           (*((volatile uint16_t *) 0x04000200))
 
-#define DMA_SAD(n)       (*(((volatile uint32_t *) 0x040000B0) + (n) * 3))
-#define DMA_DAD(n)       (*(((volatile uint32_t *) 0x040000B4) + (n) * 3))
-#define DMA_CTL(n)       (*(((volatile uint32_t *) 0x040000B8) + (n) * 3))
+#define DMA_SAD(n)       (*(((volatile uint32_t *)(0x040000B0) + (n) * 3)))
+#define DMA_DAD(n)       (*(((volatile uint32_t *)(0x040000B4) + (n) * 3)))
+#define DMA_CTL(n)       (*(((volatile uint32_t *)(0x040000B8) + (n) * 3)))
 
 #define MEM_PALETTE_SIZE (96*1024)
 #define MEM_PALETTE      (((volatile uint16_t *) 0x05000000))
@@ -90,7 +90,7 @@
 #define MEM_VRAM         (((volatile uint16_t *) 0x06000000))
 #define MEM_VRAM_U8      (((volatile  uint8_t *) 0x06000000))
 #define MEM_VRAM_OBJS    (((volatile  uint8_t *) 0x06014000))
-#define MEM_VRAM_BG3(n)  (((volatile uint16_t *) 0x06000000 + 38400*(n)))
+#define MEM_VRAM_BG3(n)  (((volatile uint16_t *)(0x06000000 + 38400*(n))))
 
 #define MEM_OAM          (((volatile uint16_t *) 0x07000000))
 
