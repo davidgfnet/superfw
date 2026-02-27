@@ -121,7 +121,7 @@ static bool find_thumb_ldrpc(const uint16_t *rom, unsigned start, unsigned targe
         return true;
     }
   }
-  return true;
+  return false;
 }
 
 // Start and target expressed in word offsets
@@ -140,7 +140,7 @@ static bool find_arm_ldrpc(const uint32_t *rom, unsigned start, unsigned target)
       }
     }
   }
-  return true;
+  return false;
 }
 
 ARM_CODE IWRAM_CODE NOINLINE
@@ -337,8 +337,10 @@ bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_buil
     }
     // Identify IRQ handle address, so we can find IRQ hook set.
     else if (rom[i] == IRQHADDR_VALUE) {
-      unsigned start_pos = i < THUMB_LDR_BACKOFF ? 0 : i - THUMB_LDR_BACKOFF;
-      if (find_thumb_ldrpc(rom16, start_pos * 2, i * 2)) {
+      unsigned start_pos_thumb = i < THUMB_LDR_BACKOFF ? 0 : i - THUMB_LDR_BACKOFF;
+      unsigned start_pos_arm   = i < ARM_LDR_BACKOFF   ? 0 : i - ARM_LDR_BACKOFF;
+      if (find_thumb_ldrpc(rom16, start_pos_thumb * 2, i * 2) ||
+          find_arm_ldrpc(rom, start_pos_arm, i)) {
         // This constant seems to be used by an LDR rX, [PC + off], most likely
         // an IRQ handler write. We just patch the constant to point to the reserved area.
         patch->op[patch->wcnt_ops + patch->save_ops + patch->irqh_ops++] = (i * 4) | (OPC_WR_BUF << 28) | (1 << 25);

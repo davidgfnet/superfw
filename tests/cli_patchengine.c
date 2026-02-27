@@ -24,6 +24,8 @@
 
 #define BLK_SIZE     4*1024*1024
 
+static void dummy(unsigned) {}
+
 int main(int argc, char **argv) {
   if (argc <= 1) {
     printf("Usage: %s romfile\n", argv[0]);
@@ -46,8 +48,6 @@ int main(int argc, char **argv) {
     int r = fread(tmp, 1, BLK_SIZE, fd);
     if (r <= 0)
       break;
-
-    void dummy(unsigned) {}
 
     patchengine_process_rom((uint32_t*)tmp, r, &pb, dummy);
   }
