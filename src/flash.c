@@ -336,20 +336,28 @@ bool flash_program(uint32_t baseaddr, const uint8_t *buf, unsigned size) {
 }
 
 // Programs the built-in flash memory using the internal write buffer.
-bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize) {
+bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size, unsigned bufsize, bool precopy) {
   // Reset any previous command that might be ongoing.
   FLASH_WE_MODE();
   SLOT2_BASE_U16[0] = 0x00F0;
   const unsigned wrsize = MIN(bufsize, 512);
+  union {
+    uint16_t b16[256];
+    uint32_t b32[128];
+  } tmp;
+
+  if (precopy) {
+    set_supercard_mode(MAPPED_SDRAM, true, true);
+    dma_memcpy32(tmp.b32, &buf[0], sizeof(tmp) / 4);
+    FLASH_WE_MODE();
+  }
 
   for (unsigned i = 0; i < size; i += 512) {
-    union {
-      uint16_t b16[256];
-      uint32_t b32[128];
-    } tmp;
-    set_supercard_mode(MAPPED_SDRAM, true, true);
-    dma_memcpy32(tmp.b32, &buf[i], sizeof(tmp) / 4);
-    FLASH_WE_MODE();
+    if (!precopy) {
+      set_supercard_mode(MAPPED_SDRAM, true, true);
+      dma_memcpy32(tmp.b32, &buf[i], sizeof(tmp) / 4);
+      FLASH_WE_MODE();
+    }
 
     for (unsigned off = 0; off < 512 && i+off < size; off += wrsize) {
       const uint32_t toff = (i + off);
@@ -366,6 +374,15 @@ bool flash_program_buffered(uint32_t baseaddr, const uint8_t *buf, unsigned size
 
       *(ptr-1) = 0x29;     // Confirm write buffer operation.
 
+      if (precopy) {
+        set_supercard_mode(MAPPED_SDRAM, true, true);
+        // off, off+wrsize is programmed, copy next chunk off, off+wrsize
+        unsigned next_chunk = i + 512;
+        if (next_chunk < size) {
+          dma_memcpy32(tmp.b32+(off/4), &buf[next_chunk + off], wrsize / 4);
+        }
+        FLASH_WE_MODE();
+      }
       // Wait a bit for the operation to finish.
       for (unsigned j = 0; j < 32*1024; j++) {
         if (SLOT2_BASE_U16[0] == SLOT2_BASE_U16[0])
