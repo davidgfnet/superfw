@@ -752,6 +752,13 @@ assets_start:
     .incbin "emu/pceadvance-v7.5-scptch.gba.comp"
   pceadv_emu_end:
   .balign 4
+
+  .ascii "SMSA"
+  .word (smsadv_emu_end - smsadv_emu_start)
+  smsadv_emu_start:
+    .incbin "emu/smsadvance-v2.5-scptch.gba.comp"
+  smsadv_emu_end:
+  .balign 4
   #endif
 
   .word 0               @ End of asset list

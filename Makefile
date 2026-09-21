@@ -64,7 +64,8 @@ ifeq ($(BUNDLE_OTHER_EMULATORS),1)
   BIEMUFILES += emu/pocketnes_20130701.gba.comp \
                 emu/wasabigba_v0.2.4.gba.comp \
                 emu/NGPGBA_v0.5.7.gba.comp \
-                emu/pceadvance-v7.5-scptch.gba.comp
+                emu/pceadvance-v7.5-scptch.gba.comp \
+                emu/smsadvance-v2.5-scptch.gba.comp
 endif
 
 BASEFLAGS=$(GLOBAL_DEFINES) -mcpu=arm7tdmi -mtune=arm7tdmi

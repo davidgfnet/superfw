@@ -38,14 +38,14 @@ void file_dirname(const char *fullpath, char *dirname) {
     *p = 0;
 }
 
-// Returns a pointer to the "." for a file name extension.
+// Returns a pointer to the first extension char for a file name extension.
 const char *find_extension(const char *s) {
   const char *p = &s[strlen(s)];
   while (p != s) {
     if (*p == '/')
       return NULL;   // Has no extension!
     else if (*p == '.')
-      return p;
+      return p + 1;
     p--;
   }
   return NULL;     // Has no extension, nor a path
@@ -55,7 +55,7 @@ void replace_extension(char *fn, const char *newext) {
   // Change or append the extension (if it has none)
   const char *p = find_extension(fn);
   if (p)
-    *(char*)p = 0;    // Truncate file at extension
+    fn[p - fn - 1] = 0;   // Truncate file at extension
 
   // Just append .sav since we could not replace the extension.
   strcat(fn, newext);

@@ -83,12 +83,12 @@ int main() {
   replace_extension(tmp, ".doc");
   assert(!strcmp(tmp, "/foo/bar/lol.doc"));
 
-  assert(!strcmp(find_extension("/foo/bar.lol"), ".lol"));
+  assert(!strcmp(find_extension("/foo/bar.lol"), "lol"));
   assert(find_extension("/foo/barlol") == NULL);
   assert(find_extension("/barlol") == NULL);
   assert(find_extension("foo") == NULL);
-  assert(!strcmp(find_extension("/foo/bar."), "."));
-  assert(!strcmp(find_extension("/foo/bar.lol/test.123"), ".123"));
+  assert(!strcmp(find_extension("/foo/bar."), ""));
+  assert(!strcmp(find_extension("/foo/bar.lol/test.123"), "123"));
   assert(find_extension("/foo/bar.lol/beef") == NULL);
 
   human_size(tmp, sizeof(tmp), 0); assert(!strcmp(tmp, "1K"));

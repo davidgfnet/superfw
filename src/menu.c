@@ -1001,16 +1001,16 @@ void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
 }
 
 NOINLINE static void browser_open(const char *fn, uint32_t fs) {
-  unsigned l = strlen(fn);
-  if (!strcasecmp(&fn[l-4], ".gba"))
+  const char *ext = find_extension(fn);
+  if (ext && !strcasecmp(ext, "gba"))
     // GBA ROMs (most likely)
     browser_open_gba(fn, fs, true);
-  else if (!strcasecmp(&fn[l-4], ".sav")) {
+  else if (ext && !strcasecmp(ext, "sav")) {
     spop.pop_num = POPUP_SAVFILE;
     spop.selector = SavMAX;
     strcpy(spop.p.savopt.savfn, fn);
   }
-  else if (!strcasecmp(&fn[l-3], ".fw")) {
+  else if (ext && !strcasecmp(ext, "fw")) {
     // A SuperFW firmware update is selected!
     if (!enable_flashing)
       spop.alert_msg = msgs[lang_id][MSG_FWUP_DISABLED];
@@ -1042,9 +1042,8 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
   }
   else {
     // Any emulator-based console supported
-    const char *ext = find_extension(fn);
     if (ext) {
-      const t_emu_loader *ldinfo = get_emu_info(&ext[1]);
+      const t_emu_loader *ldinfo = get_emu_info(ext);
       if (ldinfo) {
         start_emu_game(ldinfo, fn, fs);
         return;
@@ -1171,22 +1170,24 @@ static inline void render_icon_trans(unsigned x, unsigned y, unsigned iconn) {
 
 // Guess the file type based on the file name.
 static unsigned guessicon(const char *path) {
-  unsigned l = strlen(path);
-  if (l < 4)
-    return ICON_BINFILE;
+  const char *ext = find_extension(path);
 
-  if (!strcasecmp(&path[l-4], ".gba"))
-    return ICON_GBACART;
-  else if (!strcasecmp(&path[l-3], ".gb"))
-    return ICON_GBCART;
-  else if (!strcasecmp(&path[l-4], ".gbc"))
-    return ICON_GBCCART;
-  else if (!strcasecmp(&path[l-4], ".nes"))
-    return ICON_NESCART;
-  else if (!strcasecmp(&path[l-4], ".sms"))
-    return ICON_SMSCART;
-  else if (!strcasecmp(&path[l-3], ".fw"))
-    return ICON_UPDFILE;
+  if (ext) {
+    static const struct {
+      const char *ext;
+      unsigned icon;
+    } exticon[] = {
+      {"gba", ICON_GBACART},
+      {"gb",  ICON_GBCART},
+      {"gbc", ICON_GBCCART},
+      {"nes", ICON_NESCART},
+      {"sms", ICON_SMSCART},
+      {"fw",  ICON_UPDFILE},
+    };
+    for (unsigned i = 0; i < sizeof(exticon)/sizeof(exticon[0]); i++)
+      if (!strcasecmp(exticon[i].ext, ext))
+        return exticon[i].icon;
+  }
 
   return ICON_BINFILE;
 }

@@ -65,11 +65,13 @@ unsigned smsadvance_header(uint8_t *buffer, const char *fn, unsigned fs) {
   // Copy the base filename into the name buffer
   t_smsadv_header hdr;
   const char *bname = file_basename(fn);
+  const char *ext = find_extension(fn);
 
   memset(&hdr, 0, sizeof(hdr));
   memcpy(hdr.title, bname, sizeof(hdr.title) - 1);
   hdr.romsize = fs;
   hdr.ident = 0x1A534D53;   // SMS + 0x1A (little endian)
+  hdr.flags1 = (ext && !strcasecmp(ext, "gg")) ? 0x04 : 0;
   memcpy32(buffer, &hdr, sizeof(hdr));
 
   return sizeof(hdr);
@@ -114,17 +116,20 @@ unsigned drsms_header_sms(uint8_t *buffer, const char *fn, unsigned fs) {
 const t_emu_loader sms_loaders[] = {
   { "drsms", drsms_header_sms },
   { "smsadvance", smsadvance_header },
+  { "vfs:SMSA", smsadvance_header },
   { NULL, NULL },
 };
 
 const t_emu_loader gg_loaders[] = {
   { "drsms", drsms_header_gg },
   { "smsadvance", smsadvance_header },
+  { "vfs:SMSA", smsadvance_header },
   { NULL, NULL },
 };
 
 const t_emu_loader sg_loaders[] = {
   { "smsadvance", smsadvance_header },
+  { "vfs:SMSA", smsadvance_header },
   { NULL, NULL },
 };
 
