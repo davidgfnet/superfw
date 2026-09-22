@@ -446,6 +446,13 @@ END_FUNC(patch_flash_write_byte_sram128k)
 // These convert EEPROM/FLASH save routines into SD saving routines.
 // Data is read and written from/to SD card directly.
 
+// Each function comes with a start and end symbols as well as a size symbol.
+// When patching them to a ROM, the function is copied, and the first word after
+// the end (where size actually lives) is patched with the DirectSave base address
+// (aka ds_entrypoint). The patch does its thing and then can call that address
+// after setting up the right call number (in r7). The dispatcher will direct the
+// call to the right handler (as well as handle its internal SD card mutex).
+
 // Keep these in sync with directsaver.S!
 #define READ_EEPROM_FN                (0)
 #define WRITE_EEPROM_FN               (1)
@@ -453,6 +460,7 @@ END_FUNC(patch_flash_write_byte_sram128k)
 #define WRITE_FLASH_FN                (3)
 #define ERASE_CHIP_FLASH_FN           (4)
 #define ERASE_SECTOR_FLASH_FN         (5)
+#define WRITE_FLASH_BYTE_FN           (6)
 
 
 #define trampoline_arm_r3()                \
@@ -586,39 +594,14 @@ END_FUNC(patch_flash_write_sector_directsave)
 START_FUNC(patch_flash_write_byte_directsave)
   push {r7, lr}
 
-  sub sp, $256               // Reserve a sector worth of data
-  sub sp, $256
+  lsl r0, #12                // Scale by 4KiB
+  add r0, r1                 // Byte offset to write
+  mov r1, r2                 // Byte to write as second param
 
-  push {r0, r1, r2}          // Save write information
-
-  // We need to read a sector, replace a byte, and write it back.
-  // This function sucks but it should be used rarely.
-  lsl r0, #27                // Limit sector number to [0...31] + lsl #12
-  lsr r1, r0, #15
-
-  mov r0, sp
-  mov r2, $128; lsl r2, #2;  // Load 512 bytes
-
-  mov r7, $READ_FLASH_FN
+  mov r7, $WRITE_FLASH_BYTE_FN
   ldr r3, patch_flash_write_byte_directsave_size
   bl 33f
 
-  // Data was read, proceed to patch the sector byte
-  pop {r0, r1, r2}
-  mov r3, sp
-  strb r2, [r3, r1]
-
-  mov r1, r0
-  mov r0, sp
-
-  mov r7, $WRITE_FLASH_FN
-  ldr r3, patch_flash_write_byte_directsave_size
-  bl 33f
-
-  add sp, $256
-  add sp, $256
-
-  mov r0, #0
   pop {r7}
   pop {r1}
   bx r1

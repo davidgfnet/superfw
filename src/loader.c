@@ -175,7 +175,7 @@ void load_directsave_config(const t_dirsave_info *dsinfo) {
   t_dirsave_config cfg = {
     .magic = DIRSAV_CFG_MAGIC,
     .checksum = 0,
-    .nrandom = 0xdeadbeef ^ (uint32_t)dsinfo,
+    .nrandom = 0xdeadbeef ^ systime(),
     .memory_size = dsinfo->save_size,
     .base_sector = dsinfo->sector_lba,
     .drv_issdhc = sc_issdhc(),

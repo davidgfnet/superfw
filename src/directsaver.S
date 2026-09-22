@@ -63,6 +63,7 @@ ds_table:
   b ds_write_sector_flash
   b ds_erase_chip_flash
   b ds_erase_sector_flash
+  b ds_write_byte_flash
 
 
 // r3: value to write to the mutex register
