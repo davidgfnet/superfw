@@ -1090,7 +1090,7 @@ static void browser_reload_filter() {
   // of memory, we use a list of pointers.
   unsigned fcount = 0;
   for (unsigned i = 0; i < smenu.browser.maxentries; i++) {
-    if ((sdr_state->fentries[i].attr & AM_HID) && hide_hidden)
+    if (((sdr_state->fentries[i].attr & AM_HID) || sdr_state->fentries[i].fname[0] == '.') && hide_hidden)
       continue;
 
     sdr_state->fileorder[fcount++] = &sdr_state->fentries[i];
