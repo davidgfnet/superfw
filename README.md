@@ -2,7 +2,7 @@
 SuperFW
 =======
 
-An alternative firmware for Supercard GBA flash carts
+An alternative firmware for Supercard GBA flash carts (and derivatives/clones)
 
 This project aims to provide a more modern and better firmware for Supercard
 flash carts (which are still widely used and very cheaply available). The goal
@@ -40,7 +40,7 @@ GB/GBC Emulation
 ----------------
 
 GameBoy and GameBoy Color ROMs can be played by using the built-in Goombacolor
-emulator binary (the Lite build doesn't ship any emulator though).Picking any
+emulator binary (the Lite build doesn't ship any emulator though). Picking any
 .gb/.gbc file will load the emulator and the ROM and start its execution.
 
 Other devices can also be played as long as the right emulator is installed in
@@ -150,8 +150,9 @@ Licenses
 
 Most of SuperFW was written by davidgf and is published under GPL license.
 Some components use third party code, such as: nanoprintf (public domain),
-heapsort (3-BSD), fatfs (1-BSD-like) and apultra/upkr (only used at
-build-time). Some linkerscript/crt0 code was adapted from AntonioND's work
-under CC0.
+heapsort (3-BSD) and fatfs (1-BSD-like). apultra and upkr (only used at
+build-time) were re-implemented in C++ using the original sources as reference
+and an LLM (they are under zlib and public domain respecitvely). Some
+linkerscript/crt0 code was adapted from AntonioND's work under CC0.
 
 
