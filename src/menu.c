@@ -89,6 +89,11 @@ enum {
 #define IGM_PAL_BL      244
 #define SEL_COLOR       255
 
+// Starting number of frames to start repeating keypresses
+#define INITIAL_KEY_REPEAT_FRAMES 15
+// Minimum number of frames to repeat on
+#define MIN_KEY_REPEAT_FRAMES 5
+
 #define FLASH_UNLOCK_KEYS      (KEY_BUTTDOWN|KEY_BUTTB|KEY_BUTTSTA)
 #define FLASH_GO_KEYS          (KEY_BUTTUP|KEY_BUTTL|KEY_BUTTR)
 
@@ -256,7 +261,7 @@ typedef struct {
 } t_load_gba_lcfg;
 
 typedef void (*t_mrender_fn)(volatile uint8_t *frame);
-typedef void (*t_mkeyupd_fn)(unsigned newkeys);
+typedef void (*t_mkeyupd_fn)(unsigned newkeys, uint16_t deltaframes);
 
 // Info and state for the menu tab
 static struct {
@@ -414,6 +419,12 @@ static bool enable_flashing = false;
 static unsigned framen = 0;
 static unsigned objnum = 0;
 static t_oamobj fobjs[64];
+
+static unsigned prevkeys = 0;
+static uint32_t hfracnt = 0;
+static uint32_t hfrarpt = INITIAL_KEY_REPEAT_FRAMES;
+
+static bool is_repeating = false;
 
 unsigned lang_lookup(uint16_t code) {
   for (unsigned i = 0; i < LANG_COUNT; i++)
@@ -2244,8 +2255,7 @@ void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) 
     spop.pop_num = 0;
   }
 }
-
-static void keypress_popup_loadgba(unsigned newkeys) {
+static void keypress_popup_loadgba(unsigned newkeys, uint16_t keypresses) {
   const unsigned maxm[] = {
     GBAInfoCNT,
     GBALdSetCNT,
@@ -2255,9 +2265,9 @@ static void keypress_popup_loadgba(unsigned newkeys) {
 
   const int psel = spop.selector;
   if (newkeys & KEY_BUTTUP)
-    spop.selector += maxsel - 1;
+    spop.selector += maxsel - keypresses;
   if (newkeys & KEY_BUTTDOWN)
-    spop.selector++;
+    spop.selector+=keypresses;
 
   // Limit selector to its max value
   spop.selector %= maxsel;
@@ -2449,11 +2459,11 @@ static void keypress_popup_loadgba(unsigned newkeys) {
     spop.anim = 0;
 }
 
-static void keypress_popup_savefile(unsigned newkeys) {
+static void keypress_popup_savefile(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTUP)
-    spop.selector = MAX(0, spop.selector - 1);
+    spop.selector = MAX(0, spop.selector - keypresses);
   if (newkeys & KEY_BUTTDOWN)
-    spop.selector = MIN(SavMAX, spop.selector + 1);
+    spop.selector = MIN(SavMAX, spop.selector + keypresses);
 
   if (newkeys & KEY_BUTTA) {
     switch (spop.selector) {
@@ -2482,17 +2492,17 @@ static void keypress_popup_savefile(unsigned newkeys) {
   }
 }
 
-static void keypress_popup_flash(unsigned newkeys) {
+static void keypress_popup_flash(unsigned newkeys, uint16_t keypresses) {
   if ((newkeys & FLASH_GO_KEYS) == FLASH_GO_KEYS)
     start_flash_update(spop.p.update.fn, spop.p.update.fw_size, spop.p.update.issfw);
 }
 
 #ifdef SUPPORT_NORGAMES
-static void keypress_popup_norwrite(unsigned newkeys) {
+static void keypress_popup_norwrite(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTUP)
-    spop.selector = MAX(0, spop.selector - 1);
+    spop.selector = MAX(0, spop.selector - keypresses);
   if (newkeys & KEY_BUTTDOWN)
-    spop.selector = MIN(GBAPatchCNT - 1, spop.selector + 1);
+    spop.selector = MIN(GBAPatchCNT - 1, spop.selector + keypresses);
 
   if (spop.submenu == GbaNorWrPatch) {
     if (newkeys & (KEY_BUTTLEFT|KEY_BUTTRIGHT)) {
@@ -2589,11 +2599,11 @@ static void keypress_popup_norwrite(unsigned newkeys) {
   }
 }
 
-static void keypress_popup_norload(unsigned newkeys) {
+static void keypress_popup_norload(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTUP)
-    spop.selector = MAX(0, spop.selector - 1);
+    spop.selector = MAX(0, spop.selector - keypresses);
   if (newkeys & KEY_BUTTDOWN)
-    spop.selector = MIN(GBALdSetCNT - 1, spop.selector + 1);
+    spop.selector = MIN(GBALdSetCNT - 1, spop.selector + keypresses);
 
   const t_flash_game_entry *e = spop.p.norld.e;
   bool uses_dsave = e->gattrs & GATTR_SAVEDS;
@@ -2730,11 +2740,11 @@ static void keypress_popup_norload(unsigned newkeys) {
 }
 #endif
 
-static void keypress_popup_filemgr(unsigned newkeys) {
+static void keypress_popup_filemgr(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTUP)
-    spop.selector = MAX(0, spop.selector - 1);
+    spop.selector = MAX(0, spop.selector - keypresses);
   if (newkeys & KEY_BUTTDOWN)
-    spop.selector = MIN(FiMgrCNT - 1, spop.selector + 1);
+    spop.selector = MIN(FiMgrCNT - 1, spop.selector + keypresses);
 
   if (newkeys & KEY_BUTTA) {
     t_centry *e = sdr_state->fileorder[smenu.browser.selector];
@@ -2809,19 +2819,19 @@ static void keypress_popup_filemgr(unsigned newkeys) {
   }
 }
 
-static void keypress_menu_recent(unsigned newkeys) {
+static void keypress_menu_recent(unsigned newkeys, uint16_t keypresses) {
   if (smenu.recent.maxentries) {
     if (newkeys & KEY_BUTTUP)
-      smenu.recent.selector = MAX(0, smenu.recent.selector - 1);
+      smenu.recent.selector = MAX(0, smenu.recent.selector - keypresses);
     else if (newkeys & KEY_BUTTDOWN)
-      smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + 1);
+      smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + keypresses);
     if (newkeys & KEY_BUTTLEFT) {
-      smenu.recent.selector = MAX(0, smenu.recent.selector - RECENT_ROWS);
-      smenu.recent.seloff   = MAX(0, smenu.recent.seloff - RECENT_ROWS);
+      smenu.recent.selector = MAX(0, smenu.recent.selector - RECENT_ROWS * keypresses);
+      smenu.recent.seloff   = MAX(0, smenu.recent.seloff - RECENT_ROWS * keypresses);
     }
     else if (newkeys & KEY_BUTTRIGHT) {
-      smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + RECENT_ROWS);
-      smenu.recent.seloff   = MIN(smenu.recent.maxentries - 1, smenu.recent.seloff   + RECENT_ROWS);
+      smenu.recent.selector = MIN(smenu.recent.maxentries - 1, smenu.recent.selector + RECENT_ROWS * keypresses);
+      smenu.recent.seloff   = MIN(smenu.recent.maxentries - 1, smenu.recent.seloff   + RECENT_ROWS * keypresses);
     }
     if (newkeys & KEY_BUTTA) {
       t_rentry *e = &sdr_state->rentries[smenu.recent.selector];
@@ -2869,20 +2879,20 @@ static void keypress_menu_recent(unsigned newkeys) {
     smenu.recent.seloff = smenu.recent.selector - RECENT_ROWS + 1;
 }
 
-static void keypress_menu_browse(unsigned newkeys) {
+static void keypress_menu_browse(unsigned newkeys, uint16_t keypresses) {
   if (smenu.browser.dispentries) {
     // Move menu up and down
     if (newkeys & KEY_BUTTUP)
-      smenu.browser.selector = MAX(0, smenu.browser.selector - 1);
+      smenu.browser.selector = MAX(0, smenu.browser.selector - keypresses);
     if (newkeys & KEY_BUTTDOWN)
-      smenu.browser.selector = MIN(smenu.browser.dispentries - 1, smenu.browser.selector + 1);
+      smenu.browser.selector = MIN(smenu.browser.dispentries - 1, smenu.browser.selector + keypresses);
     if (newkeys & KEY_BUTTLEFT) {
-      smenu.browser.selector = MAX(0, smenu.browser.selector - BROWSER_ROWS);
-      smenu.browser.seloff   = MAX(0, smenu.browser.seloff - BROWSER_ROWS);
+      smenu.browser.selector = MAX(0, smenu.browser.selector - BROWSER_ROWS * keypresses);
+      smenu.browser.seloff   = MAX(0, smenu.browser.seloff - BROWSER_ROWS * keypresses);
     }
     if (newkeys & KEY_BUTTRIGHT) {
-      smenu.browser.selector = MIN(smenu.browser.dispentries - 1, smenu.browser.selector + BROWSER_ROWS);
-      smenu.browser.seloff   = MIN(smenu.browser.dispentries - 1, smenu.browser.seloff   + BROWSER_ROWS);
+      smenu.browser.selector = MIN(smenu.browser.dispentries - 1, smenu.browser.selector + BROWSER_ROWS * keypresses);
+      smenu.browser.seloff   = MIN(smenu.browser.dispentries - 1, smenu.browser.seloff   + BROWSER_ROWS * keypresses);
     }
     // Move into a new dir and/or open a file
     if (newkeys & KEY_BUTTA) {
@@ -2929,19 +2939,19 @@ static void keypress_menu_browse(unsigned newkeys) {
 }
 
 #ifdef SUPPORT_NORGAMES
-static void keypress_menu_norbrowse(unsigned newkeys) {
+static void keypress_menu_norbrowse(unsigned newkeys, uint16_t keypresses) {
   if (smenu.fbrowser.maxentries) {
     if (newkeys & KEY_BUTTUP)
-      smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - 1);
+      smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - keypresses);
     if (newkeys & KEY_BUTTDOWN)
-      smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + 1);
+      smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + keypresses);
     if (newkeys & KEY_BUTTLEFT) {
-      smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - NORGAMES_ROWS);
-      smenu.fbrowser.seloff   = MAX(0, smenu.fbrowser.seloff - NORGAMES_ROWS);
+      smenu.fbrowser.selector = MAX(0, smenu.fbrowser.selector - NORGAMES_ROWS * keypresses);
+      smenu.fbrowser.seloff   = MAX(0, smenu.fbrowser.seloff - NORGAMES_ROWS * keypresses);
     }
     if (newkeys & KEY_BUTTRIGHT) {
-      smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + NORGAMES_ROWS);
-      smenu.fbrowser.seloff   = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.seloff   + NORGAMES_ROWS);
+      smenu.fbrowser.selector = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.selector + NORGAMES_ROWS * keypresses);
+      smenu.fbrowser.seloff   = MIN(smenu.fbrowser.maxentries - 1, smenu.fbrowser.seloff   + NORGAMES_ROWS * keypresses);
     }
 
     if (newkeys & KEY_BUTTA)
@@ -2979,11 +2989,21 @@ static void keypress_menu_norbrowse(unsigned newkeys) {
 }
 #endif
 
-static void keypress_menu_settings(unsigned newkeys) {
-  if (newkeys & KEY_BUTTUP)
-    smenu.set.selector = MAX(0, smenu.set.selector - 1);
-  if (newkeys & KEY_BUTTDOWN)
-    smenu.set.selector = MIN(SettMAX - 1, smenu.set.selector + 1);
+static void keypress_menu_settings(unsigned newkeys, uint16_t keypresses) {
+  if (newkeys & KEY_BUTTUP){
+    // Max 1 to skip the top option in the settings
+    smenu.set.selector = MAX(1, smenu.set.selector - keypresses);
+    // Skip the title of the option section
+    if (smenu.menu_tab == MENUTAB_SETTINGS && smenu.set.selector == SettTitle2){
+      smenu.set.selector = MAX(1, smenu.set.selector - 1);
+    }
+  }
+  if (newkeys & KEY_BUTTDOWN){
+    smenu.set.selector = MIN(SettMAX, smenu.set.selector + keypresses);
+    if (smenu.menu_tab == MENUTAB_SETTINGS && (smenu.set.selector == SettTitle1 || smenu.set.selector == SettTitle2)){
+      smenu.set.selector = MIN(SettMAX, smenu.set.selector + 1);
+    }
+  }
   if (newkeys & KEY_BUTTLEFT) {
     if (smenu.set.selector == SettHotkey)
       hotkey_combo = (hotkey_combo + hotkey_listcnt - 1) % hotkey_listcnt;
@@ -3061,11 +3081,11 @@ static void keypress_menu_settings(unsigned newkeys) {
   }
 }
 
-static void keypress_menu_uisettings(unsigned newkeys) {
+static void keypress_menu_uisettings(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTUP)
-    smenu.uiset.selector = MAX(0, smenu.uiset.selector - 1);
+    smenu.uiset.selector = MAX(0, smenu.uiset.selector - keypresses);
   if (newkeys & KEY_BUTTDOWN)
-    smenu.uiset.selector = MIN(UiSetMAX, smenu.uiset.selector + 1);
+    smenu.uiset.selector = MIN(UiSetMAX, smenu.uiset.selector + keypresses);
   if (newkeys & KEY_BUTTLEFT) {
     if (smenu.uiset.selector == UiSetTheme)
       menu_theme = menu_theme ? menu_theme - 1 : 0;
@@ -3102,11 +3122,11 @@ static void keypress_menu_uisettings(unsigned newkeys) {
   reload_theme(menu_theme);
 }
 
-static void keypress_menu_tools(unsigned newkeys) {
+static void keypress_menu_tools(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTUP)
-    smenu.tools.selector = MAX(0, smenu.tools.selector - 1);
+    smenu.tools.selector = MAX(0, smenu.tools.selector - keypresses);
   if (newkeys & KEY_BUTTDOWN)
-    smenu.tools.selector = MIN(ToolsMAX - 1, smenu.tools.selector + 1);
+    smenu.tools.selector = MIN(ToolsMAX - 1, smenu.tools.selector + keypresses);
 
   if (newkeys & KEY_BUTTA) {
     if (smenu.tools.selector == ToolsSDRAMTest) {
@@ -3181,15 +3201,59 @@ static void keypress_menu_tools(unsigned newkeys) {
   }
 }
 
-static void keypress_menu_info(unsigned newkeys) {
+static void keypress_menu_info(unsigned newkeys, uint16_t keypresses) {
   if (newkeys & KEY_BUTTA)
     smenu.info.selector = (smenu.info.selector + 1) % 4;
   if ((newkeys & FLASH_UNLOCK_KEYS) == FLASH_UNLOCK_KEYS)
     enable_flashing = true;
 }
 
+void menu_keypress(unsigned newkeys, uint16_t deltaframes) {
+  // TODO: Move this keypress code into a new function for maintainability
+  bool repeat_key_held = (
+    prevkeys == KEY_BUTTDOWN
+    || prevkeys == KEY_BUTTUP
+    || prevkeys == KEY_BUTTLEFT
+    || prevkeys == KEY_BUTTRIGHT
+    || prevkeys == KEY_BUTTL
+    || prevkeys == KEY_BUTTR
+  );
 
-void menu_keypress(unsigned newkeys) {
+  bool hold_key_press = (newkeys == prevkeys);
+  
+  prevkeys = newkeys;
+
+  // If we are holding the same keys but not a repeating key, skip
+  if (hold_key_press && !repeat_key_held)
+    return;
+
+  // May handle an odd edge case that shouldn't happen
+  if (deltaframes == 0)
+    return;
+
+  uint16_t keypresses = 1;
+
+  if (hold_key_press && repeat_key_held){
+    // Init the repeating state
+    if (!is_repeating){
+      is_repeating = true;
+      hfracnt = 0;
+      hfrarpt = INITIAL_KEY_REPEAT_FRAMES;
+    }
+    hfracnt += deltaframes;
+    keypresses = hfracnt / hfrarpt;
+    hfracnt %= hfrarpt;
+    hfrarpt = MAX(MIN_KEY_REPEAT_FRAMES, hfrarpt - keypresses);
+  }
+  // Exit repeating state
+  else if (is_repeating) {
+    is_repeating = false;
+  }
+
+  // If there is no input or keypresses nothing to do
+  if (newkeys == 0 || keypresses == 0)
+    return;
+
   if (spop.alert_msg) {
     // Modal message pop up!
     if (newkeys & (KEY_BUTTA | KEY_BUTTB))
@@ -3212,14 +3276,14 @@ void menu_keypress(unsigned newkeys) {
   }
   else if (spop.rtcpop.callback) {
     if (newkeys & KEY_BUTTLEFT)
-      spop.rtcpop.selector = MAX(0, spop.rtcpop.selector - 1);
+      spop.rtcpop.selector = MAX(0, spop.rtcpop.selector - keypresses);
     if (newkeys & KEY_BUTTRIGHT)
-      spop.rtcpop.selector = MIN(4, spop.rtcpop.selector + 1);
+      spop.rtcpop.selector = MIN(4, spop.rtcpop.selector + keypresses);
 
     if (newkeys & KEY_BUTTUP)
-      ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector]++;
+      ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector] += keypresses;
     if (newkeys & KEY_BUTTDOWN)
-      ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector]--;
+      ((uint8_t*)&spop.rtcpop.val)[spop.rtcpop.selector] -= keypresses;
 
     if (newkeys & (KEY_BUTTUP|KEY_BUTTDOWN))
       fixdate(&spop.rtcpop.val);
@@ -3237,9 +3301,9 @@ void menu_keypress(unsigned newkeys) {
   else if (spop.pop_num) {
     const int subcnt = popup_windows[spop.pop_num - 1].max_submenu;
     if (newkeys & KEY_BUTTL)
-      spop.submenu = (spop.submenu + subcnt - 1) % subcnt;
+      spop.submenu = (spop.submenu + subcnt - keypresses) % subcnt;
     if (newkeys & KEY_BUTTR)
-      spop.submenu = (spop.submenu + 1) % subcnt;
+      spop.submenu = (spop.submenu + keypresses) % subcnt;
 
     // Close pop-up on B button
     if (newkeys & KEY_BUTTB)
@@ -3256,15 +3320,15 @@ void menu_keypress(unsigned newkeys) {
         keypress_popup_norload,
         #endif
       };
-      keyfns[spop.pop_num](newkeys);
+      keyfns[spop.pop_num](newkeys, keypresses);
     }
   } else {
     // Menu change via trigger buttons
     int mintab = (recent_menu && smenu.recent.maxentries) ? MENUTAB_RECENT : MENUTAB_ROMBROWSE;
     if (newkeys & KEY_BUTTL)
-      smenu.menu_tab = MAX((int)smenu.menu_tab - 1, mintab);
+      smenu.menu_tab = MAX((int)smenu.menu_tab - keypresses, mintab);
     else if (newkeys & KEY_BUTTR)
-      smenu.menu_tab = MIN(smenu.menu_tab + 1, MENUTAB_MAX - 1);
+      smenu.menu_tab = MIN(smenu.menu_tab + keypresses, MENUTAB_MAX - 1);
 
     if (newkeys & (KEY_BUTTL | KEY_BUTTR | KEY_BUTTUP | KEY_BUTTDOWN))
       smenu.anim_state = 0;
@@ -3280,7 +3344,6 @@ void menu_keypress(unsigned newkeys) {
       keypress_menu_tools,
       keypress_menu_info,
     };
-    keyfns[smenu.menu_tab](newkeys);
+    keyfns[smenu.menu_tab](newkeys, keypresses);
   }
 }
-

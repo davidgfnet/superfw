@@ -182,13 +182,10 @@ static int main_gba() {
   menu_flip();
 
   unsigned prev_frame = frame_count;
-  uint32_t prev_keys = REG_KEYINPUT ^ 0x3FF;
   while (1) {
     uint32_t ckeys = REG_KEYINPUT ^ 0x3FF;
-    if (ckeys != prev_keys) {
-      menu_keypress(ckeys);
-      prev_keys = ckeys;
-    }
+    menu_keypress(ckeys, frame_count - prev_frame);
+
     unsigned cframe = frame_count;
     menu_render(frame_count - prev_frame);
 
