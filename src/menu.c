@@ -61,6 +61,11 @@ enum {
 
 #define ANIM_INITIAL_WAIT     128    // Intial wait (in anim cycles)
 
+#define KEY_REPEAT_INITIAL    384    // Initial wait for key repeat
+#define KEY_REPEAT_MID        160    // Next key presses
+#define KEY_REPEAT_FAST        96    // End speed
+#define KEY_REPEAT_CNT1         5
+
 enum {
   POPUP_NONE,
   POPUP_GBA_LOAD,              // Load a GBA ROM
@@ -421,6 +426,10 @@ unsigned lang_lookup(uint16_t code) {
       return i;
 
   return 0;  // Fallback to default (english)
+}
+
+inline uint16_t curr_pressed_keys() {
+  return REG_KEYINPUT ^ 0x3FF;
 }
 
 uint16_t lang_getcode() {
@@ -2483,7 +2492,7 @@ static void keypress_popup_savefile(unsigned newkeys) {
 }
 
 static void keypress_popup_flash(unsigned newkeys) {
-  if ((newkeys & FLASH_GO_KEYS) == FLASH_GO_KEYS)
+  if ((curr_pressed_keys() & FLASH_GO_KEYS) == FLASH_GO_KEYS)
     start_flash_update(spop.p.update.fn, spop.p.update.fw_size, spop.p.update.issfw);
 }
 
@@ -3184,7 +3193,7 @@ static void keypress_menu_tools(unsigned newkeys) {
 static void keypress_menu_info(unsigned newkeys) {
   if (newkeys & KEY_BUTTA)
     smenu.info.selector = (smenu.info.selector + 1) % 4;
-  if ((newkeys & FLASH_UNLOCK_KEYS) == FLASH_UNLOCK_KEYS)
+  if ((curr_pressed_keys() & FLASH_UNLOCK_KEYS) == FLASH_UNLOCK_KEYS)
     enable_flashing = true;
 }
 
@@ -3282,5 +3291,41 @@ void menu_keypress(unsigned newkeys) {
     };
     keyfns[smenu.menu_tab](newkeys);
   }
+}
+
+// Only repeat keys A/B and Dir
+const uint16_t keyrep = 0x0F3;
+static uint32_t keyreptmr[10] = {0};
+static uint8_t  keyrepcnt[10] = {0};
+static uint32_t prev_keys = 0;
+
+// Handle button input. Supports key re-press whenever a button is held for a while.
+// This key repeat pattern can be tuned for speed and what not.
+uint16_t get_keypress() {
+  uint32_t ckeys = curr_pressed_keys();
+  uint32_t mkeys = 0;
+  for (unsigned i = 0; i < 10; i++) {
+    if (ckeys & (1 << i)) {
+      if (!(prev_keys & (1 << i))) {
+        keyreptmr[i] = systime() + KEY_REPEAT_INITIAL;
+        mkeys |= (1 << i);
+        keyrepcnt[i] = 0;
+      }
+      else if (((1 << i) & keyrep) && systime() > keyreptmr[i]) {
+        if (keyrepcnt[i] > KEY_REPEAT_CNT1)
+          keyreptmr[i] = systime() + KEY_REPEAT_FAST;
+        else {
+          keyreptmr[i] = systime() + KEY_REPEAT_MID;
+          keyrepcnt[i]++;
+        }
+        mkeys |= (1 << i);
+      }
+    }
+    else
+      keyreptmr[i] = 0;
+  }
+
+  prev_keys = ckeys;
+  return mkeys;
 }
 
