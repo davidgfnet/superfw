@@ -411,7 +411,7 @@ t_sdram_state *sdr_state = (t_sdram_state*)0x08000000;
 uint8_t *hiscratch = (uint8_t*)ROM_HISCRATCH_U8;
 
 typedef struct {
-  uint16_t x, y;
+  uint16_t y, x;
   unsigned tn;
 } t_oamobj;
 
@@ -1169,12 +1169,27 @@ static void flashbrowser_reload() {
   #endif
 }
 
-static inline void render_icon(unsigned x, unsigned y, unsigned iconn) {
-  fobjs[objnum++] = (t_oamobj){x, y, 8*iconn };
+static inline void render_icon(unsigned x, unsigned y, unsigned iconn) { 
+  fobjs[objnum++] = (t_oamobj){
+    // Use 256 entries palette
+    y | 0x2000,
+    // Size 16x16 
+    x | 0x4000,
+    // OBJ numbers start at 512 for Mode 4
+    8 * iconn + 512
+  };
 }
 
 static inline void render_icon_trans(unsigned x, unsigned y, unsigned iconn) {
-  fobjs[objnum++] = (t_oamobj){x, y | 0x0400, 8*iconn };
+  fobjs[objnum++] = (t_oamobj){
+    // 0x2000 Use 256 entries palette
+    // 0x0400 make transparent
+    y | 0x2400, 
+    // Size 16x16 
+    x | 0x4000, 
+    // OBJ numbers start at 512 for Mode 4
+    8*iconn + 512
+  };
 }
 
 // Guess the file type based on the file name.
@@ -2115,11 +2130,8 @@ void menu_render(unsigned fcnt) {
 }
 
 void menu_flip() {
-  for (unsigned i = 0; i < objnum; i++) {
-    MEM_OAM[i*4+0] = fobjs[i].y | 0x2000;  // Use 256 entries palette
-    MEM_OAM[i*4+1] = fobjs[i].x | 0x4000;  // Size 16x16
-    MEM_OAM[i*4+2] = fobjs[i].tn + 512;    // OBJ numbers start at 512 for Mode 4
-  }
+  /* Copy icons directly instead of iterating */
+  dma_memcpy16(&MEM_OAM[0], fobjs, objnum * 4);
   dma_memset16(&MEM_OAM[objnum*4], 0, 256 - objnum*2);  // Clear unused objects
   REG_DISPCNT = (REG_DISPCNT & ~0x10) | (framen << 4);
   framen ^= 1;

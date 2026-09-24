@@ -8,12 +8,12 @@ CXX		:= $(PREFIX)g++
 OBJDUMP		:= $(PREFIX)objdump
 OBJCOPY		:= $(PREFIX)objcopy
 
-COMPRESSION_RATIO ?= 4
+COMPRESSION_RATIO ?= 10
 
 GLOBAL_DEFINES = -D__GBA__
 
 # BOARD can be "sd", "lite", "chis"
-BOARD ?= sd
+BOARD ?= chis
 
 ifeq ($(BOARD),lite)
   GLOBAL_DEFINES += -DSUPERCARD_LITE_IO
@@ -36,6 +36,8 @@ else ifeq ($(BOARD),chis)
 else
   $(error No valid board specified in BOARD)
 endif
+
+FIRMWARE_NAME := "superfw-$(BOARD).fw"
 
 FWBINFILES=firmware.ewram.gba res/patches.db res/fonts.pack
 
@@ -167,9 +169,9 @@ INFILES=src/gba_ewram_crt0.S \
 all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload ingame_trampoline.payload
 	# Wrap the firmware around a ROM->EWRAM loader
 	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K
-	$(OBJCOPY) --output-target=binary firmware.elf superfw.gba
+	$(OBJCOPY) --output-target=binary firmware.elf $(FIRMWARE_NAME)
 	# Fix the header/checksum.
-	./tools/fw-fixer.py superfw.gba
+	./tools/fw-fixer.py $(FIRMWARE_NAME)
 
 firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload ingame_trampoline.payload src/messages_data.h ldscripts/gba_ewram.ld.i
 	# Build the actual firmware image
@@ -225,5 +227,5 @@ upkr.elf:	tools/upkr.cc
 	g++ -o $@ $< -O3 -ffast-math
 
 clean:
-	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h
+	rm -f ldscripts/*.i superfw-*.fw *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h
 
