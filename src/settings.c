@@ -208,6 +208,7 @@ static void parse_settings(void *usr, const char *var, const char *value) {
       uint8_t * const var;
       const unsigned modval;
     } uintset[] = {
+      { "hotkey_opt",           &hotkey_combo,          sizeof(hotkey_list)/sizeof(hotkey_list[0]) },
       { "save_path_policy",     &save_path_default,     SaveDirCNT },
       { "save_path_nor_policy", &save_path_nor_default, SaveDirNORCNT },
       { "state_path_policy",    &state_path_default,    StateDirCNT },
