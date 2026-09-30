@@ -19,16 +19,41 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "directsave.h"
 #include "supercard_driver.h"
 
 #define SRAM_BASE            0x0E000000
 
-bool validate_config(void);
 uint32_t base_sector(void);
 uint32_t get_memory_size(void);
 
 static inline uint32_t min32(uint32_t a, uint32_t b) {
   return (a < b) ? a : b;
+}
+
+// Check that the config on SRAM is valid.
+bool validate_config() {
+  union {
+    t_dirsave_config cfg;
+    uint8_t bytes[0];
+    uint32_t words[0];
+  } u;
+  volatile uint8_t *sramcfg = (uint8_t*)(0x0F000000 - sizeof(t_dirsave_config));
+
+  for (unsigned i = 0; i < sizeof(t_dirsave_config); i++)
+    u.bytes[i] = sramcfg[i];
+
+  if (u.cfg.magic != DIRSAV_CFG_MAGIC)
+    return false;
+
+  // Clear mutex variable to calculate the checksum.
+  u.cfg.sd_mutex = 0;
+
+  uint32_t crc = 0;
+  for (unsigned i = 0; i < sizeof(t_dirsave_config) / sizeof(uint32_t); i++)
+    crc ^= u.words[i];
+
+  return crc == 0;
 }
 
 // EEPROM handlers
@@ -97,7 +122,7 @@ typedef struct {
 } t_cache_meta;
 
 // Load the cache from SRAM, check that the struct is valid.
-static bool load_cache_metadata(t_cache_meta *cache) {
+bool load_cache_metadata(t_cache_meta *cache) {
   // Load the medata block first, byte for byte.
   volatile char * metablk = (char*)0x0E00FF00;
   char *cache_bytes = (char*)cache;
@@ -272,6 +297,7 @@ int ds_write_byte_flash(uint32_t offset, uint8_t value) {
   unsigned errs = 0;
   uint8_t *datablk = (uint8_t*)SRAM_CACHE_DATA;
   const uint32_t blkn = offset / 512U;
+  const uint32_t basesect = base_sector();
 
   t_cache_meta cacheinfo;
   if (!load_cache_metadata(&cacheinfo)) {
@@ -280,9 +306,9 @@ int ds_write_byte_flash(uint32_t offset, uint8_t value) {
     cacheinfo.dirty = 0;  // We will flush this one, so clean.
 
     // Read data for that 512 byte block and patch written byte.
-    errs |= sdcard_read_blocks(datablk, base_sector() + blkn, 1);
+    errs |= sdcard_read_blocks(datablk, basesect + blkn, 1);
     datablk[offset % 512U] = value;
-    errs |= sdcard_write_blocks(datablk, base_sector() + blkn, 1);
+    errs |= sdcard_write_blocks(datablk, basesect + blkn, 1);
   } else {
     // We usually flush when:
     //  - The write happens the end of the 512 byte block.
@@ -293,8 +319,8 @@ int ds_write_byte_flash(uint32_t offset, uint8_t value) {
     const uint32_t cacheblkn = cacheinfo.last_addr / 512U;
     if (blkn != cacheblkn) {
       if (cacheinfo.dirty)
-        errs |= sdcard_write_blocks(datablk, base_sector() + cacheblkn, 1);
-      errs |= sdcard_read_blocks(datablk, base_sector() + blkn, 1);
+        errs |= sdcard_write_blocks(datablk, basesect + cacheblkn, 1);
+      errs |= sdcard_read_blocks(datablk, basesect + blkn, 1);
     }
 
     datablk[offset % 512U] = value;
@@ -302,7 +328,7 @@ int ds_write_byte_flash(uint32_t offset, uint8_t value) {
 
     // Is this the end of the block, or was this non-sequential?
     if ((offset % 512U) == 512 - 1 || cacheinfo.last_addr + 1 != offset) {
-      errs |= sdcard_write_blocks(datablk, base_sector() + blkn, 1);
+      errs |= sdcard_write_blocks(datablk, basesect + blkn, 1);
       cacheinfo.dirty = 0;
     }
 

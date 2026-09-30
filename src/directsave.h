@@ -35,6 +35,8 @@
 
 #ifndef __ASSEMBLER__
 
+#include <stddef.h>
+
 // Config: loaded on every load to SRAM, can change (ie. SD sector).
 typedef struct {
   uint32_t magic;                      // Magic constant to ensure the config is valid

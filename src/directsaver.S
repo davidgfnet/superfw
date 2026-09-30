@@ -76,52 +76,6 @@ set_clear_mutex:
   pop {r0, pc}
 
 
-// Validate that the SRAM configuration is correct (not corrupted).
-.global validate_config
-validate_config:
-  sub sp, $DIRSAV_CFG_SIZE
-
-  // Copy the SRAM config to the stack
-  ldr r0, =(0x0F000000 - DIRSAV_CFG_SIZE)
-  mov r1, sp
-  mov r3, $DIRSAV_CFG_SIZE
-1:
-  ldrb r2, [r0], #1
-  strb r2, [r1], #1
-  subs r3, $1
-  bne 1b
-
-  // Check the magic header
-  ldr r0, [sp, #DIRSAV_CFG_MAGIC_OFF]
-  ldr r1, =DIRSAV_CFG_MAGIC
-  cmp r0, r1
-  bne 9f
-
-  // Clear the mutex variable for checksum calculation
-  mov r0, $0
-  strb r0, [sp, #DIRSAV_CFG_MUTEX_OFF]
-  // Calculate checksum
-  mov r1, sp
-  mov r3, $DIRSAV_CFG_SIZE
-1:
-  ldr r2, [r1], #4
-  eor r0, r2, r0
-  subs r3, $4
-  bne 1b
-
-  cmp r0, $0
-  bne 9f
-
-  add sp, $DIRSAV_CFG_SIZE
-  mov r0, $1
-  bx lr
-
-9:  // Bad config!
-  add sp, $DIRSAV_CFG_SIZE
-  mov r0, $0
-  bx lr
-
-
 // Necessary handlers for the SC driver, reads info from SRAM.
 .global sc_issdhc
 sc_issdhc:
