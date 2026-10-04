@@ -117,7 +117,7 @@ void send_sdcard_commandbuf(const uint8_t *buffer, unsigned maxsize);
 typedef struct {
   uint8_t cmdresp;
   uint8_t manufacturer;
-  uint16_t appid;
+  uint8_t appid[2];
   char prodname[5];
   uint8_t prodrev;
   uint8_t prodserial[4];
@@ -358,7 +358,11 @@ unsigned sdcard_init(t_card_info *info) {
     const t_card_cid *cid = (t_card_cid*)resp;
     // Save SD CID info as card info.
     info->manufacturer = cid->manufacturer;
-    info->oemid = cid->appid;
+    info->oemid = (cid->appid[0] << 8) | cid->appid[1];
+    info->year = (((cid->mdate[0] & 0x0F) << 4) | (cid->mdate[1] >> 4));
+    info->month = cid->mdate[1] & 0x0F;
+    for (unsigned i = 0; i < sizeof(info->prodname); i++)
+      info->prodname[i] = cid->prodname[i];
   }
 
   drv_rca = 0;

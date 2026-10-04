@@ -25,9 +25,11 @@
 
 typedef struct {
   uint32_t block_cnt;        // Size (in 512byte blocks)
-  bool sdhc;                 // Is SDHC (or SDSC otherwise)
-  uint8_t manufacturer;      // 8 bit ID
   uint16_t oemid;            // Product ID.
+  uint8_t manufacturer;      // 8 bit ID
+  char prodname[5];          // 5 ASCII chars for product name.
+  uint8_t year, month;       // Manufacturing date
+  bool sdhc;                 // Is SDHC (or SDSC otherwise)
 } t_card_info;
 
 #define MAPPED_FIRMWARE      0

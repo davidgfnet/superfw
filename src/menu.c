@@ -1997,14 +1997,15 @@ void render_info(volatile uint8_t *frame) {
     draw_central_text(tmp, frame, 120, 110);
     break;
   case 3:
-    if (sd_info.sdhc)
-      draw_central_text("SD card type: SDHC", frame, 120, 70);
-    else
-      draw_central_text("SD card type: SDSC", frame, 120, 70);
+    npf_snprintf(tmp, sizeof(tmp), "SD Card ID: %02x | %04x", sd_info.manufacturer, sd_info.oemid);
+    draw_central_text(tmp, frame, 120, 70);
     human_size_kb(tmp2, sizeof(tmp2), sd_info.block_cnt / 2);
-    npf_snprintf(tmp, sizeof(tmp), msgs[lang_id][MSG_CAPACITY], tmp2);
+    npf_snprintf(tmp, sizeof(tmp), "Type: %s  Size: %s", sd_info.sdhc ? "SDHC" : "SDSC", tmp2);
     draw_central_text(tmp, frame, 120, 90);
-    npf_snprintf(tmp, sizeof(tmp), "Card ID: %02x | %04x", sd_info.manufacturer, sd_info.oemid);
+    npf_snprintf(tmp, sizeof(tmp), "Info: %c%c%c%c%c (%d/%d)",
+      sd_info.prodname[0] ?: '#', sd_info.prodname[1] ?: '#',
+      sd_info.prodname[2] ?: '#', sd_info.prodname[3] ?: '#',
+      sd_info.prodname[4] ?: '#', 2000 + sd_info.year, sd_info.month);
     draw_central_text(tmp, frame, 120, 110);
     break;
   }

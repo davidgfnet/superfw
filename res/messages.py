@@ -227,7 +227,6 @@ en_strings = [
   "MSG_GOOD_RAM":  "All memory tests passed!",             # alertmsg
 
   "MSG_BENCHSPD":  "Speed: %u KiB/s",
-  "MSG_CAPACITY":  "Capacity: %s",
   "MSG_DBPINFO":   "Patch database version info",
   }),
   ("SUPPORT_NORGAMES", {
