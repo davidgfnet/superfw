@@ -731,14 +731,10 @@ static bool prepare_gba_info(
       info->patch_type = PatchNone;
   }
   // Downgrade to no patches if the specified was not found.
-  else if (st->patch_policy == PatchDatabase) {
-    if (!info->patches_datab_found)
-      info->patch_type = PatchNone;
-  }
-  else if (st->patch_policy == PatchEngine) {
-    if (!info->patches_cache_found)
-      info->patch_type = PatchNone;
-  }
+  else if (st->patch_policy == PatchDatabase)
+    info->patch_type = info->patches_datab_found ? PatchDatabase : PatchNone;
+  else if (st->patch_policy == PatchEngine)
+    info->patch_type = info->patches_cache_found ? PatchEngine : PatchNone;
   else
     info->patch_type = st->patch_policy;
 
