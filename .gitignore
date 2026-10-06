@@ -10,3 +10,5 @@
 *.fw
 src/menu_messages.h
 src/messages_data.h
+*.bin
+coverage/
