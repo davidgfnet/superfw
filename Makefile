@@ -8,12 +8,12 @@ CXX		:= $(PREFIX)g++
 OBJDUMP		:= $(PREFIX)objdump
 OBJCOPY		:= $(PREFIX)objcopy
 
-COMPRESSION_RATIO ?= 10
+COMPRESSION_RATIO ?= 4
 
 GLOBAL_DEFINES = -D__GBA__
 
 # BOARD can be "sd", "lite", "chis"
-BOARD ?= chis
+BOARD ?= sd
 
 ifeq ($(BOARD),lite)
   GLOBAL_DEFINES += -DSUPERCARD_LITE_IO
@@ -228,4 +228,3 @@ upkr.elf:	tools/upkr.cc
 
 clean:
 	rm -f ldscripts/*.i superfw-*.fw *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h
-
