@@ -32,7 +32,7 @@ typedef struct {
 extern const t_combo_key hotkey_list[13];
 #define hotkey_listcnt (sizeof(hotkey_list)/sizeof(hotkey_list[0]))
 
-extern const uint8_t animspd_lut[5];
+extern const uint8_t animspd_lut[6];
 #define animspd_cnt (sizeof(animspd_lut)/sizeof(animspd_lut[0]))
 
 enum { SaveSavegameDir = 0, SaveSavesDir = 1, SaveRomName = 2, SaveDirNORCNT = 2, SaveDirCNT = 3 };
@@ -92,4 +92,3 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
 bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_rom_launch_settings *rlh);
 
 #endif
-

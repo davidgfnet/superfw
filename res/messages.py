@@ -87,6 +87,7 @@ en_strings = [
   "MSG_UIS_SPD2":  "Regular",
   "MSG_UIS_SPD3":  "Fast",
   "MSG_UIS_SPD4":  "Very fast",
+  "MSG_UIS_SPD5":  "Ludicrous",
 
   "MSG_STILLRTC":    "Frozen",
 
@@ -390,5 +391,4 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
       c = ord(l[0]) | (ord(l[1]) << 8)
       print("  0x%04x,     // %s" % (c, l))
     print("};")
-
 

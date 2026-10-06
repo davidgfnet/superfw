@@ -60,6 +60,8 @@ enum {
 };
 
 #define ANIM_INITIAL_WAIT     128    // Intial wait (in anim cycles)
+#define FAST_ANIM              16    // Threshold for reducing animation updates
+#define FAST_ANIM_FRAME_SKIP    8    // Frames between fast animation updates
 
 #define KEY_REPEAT_INITIAL    384    // Initial wait for key repeat
 #define KEY_REPEAT_MID        160    // Next key presses
@@ -268,6 +270,7 @@ static struct {
   uint8_t menu_tab;
 
   unsigned anim_state;            // Animation (text rotation) status.
+  unsigned anim_skip;             // Frames accumulated for fast animations.
 
   // Recent ROMs state
   struct {
@@ -324,6 +327,7 @@ static struct {
   char submenu;                   // Which submenu tab we are in (if any)
   char selector;                  // Option selector (if any)
   unsigned anim;                  // Animation state
+  unsigned anim_skip;             // Frames accumulated for fast animations.
 
   // Pop up message (for whatever action). Allows returning to previous popup.
   struct {
@@ -866,6 +870,7 @@ static void browser_open_gba(const char *fn, uint32_t fs, bool prompt_patchgen) 
       // Show load ROM menu.
       spop.pop_num = POPUP_GBA_LOAD;
       spop.anim = 0;
+      spop.anim_skip = 0;
       spop.submenu = GbaLoadPopInfo;
       spop.selector = GBALoadButt;
     }
@@ -978,6 +983,7 @@ static void recent_reload() {
   smenu.recent.selector = 0;
   smenu.recent.seloff = 0;
   smenu.anim_state = 0;
+  smenu.anim_skip = 0;
   smenu.recent.maxentries = recent_load(RECENT_FILEPATH, sdr_state->rentries);
 }
 
@@ -1117,6 +1123,7 @@ static void browser_reload_filter() {
 // TODO: Implement filtering (.gba/.rom/.bin... etc) using settings
 static void browser_reload() {
   smenu.anim_state = 0;
+  smenu.anim_skip = 0;
 
   unsigned fcount = 0;
   DIR d;
@@ -1149,6 +1156,7 @@ static void flashbrowser_reload() {
   #ifdef SUPPORT_NORGAMES
   smenu.fbrowser.selector = 0;
   smenu.anim_state = 0;
+  smenu.anim_skip = 0;
 
   if (!flashmgr_load(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE, (t_reg_entry*)&sdr_state->nordata))
     // No data found, reset the entries
@@ -2073,6 +2081,18 @@ static const struct {
   #endif
 };
 
+static void calculate_animation_step(unsigned fcnt, unsigned *anim_state, unsigned *anim_skip) {
+  if (animspd_lut[anim_speed] < FAST_ANIM) {
+    *anim_state += fcnt * animspd_lut[anim_speed];
+  } else {
+    *anim_skip += fcnt;
+    while (*anim_skip >= FAST_ANIM_FRAME_SKIP) {
+      *anim_state += FAST_ANIM_FRAME_SKIP * animspd_lut[anim_speed];
+      *anim_skip -= FAST_ANIM_FRAME_SKIP;
+    }
+  }
+}
+
 // Renders the menu. Arg0 represents the frame count difference with the
 // previous rendered frame (for animations and similar stuff).
 void menu_render(unsigned fcnt) {
@@ -2100,7 +2120,7 @@ void menu_render(unsigned fcnt) {
   else {
     if (spop.pop_num) {
       popup_windows[spop.pop_num - 1].render(frame);
-      spop.anim += fcnt * animspd_lut[anim_speed];
+      calculate_animation_step(fcnt, &spop.anim, &spop.anim_skip);
     } else {
       static const t_mrender_fn renderfns[] = {
         render_recent,
@@ -2114,7 +2134,7 @@ void menu_render(unsigned fcnt) {
         render_info,
       };
       renderfns[smenu.menu_tab](frame);
-      smenu.anim_state += fcnt * animspd_lut[anim_speed];
+      calculate_animation_step(fcnt, &smenu.anim_state, &smenu.anim_skip);
     }
   }
 
@@ -2467,8 +2487,10 @@ static void keypress_popup_loadgba(unsigned newkeys) {
     }
   }
 
-  if (psel != spop.selector)
+  if (psel != spop.selector) {
     spop.anim = 0;
+    spop.anim_skip = 0;
+  }
 }
 
 static void keypress_popup_savefile(unsigned newkeys) {
@@ -2929,6 +2951,7 @@ static void keypress_menu_browse(unsigned newkeys) {
       // Shows a file management menu.
       spop.pop_num = POPUP_FILE_MGR;
       spop.anim = 0;
+      spop.anim_skip = 0;
       spop.selector = 0;
     }
   }
@@ -3288,8 +3311,10 @@ void menu_keypress(unsigned newkeys) {
     else if (newkeys & KEY_BUTTR)
       smenu.menu_tab = MIN(smenu.menu_tab + 1, MENUTAB_MAX - 1);
 
-    if (newkeys & (KEY_BUTTL | KEY_BUTTR | KEY_BUTTUP | KEY_BUTTDOWN))
+    if (newkeys & (KEY_BUTTL | KEY_BUTTR | KEY_BUTTUP | KEY_BUTTDOWN)) {
       smenu.anim_state = 0;
+      smenu.anim_skip = 0;
+    }
 
     const t_mkeyupd_fn keyfns[] = {
       keypress_menu_recent,
@@ -3341,4 +3366,3 @@ uint16_t get_keypress() {
   prev_keys = ckeys;
   return mkeys;
 }
-
