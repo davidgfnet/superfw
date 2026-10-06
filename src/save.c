@@ -136,12 +136,14 @@ bool write_save_sram(const char *fn) {
     set_supercard_mode(MAPPED_SDRAM, true, true);
 
     res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
-    if (res != FR_OK) {
+    if (res != FR_OK || wrbytes != sizeof(tmpbuf)) {
       f_close(&fd);
       return false;
     }
   }
-  f_close(&fd);
+
+  if (f_close(&fd) != FR_OK)
+    return false;
 
   return true;
 }
