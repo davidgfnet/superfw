@@ -436,19 +436,22 @@ typedef struct {
   uint32_t fw_size;
   uint8_t  hw_variant[4];
   uint8_t  fw_variant[4];
-  uint8_t  pad[8];
+  uint32_t fw_patch;         // Patch version (zero in old images)
+  uint8_t  pad[4];
   uint8_t  checksum[16];     // Truncated sha256 checksum
   uint8_t  magic[16];        // SUPERFW~DAVIDGF
 } t_superfw_header;
 
 // Validates a superFW image header
-bool check_superfw(const uint8_t *h, uint32_t *ver) {
+bool check_superfw(const uint8_t *h, uint32_t *ver, uint32_t *patch) {
   const t_superfw_header *header = (t_superfw_header*)h;
 
   if (memcmp(header->magic, "SUPERFW~DAVIDGF", 16))
     return false;
   if (ver)
     *ver = header->version;
+  if (patch)
+    *patch = header->fw_patch;
   return true;
 }
 

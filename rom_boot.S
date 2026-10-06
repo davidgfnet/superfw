@@ -158,7 +158,7 @@ entry_point:
   .word 0                      @ 32 bit firmware file size (patched)
   .ascii FW_FLAVOUR; .balign 4 @ Device variant
   .ascii "WRLD"                @ Firmware variant (no variants atm.)
-  .word 0                      @ Unused
+  .word VERSION_PATCH          @ Patch version (backward-compatible; old readers ignore this)
   .word 0                      @ Unused
   .fill 16, 1, 0               @ 16 byte hash (patched)
   .asciz "SUPERFW~DAVIDGF"     @ Name/author

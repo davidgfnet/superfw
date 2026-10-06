@@ -1,5 +1,6 @@
 
 VERSION_WORD := 0x00000015
+VERSION_PATCH := 2
 VERSION_SLUG_WORD := $(shell git rev-parse --short=8 HEAD || echo FFFFFFFF)
 
 PREFIX		:= arm-none-eabi-
@@ -78,6 +79,7 @@ CFLAGS=-O2 -ggdb \
        -DSC_FAST_ROM_MIRROR="use_fast_mirror()" \
        -DSD_PREERASE_BLOCKS_WRITE \
        -DVERSION_WORD="$(VERSION_WORD)" \
+       -DVERSION_PATCH="$(VERSION_PATCH)" \
        -DVERSION_SLUG_WORD="0x$(VERSION_SLUG_WORD)" \
        -Wall -Isrc -I. -mthumb -flto -flto-partition=none
 

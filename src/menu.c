@@ -372,6 +372,7 @@ static struct {
       char fn[MAX_FN_LEN];                // FW file to load and flash
       bool issfw;                         // The firmware is a superFW image.
       uint32_t superfw_ver;               // Reported FW version.
+      uint32_t superfw_patch;             // Reported FW patch version.
       uint32_t fw_size;                   // Size in bytes reported by stat.
       unsigned curr_state;                // Flashing FSM state.
     } update;
@@ -1045,7 +1046,7 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
         else if (!validate_gba_header(tmp))  // Is it a valid GBA ROM header?
           spop.alert_msg = msgs[lang_id][MSG_FWUP_BADHD];
         else {
-          spop.p.update.issfw = check_superfw(tmp, &spop.p.update.superfw_ver);
+          spop.p.update.issfw = check_superfw(tmp, &spop.p.update.superfw_ver, &spop.p.update.superfw_patch);
           spop.p.update.fw_size = fs;
           spop.p.update.curr_state = FlashingReady;
           spop.pop_num = POPUP_FWFLASH;
@@ -1467,10 +1468,17 @@ void render_fw_flash_popup(volatile uint8_t *frame) {
 
   draw_box_outline(frame, 16, 224, 64, 92, FG_COLOR);
   if (spop.p.update.issfw) {
-    char tmp[32];
-    npf_snprintf(tmp, sizeof(tmp), "SuperFW (ver %lu.%lu)",
-                 spop.p.update.superfw_ver >> 16,
-                 spop.p.update.superfw_ver & 0xFFFF);
+    char tmp[40];
+    if (spop.p.update.superfw_patch) {
+      npf_snprintf(tmp, sizeof(tmp), "SuperFW (ver %lu.%lu.%lu)",
+                   spop.p.update.superfw_ver >> 16,
+                   spop.p.update.superfw_ver & 0xFFFF,
+                   spop.p.update.superfw_patch);
+    } else {
+      npf_snprintf(tmp, sizeof(tmp), "SuperFW (ver %lu.%lu)",
+                   spop.p.update.superfw_ver >> 16,
+                   spop.p.update.superfw_ver & 0xFFFF);
+    }
     draw_central_text(tmp, frame, 120, 70);
   } else {
     draw_central_text(msgs[lang_id][MSG_FWUPD_UNK], frame, 120, 70);
@@ -1984,6 +1992,7 @@ void render_ui_settings(volatile uint8_t *frame) {
 void render_info(volatile uint8_t *frame) {
   uint32_t vmaj = VERSION_WORD >> 16;
   uint32_t vmin = VERSION_WORD & 0xFFFF;
+  uint32_t vpatch = VERSION_PATCH;
   uint32_t gitver = VERSION_SLUG_WORD;
   char tmp[64], tmp2[32];
 
@@ -1993,7 +2002,7 @@ void render_info(volatile uint8_t *frame) {
   switch (smenu.info.selector) {
   case 0:
     draw_central_text("by davidgf", frame, 120, 70);
-    npf_snprintf(tmp, sizeof(tmp), "Version %lu.%lu (%08lx)", vmaj, vmin, gitver);
+    npf_snprintf(tmp, sizeof(tmp), "Version %lu.%lu.%lu (%08lx)", vmaj, vmin, vpatch, gitver);
     draw_central_text(tmp, frame, 120, 95);
     draw_central_text(FW_FLAVOUR " variant", frame, 120, 114);
     break;
