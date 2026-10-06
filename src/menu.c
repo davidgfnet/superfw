@@ -1177,11 +1177,11 @@ static void flashbrowser_reload() {
   #endif
 }
 
-static inline void render_icon(unsigned x, unsigned y, unsigned iconn) { 
+static inline void render_icon(unsigned x, unsigned y, unsigned iconn) {
   fobjs[objnum++] = (t_oamobj){
     // Use 256 entries palette
     y | 0x2000,
-    // Size 16x16 
+    // Size 16x16
     x | 0x4000,
     // OBJ numbers start at 512 for Mode 4
     8 * iconn + 512
@@ -1192,9 +1192,9 @@ static inline void render_icon_trans(unsigned x, unsigned y, unsigned iconn) {
   fobjs[objnum++] = (t_oamobj){
     // 0x2000 Use 256 entries palette
     // 0x0400 make transparent
-    y | 0x2400, 
-    // Size 16x16 
-    x | 0x4000, 
+    y | 0x2400,
+    // Size 16x16
+    x | 0x4000,
     // OBJ numbers start at 512 for Mode 4
     8*iconn + 512
   };
