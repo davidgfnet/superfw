@@ -247,6 +247,8 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
   }
 }
 
+// Parses a config file and calls the user callback with varname+value
+// Pointers are only valid for the duration of the callback!
 static void parse_file(char *buf, void(*parse_cb)(void *usr, const char*, const char*), void *usrptr) {
   char *p = buf;
   while (1) {
@@ -258,10 +260,13 @@ static void parse_file(char *buf, void(*parse_cb)(void *usr, const char*, const 
     if (a) {
       *a = 0;
       parse_cb(usrptr, p, &a[1]);
+      *a = '=';
     }
 
     if (!e)
       break;
+
+    *e = '\n';
     p = &e[1];  // Advance to the next line
   }
 }
