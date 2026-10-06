@@ -725,17 +725,15 @@ static bool prepare_gba_info(
     else
       info->patch_type = PatchNone;
   }
-  // Downgrade to no patches if the specified was not found.
-  else if (st->patch_policy == PatchDatabase) {
-    if (!info->patches_datab_found)
-      info->patch_type = PatchNone;
-  }
-  else if (st->patch_policy == PatchEngine) {
-    if (!info->patches_cache_found)
-      info->patch_type = PatchNone;
-  }
-  else
+  else {
+    // Use the specified patch type.
     info->patch_type = st->patch_policy;
+
+    // Downgrade to no patches if the specified was not found.
+    if ((info->patch_type == PatchDatabase && !info->patches_datab_found) ||
+        (info->patch_type == PatchEngine   && !info->patches_cache_found))
+      info->patch_type = PatchNone;
+  }
 
   // Fill defaults as requested if possible.
   bool allowds = load_sdram ? dirsav_avail_sdram(info) : dirsav_avail_flash(info);
