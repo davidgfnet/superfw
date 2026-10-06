@@ -878,9 +878,19 @@ bool action_save_backup() {
 
 bool action_save_reset() {
   // Write the .sav file
-  action_save_overw();
+  char finalfn[256];
+  strcpy(finalfn, savefile_pattern);
+  strcat(finalfn, ".sav");
+  create_paths(finalfn);
+  if (!write_save_sram(finalfn)) {
+    popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
+    return false;
+  }
   // Do not write any file on reboot (it's done already!)
-  program_sram_dump(NULL, 0);
+  if (!program_sram_dump(NULL, 0)) {
+    popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
+    return false;
+  }
   // Go ahead and reboot to flash.
   reset_fw();
   return false;
