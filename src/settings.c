@@ -330,6 +330,19 @@ static void parse_rom_launch_settings(void *usr, const char *var, const char *va
     rs->rtcts = valu;
 }
 
+typedef struct {
+  t_rom_load_settings *load;
+  t_rom_launch_settings *launch;
+} t_rom_settings_parse_ctx;
+
+static void parse_rom_settings(void *usr, const char *var, const char *value) {
+  t_rom_settings_parse_ctx *ctx = (t_rom_settings_parse_ctx*)usr;
+  if (ctx->load)
+    parse_rom_load_settings(ctx->load, var, value);
+  if (ctx->launch)
+    parse_rom_launch_settings(ctx->launch, var, value);
+}
+
 bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_settings *rlh) {
   char buf[512];
   strcpy(buf, ROMCONFIG_PATH);
@@ -344,10 +357,11 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
   UINT rdbytes;
   if (FR_OK == f_read(&fd, buf, sizeof(buf) - 1, &rdbytes)) {
     buf[rdbytes] = 0;
-    if (rld)
-      parse_file(buf, parse_rom_load_settings, rld);
-    if (rlh)
-      parse_file(buf, parse_rom_launch_settings, rlh);
+    t_rom_settings_parse_ctx ctx = {
+      .load = rld,
+      .launch = rlh
+    };
+    parse_file(buf, parse_rom_settings, &ctx);
   }
   f_close(&fd);
 
@@ -392,5 +406,3 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
 
   return FR_OK == res;
 }
-
-
