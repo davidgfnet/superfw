@@ -100,7 +100,7 @@ base_sector:
   ldrb r3, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_BSECT_OFF + 3)]
   orr r0, r0, r1, lsl #8
   orr r0, r0, r2, lsl #16
-  orr r0, r0, r3, lsl #23
+  orr r0, r0, r3, lsl #24
   bx lr
 
 .global get_memory_size
@@ -112,7 +112,7 @@ get_memory_size:
   ldrb r3, [r3, #(-DIRSAV_CFG_SIZE + DIRSAV_CFG_MEMSIZE_OFF + 3)]
   orr r0, r0, r1, lsl #8
   orr r0, r0, r2, lsl #16
-  orr r0, r0, r3, lsl #23
+  orr r0, r0, r3, lsl #24
   bx lr
 
 
