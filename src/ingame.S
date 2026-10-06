@@ -647,7 +647,7 @@ def_function(set_undef_lrsp):
   mrs r2, CPSR         // Save the current CPSR
   msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
   mov lr, r0           // Store in UNDEF[LR]
-  mov sp, r1           // Store in UNDEF[SP]
+  orr sp, r1, #0x580   // Store speed in UNDEF[SP] low bits; budget initialized to 176
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 
@@ -661,7 +661,7 @@ def_function(get_undef_lr):
 def_function(get_undef_sp):
   mrs r2, CPSR         // Save the current CPSR
   msr CPSR_c, $0x9B    // Move to undefined mode (no IRQs)
-  mov r0, sp           // Read UNDEF[SP]
+  and r0, sp, #7       // Read UNDEF[SP] speed (ignore persistent counter bits)
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 

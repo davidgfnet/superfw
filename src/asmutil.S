@@ -56,7 +56,7 @@ START_THUMB_FUNC(set_undef_lrsp)
   mrs r2, CPSR         // Save the current CPSR
   msr CPSR_c, $0x9B    // Move to undefined mode
   mov lr, r0           // Store in UNDEF[LR]
-  mov sp, r1           // Store in UNDEF[SP]
+  orr sp, r1, #0x580   // Store speed in UNDEF[SP] low bits; budget initialized to 176
   msr CPSR_c, r2       // Restore original model and CPSR
   bx lr
 
