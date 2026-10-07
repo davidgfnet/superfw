@@ -366,34 +366,40 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
   // Make it hidden
   f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
-  char buf[256];
-  strcpy(buf, ROMCONFIG_PATH);
-  strcat(buf, file_basename(fn));
-  replace_extension(buf, ".config");
-
   // Proceed to create the file
   FIL fd;
-  if (FR_OK != f_open(&fd, buf, FA_WRITE | FA_CREATE_ALWAYS))
-    return false;
+  {
+    char fn[MAX_FN_LEN];
+    strcpy(fn, ROMCONFIG_PATH);
+    strcat(fn, file_basename(fn));
+    replace_extension(fn, ".config");
+
+    if (FR_OK != f_open(&fd, fn, FA_WRITE | FA_CREATE_ALWAYS))
+      return false;
+  }
 
   // Serialize the ROM settings
-  npf_snprintf(buf, sizeof(buf),
-    "patchmode=%u\n"
-    "igm=%u\n"
-    "rtc=%u\n"
-    "directsaving=%u\n"
-    "cheats=%u\n"
-    "rtcts=%u\n",
-    rld->patch_policy,
-    rld->use_igm ? 1 : 0,
-    rld->use_rtc ? 1 : 0,
-    rld->use_dsaving ? 1 : 0,
-    rlh->use_cheats ? 1 : 0,
-    (unsigned int)rlh->rtcts);
+  FRESULT res;
+  {
+    char buf[128];
+    npf_snprintf(buf, sizeof(buf),
+      "patchmode=%u\n"
+      "igm=%u\n"
+      "rtc=%u\n"
+      "directsaving=%u\n"
+      "cheats=%u\n"
+      "rtcts=%u\n",
+      rld->patch_policy,
+      rld->use_igm ? 1 : 0,
+      rld->use_rtc ? 1 : 0,
+      rld->use_dsaving ? 1 : 0,
+      rlh->use_cheats ? 1 : 0,
+      (unsigned int)rlh->rtcts);
 
-  UINT wrbytes;
-  FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
-  f_close(&fd);
+    UINT wrbytes;
+    res = f_write(&fd, buf, strlen(buf), &wrbytes);
+    f_close(&fd);
+  }
 
   return FR_OK == res;
 }
