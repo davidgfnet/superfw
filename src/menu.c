@@ -1531,8 +1531,10 @@ void render_browser(volatile uint8_t *frame) {
     const char *label = msgs[lang_id][MSG_BROW_SEARCH];
     unsigned qx = 8 + font_width(label) + 4;
     draw_text_idx8_bus16(label, (uint8_t*)&frame[144 * SCREEN_WIDTH + 8], SCREEN_WIDTH, FT_COLOR);
-    draw_text_idx8_bus16(q, (uint8_t*)&frame[144 * SCREEN_WIDTH + qx], SCREEN_WIDTH, FT_COLOR);
-    qx += font_width(q);
+    // Long queries (and longer translated labels) are clipped to the bar.
+    unsigned maxcols = qx < SCREEN_WIDTH - 8 ? SCREEN_WIDTH - 8 - qx : 0;
+    draw_text_idx8_bus16_range(q, (uint8_t*)&frame[144 * SCREEN_WIDTH + qx], 0, maxcols, SCREEN_WIDTH, FT_COLOR);
+    qx += MIN(font_width(q), maxcols);
 
     if (smenu.browser.qedit)
       render_search_wheel(frame, (qx + 3) & ~1);
@@ -3033,8 +3035,12 @@ static void keypress_browse_search(unsigned newkeys) {
       changed = true;
     }
   }
-  else if (newkeys & (KEY_BUTTA | KEY_BUTTSTA))
+  else if (newkeys & (KEY_BUTTA | KEY_BUTTSTA)) {
     smenu.browser.qedit = false;
+    // The browser keys work on the list right away: filter it now if the
+    // wheel was still spinning.
+    changed = search_pending;
+  }
   else if (newkeys & KEY_BUTTLEFT) {
     if (smenu.browser.qlen > 1)
       smenu.browser.qlen--;
@@ -3086,13 +3092,21 @@ static void keypress_menu_browse(unsigned newkeys) {
     if (newkeys & KEY_BUTTA) {
       t_centry *e = sdr_state->fileorder[smenu.browser.selector];
       if (e->isdir) {
+        // Position to come back to: in the full list, not in the search results.
+        int pos = smenu.browser.selector;
+        if (smenu.browser.qlen)
+          for (unsigned i = 0; i < smenu.browser.sortentries; i++)
+            if (sdr_state->sortorder[i] == e) {
+              pos = i;
+              break;
+            }
         strcat(smenu.browser.cpath, e->fname);
         strcat(smenu.browser.cpath, "/");
         browser_clear_search();
         // Push selector history and reset it in the new dir
         memmove(&smenu.browser.selhist[1], &smenu.browser.selhist[0],
                 sizeof(smenu.browser.selhist) - sizeof(smenu.browser.selhist[0]));
-        smenu.browser.selhist[0] = smenu.browser.selector;
+        smenu.browser.selhist[0] = pos;
         smenu.browser.selector = 0;
         browser_reload();
       } else {
