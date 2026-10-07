@@ -366,7 +366,7 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
   // Make it hidden
   f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
-  char buf[256];
+  char buf[512];
   strcpy(buf, ROMCONFIG_PATH);
   strcat(buf, file_basename(fn));
   replace_extension(buf, ".config");
