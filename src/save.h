@@ -28,6 +28,12 @@
 #define ERR_SAVE_FLUSH_NOSENTINEL   1
 #define ERR_SAVE_FLUSH_WRITEFAIL    2
 #define ERR_SAVE_FLUSH_RENAME       3
+#define ERR_SAVE_FLUSH_READFAIL     4   // The sentinel exists but can't be read
+
+// The pending save is still only in the SRAM: keep its sentinel, retry later.
+static inline bool save_flush_retry(unsigned err) {
+  return err == ERR_SAVE_FLUSH_WRITEFAIL || err == ERR_SAVE_FLUSH_READFAIL;
+}
 
 
 // Calculate save game name based on config.

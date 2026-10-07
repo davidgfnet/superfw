@@ -232,15 +232,17 @@ bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups) {
 unsigned flush_pending_sram() {
   FIL fd;
   FRESULT res = f_open(&fd, PENDING_SAVE_FILEPATH, FA_READ);
-  if (res != FR_OK)
+  if (res == FR_NO_FILE || res == FR_NO_PATH)
     return ERR_SAVE_FLUSH_NOSENTINEL;
+  if (res != FR_OK)
+    return ERR_SAVE_FLUSH_READFAIL;      // ie. an SD card error, retry later
 
   // The file contains the save filename template, plus options.
   UINT rdbytes = 0;
   char content[512];
   if (FR_OK != f_read(&fd, content, sizeof(content) - 1, &rdbytes)) {
     f_close(&fd);
-    return ERR_SAVE_FLUSH_NOSENTINEL;
+    return ERR_SAVE_FLUSH_READFAIL;
   }
   content[rdbytes] = 0;
   f_close(&fd);
@@ -424,12 +426,16 @@ NOINLINE
 // and its sentinel is kept. Write it before a game replaces the SRAM contents
 // or the sentinel, and fail (keeping both) if it still can't be written.
 static bool flush_failed_pending_save() {
-  if (!check_file_exists(PENDING_SAVE_FILEPATH))
-    return true;
-  if (flush_pending_sram() == ERR_SAVE_FLUSH_WRITEFAIL)
+  FRESULT res = f_stat(PENDING_SAVE_FILEPATH, NULL);
+  if (res == FR_NO_FILE || res == FR_NO_PATH)
+    return true;                          // Nothing pending
+  if (res != FR_OK)
+    return false;                         // Can't tell (ie. SD error), don't risk it
+  if (save_flush_retry(flush_pending_sram()))
     return false;
-  f_unlink(PENDING_SAVE_FILEPATH);
-  return true;
+  // Written (or not recoverable, ie. an invalid sentinel): remove the sentinel
+  // before the game replaces it, and don't go on if that fails.
+  return FR_OK == f_unlink(PENDING_SAVE_FILEPATH);
 }
 
 unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, const char *savefn) {
