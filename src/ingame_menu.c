@@ -850,23 +850,42 @@ void create_paths(const char *fn) {
 }
 
 // Overwrites the .sav file with our data. The data goes to a temporary file
-// first, so a failed write (ie. an SD card error) never destroys the current
-// save.
+// first, and the current save is kept under a recovery name (.old.sav) until
+// the new one is in place, so a failed write or rename (ie. an SD card error)
+// never destroys it.
 static bool save_overwrite() {
   char finalfn[sizeof(savefile_pattern) + 8], tmpfn[sizeof(savefile_pattern) + 8];
+  char oldfn[sizeof(savefile_pattern) + 8];
   strcpy(finalfn, savefile_pattern);
   strcat(finalfn, ".sav");
   strcpy(tmpfn, savefile_pattern);
   strcat(tmpfn, ".tmp.sav");
+  strcpy(oldfn, savefile_pattern);
+  strcat(oldfn, ".old.sav");
   create_paths(finalfn);     // Just in case it doesn't exist.
 
   bool ok = write_save_sram(tmpfn);
-  if (ok) {
-    f_unlink(finalfn);
-    ok = (FR_OK == f_rename(tmpfn, finalfn));
-  }
-  else
+  if (!ok)
     f_unlink(tmpfn);
+  else {
+    // Move the current save aside. A recovery file next to it is a leftover
+    // from an interrupted replacement (older), but without a current save it
+    // may be the only copy: it is kept then.
+    bool had_save = check_file_exists(finalfn);
+    if (had_save) {
+      f_unlink(oldfn);
+      ok = (FR_OK == f_rename(finalfn, oldfn));
+    }
+    if (ok) {
+      ok = (FR_OK == f_rename(tmpfn, finalfn));
+      if (had_save) {
+        if (ok)
+          f_unlink(oldfn);
+        else
+          f_rename(oldfn, finalfn);   // Put the current save back
+      }
+    }
+  }
 
   popup.msg = msgs[ingame_menu_lang][ok ? IMENU_MSG_SAVEC : IMENU_MSG_SAVEERR];
   return ok;
