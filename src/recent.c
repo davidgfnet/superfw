@@ -102,7 +102,7 @@ NOINLINE unsigned insert_recent_fn(t_rentry *rentries, unsigned rcount, const ch
   rentries[0].fname_offset = pbn - fn;
   rentries[0].flags = flags;
   memcpy32(rentries[0].fpath, fn, strlen(fn) + 1);
-  return rcount + 1;
+  return MIN(rcount + 1, RECENT_MAXFN_CNT);
 }
 
 NOINLINE unsigned delete_recent(t_rentry *rentries, unsigned rcount, unsigned entry_num) {
@@ -140,13 +140,10 @@ NOINLINE unsigned recent_load(const char *fpath, t_rentry *rentries) {
     char *p = strchr(tmp, '\n');
     if (!p)
       p = strchr(tmp, '\0');
-    if (!p)
-      break;       // Some path is way too long!
-
     *p = 0;        // Add the string end char.
 
-    unsigned cnt = strlen(tmp) + 1;
-    if (cnt > 1) {
+    unsigned cnt = p - tmp + 1;
+    if (cnt > 1 && cnt < sizeof(rentries[nentries].fpath)) {
       rentries[nentries].flags = 0;
       if (!memcmp(tmp, "nor:", 4)) {
         rentries[nentries].flags |= FLAG_RECENT_NOR;
@@ -160,8 +157,12 @@ NOINLINE unsigned recent_load(const char *fpath, t_rentry *rentries) {
     }
 
     // Consume the bytes
-    memmove(&tmp[0], &tmp[cnt], bcount - cnt);
-    bcount -= cnt;
+    if (bcount < cnt)
+      bcount = 0;      // Consumed the full buffer (ie. last line or too long).
+    else {
+      memmove(&tmp[0], &tmp[cnt], bcount - cnt + 1);
+      bcount -= cnt;
+    }
   }
 
   WRITE_LOG("Loaded recently played games. %d entries found", nentries);
