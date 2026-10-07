@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": "Guarda el .sav al mateix directori que la ROM",
     "MSG_SAVE_TYPE_PT": "El fitxer de partida (savegame) es guarda al directori %s",
     "MSG_BROW_EMPTY": "Carpeta buida",
+    "MSG_BROW_NOMATCH": "Cap resultat",
+    "MSG_BROW_SEARCH": "Cerca:",
     "MSG_GBALOAD_OPTS": "Opcions de càrrega",
     "MSG_DEF_SPEED": "Velocitat RTC",
     "MSG_FMGR_DEL": "Eliminar arxiu/carpeta",

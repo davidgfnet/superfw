@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": "El archivo .sav se ubica en el mismo directorio que la ROM",
     "MSG_SAVE_TYPE_PT": "El archivo de guardado se ubica en el directorio %s",
     "MSG_BROW_EMPTY": "Carpeta vacía",
+    "MSG_BROW_NOMATCH": "Sin resultados",
+    "MSG_BROW_SEARCH": "Buscar:",
     "MSG_GBALOAD_OPTS": "Opciones de carga",
     "MSG_DEF_SPEED": "Velocidad RTC",
     "MSG_FMGR_DEL": "Eliminar archivo/carpeta",

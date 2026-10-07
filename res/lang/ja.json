@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav in the same dir as the ROM",
     "MSG_SAVE_TYPE_PT": "Save file lives in %s dir",
     "MSG_BROW_EMPTY": "Empty directory",
+    "MSG_BROW_NOMATCH": null,
+    "MSG_BROW_SEARCH": null,
     "MSG_GBALOAD_OPTS": "Loading options",
     "MSG_DEF_SPEED": "RTC speed",
     "MSG_FMGR_DEL": "Delete file/directory",

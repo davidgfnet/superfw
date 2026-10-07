@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav 파일을 ROM과 같은 폴더에 작성",
     "MSG_SAVE_TYPE_PT": "저장 파일은 %s 폴더에 작성됨",
     "MSG_BROW_EMPTY": "비어있는 폴더",
+    "MSG_BROW_NOMATCH": "일치 항목 없음",
+    "MSG_BROW_SEARCH": "검색:",
     "MSG_GBALOAD_OPTS": "불러오기 설정",
     "MSG_DEF_SPEED": "RTC 속도",
     "MSG_FMGR_DEL": "파일/폴더 삭제",

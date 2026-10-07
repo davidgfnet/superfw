@@ -74,6 +74,8 @@ en_strings = [
 
   "MSG_DEFS_PATCH":  "Patching",
   "MSG_BROW_EMPTY":  "Empty directory",
+  "MSG_BROW_NOMATCH": "No matches",
+  "MSG_BROW_SEARCH": "Search:",
 
   "MSG_UIS_THEME": "Theme color",
   "MSG_UIS_LANG":  "Language",

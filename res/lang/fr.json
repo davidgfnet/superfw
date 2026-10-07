@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav dans le même répertoire que la ROM",
     "MSG_SAVE_TYPE_PT": "Le fichier de sauvegarde est enregistré dans le répertoire %s",
     "MSG_BROW_EMPTY": "Ce dossier est vide",
+    "MSG_BROW_NOMATCH": "Aucun résultat",
+    "MSG_BROW_SEARCH": "Chercher :",
     "MSG_GBALOAD_OPTS": "Options de chargement",
     "MSG_DEF_SPEED": "Vitesse RTC",
     "MSG_FMGR_DEL": "Supprimer fichier/répertoire",

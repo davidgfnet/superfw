@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav与ROM放在同一目录",
     "MSG_SAVE_TYPE_PT": "将存档放置在%s目录",
     "MSG_BROW_EMPTY": "空白目录",
+    "MSG_BROW_NOMATCH": "没有匹配项",
+    "MSG_BROW_SEARCH": "搜索: ",
     "MSG_GBALOAD_OPTS": "读取选项",
     "MSG_DEF_SPEED": "时钟速率",
     "MSG_FMGR_DEL": "删除文件或目录",

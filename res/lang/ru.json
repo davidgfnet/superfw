@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": "Сохранить в ту же папку, что и файл",
     "MSG_SAVE_TYPE_PT": "Сохранять файлы в папке %s",
     "MSG_BROW_EMPTY": "Пустая папка",
+    "MSG_BROW_NOMATCH": "Ничего не найдено",
+    "MSG_BROW_SEARCH": "Поиск:",
     "MSG_GBALOAD_OPTS": "Опции загрузки",
     "MSG_DEF_SPEED": "Скорость RTC",
     "MSG_FMGR_DEL": "Удалить файл/папку",

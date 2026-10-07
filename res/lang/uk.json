@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": "Зберегти у ту ж теку де знаходиться файл",
     "MSG_SAVE_TYPE_PT": "Зберегти файли в теку %s",
     "MSG_BROW_EMPTY": "Порожня тека",
+    "MSG_BROW_NOMATCH": "Нічого не знайдено",
+    "MSG_BROW_SEARCH": "Пошук:",
     "MSG_GBALOAD_OPTS": "Опції завантаження",
     "MSG_DEF_SPEED": "Швидкість RTC",
     "MSG_FMGR_DEL": "Видалити файл/теку",

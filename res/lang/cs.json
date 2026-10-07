@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav je ve stejné složce jako ROM",
     "MSG_SAVE_TYPE_PT": "uložená hra je ve složce %s",
     "MSG_BROW_EMPTY": "Empty directory",
+    "MSG_BROW_NOMATCH": "Žádné výsledky",
+    "MSG_BROW_SEARCH": "Hledat:",
     "MSG_GBALOAD_OPTS": "Loading options",
     "MSG_DEF_SPEED": "RTC speed",
     "MSG_FMGR_DEL": "Delete file/directory",

@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav nello stesso perc. della ROM",
     "MSG_SAVE_TYPE_PT": "I salvataggi sono in %s",
     "MSG_BROW_EMPTY": "Cartella vuota",
+    "MSG_BROW_NOMATCH": "Nessun risultato",
+    "MSG_BROW_SEARCH": "Cerca:",
     "MSG_GBALOAD_OPTS": "Opz. di caricamento",
     "MSG_DEF_SPEED": "Velocità RTC",
     "MSG_FMGR_DEL": "Elimina file/directory",

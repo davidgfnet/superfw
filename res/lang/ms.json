@@ -196,6 +196,8 @@
     "MSG_SAVE_TYPE_NR": ".sav dalam satu folder dengan ROM",
     "MSG_SAVE_TYPE_PT": "Simpanan berada dalam %s",
     "MSG_BROW_EMPTY": "Empty directory",
+    "MSG_BROW_NOMATCH": "Tiada padanan",
+    "MSG_BROW_SEARCH": "Cari:",
     "MSG_GBALOAD_OPTS": "Loading options",
     "MSG_DEF_SPEED": "RTC speed",
     "MSG_FMGR_DEL": "Delete file/directory",
