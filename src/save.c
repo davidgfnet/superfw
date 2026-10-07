@@ -244,6 +244,7 @@ unsigned flush_pending_sram() {
     return ERR_SAVE_FLUSH_NOSENTINEL;
   }
   content[rdbytes] = 0;
+  f_close(&fd);
 
   // Separate options using NULL.
   unsigned l = strlen(content);
@@ -257,7 +258,7 @@ unsigned flush_pending_sram() {
   for (unsigned i = strlen(content) + 1; i < l + 1; ) {
     if (!strncmp(&content[i], "backup_count=", 13))
       bkpn = &content[i + 13];
-    i += strlen(content) + 1;
+    i += strlen(&content[i]) + 1;
   }
 
   // Parse options.
