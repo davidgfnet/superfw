@@ -462,9 +462,9 @@ bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_buil
       }
       else if (SEEMS_FLASHINFO(info1)) {
         if (FLASHINFO_VALIDSIZE(info1) && valid_flashid(info1->device_id)) {
-          push_save_handler(patch, OPC_FLASH_HD, FLASH_CLRC_HNDLR, 0x1FFFFFE & info2->erase_chip_fnptr);
-          push_save_handler(patch, OPC_FLASH_HD, FLASH_CLRS_HNDLR, 0x1FFFFFE & info2->erase_sector_fnptr);
-          push_save_handler(patch, OPC_FLASH_HD, FLASH_WRTS_HNDLR, 0x1FFFFFE & info2->program_sector_fnptr);
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_CLRC_HNDLR, 0x1FFFFFE & info1->erase_chip_fnptr);
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_CLRS_HNDLR, 0x1FFFFFE & info1->erase_sector_fnptr);
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_WRTS_HNDLR, 0x1FFFFFE & info1->program_sector_fnptr);
           if (info1->device_id) {
             if (isflash128k(info1->device_id))
               patchb->flash128cnt++;
