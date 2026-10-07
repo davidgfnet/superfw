@@ -996,7 +996,7 @@ void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
       if (recent_menu)
         insert_recent_flush(fn, FLAG_RECENT_SD);
 
-      unsigned errcode = load_extemu_rom(fn, fs, ldinfo, loadrom_progress);
+      errcode = load_extemu_rom(fn, fs, ldinfo, loadrom_progress);
       if (errcode && errcode != ERR_LOAD_NOEMU)
         break;
       ldinfo++;
