@@ -336,23 +336,28 @@ static void parse_rom_launch_settings(void *usr, const char *var, const char *va
 }
 
 bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_settings *rlh) {
-  char buf[512];
-  strcpy(buf, ROMCONFIG_PATH);
-  strcat(buf, file_basename(fn));
-  replace_extension(buf, ".config");
-
-  // Attempt to open and read the file.
   FIL fd;
-  if (FR_OK != f_open(&fd, buf, FA_READ))
-    return false;
+  {
+    char fn[MAX_FN_LEN];
+    strcpy(fn, ROMCONFIG_PATH);
+    strcat(fn, file_basename(fn));
+    replace_extension(fn, ".config");
 
-  UINT rdbytes;
-  if (FR_OK == f_read(&fd, buf, sizeof(buf) - 1, &rdbytes)) {
-    buf[rdbytes] = 0;
-    if (rld)
-      parse_file(buf, parse_rom_load_settings, rld);
-    if (rlh)
-      parse_file(buf, parse_rom_launch_settings, rlh);
+    // Attempt to open and read the file.
+    if (FR_OK != f_open(&fd, fn, FA_READ))
+      return false;
+  }
+
+  {
+    char buf[128];
+    UINT rdbytes;
+    if (FR_OK == f_read(&fd, buf, sizeof(buf) - 1, &rdbytes)) {
+      buf[rdbytes] = 0;
+      if (rld)
+        parse_file(buf, parse_rom_load_settings, rld);
+      if (rlh)
+        parse_file(buf, parse_rom_launch_settings, rlh);
+    }
   }
   f_close(&fd);
 
