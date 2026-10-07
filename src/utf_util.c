@@ -136,5 +136,6 @@ void sortable_utf8_u16(const char *s8, uint16_t *s16) {
 
     s8 += utf8_chlen(s8);
   }
+  *s16 = 0;
 }
 
