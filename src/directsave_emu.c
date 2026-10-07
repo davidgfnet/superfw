@@ -272,7 +272,7 @@ int ds_erase_sector_flash(uint32_t sectnum) {
 
   evict_flush_flash_cache();  // Flush any cached data (usually does nothing)
 
-  if (sectnum * 4096 > get_memory_size())
+  if (sectnum * 4096 >= get_memory_size())
     return -1;
 
   // Clear buffer and write that to the SD card
