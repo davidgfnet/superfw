@@ -942,6 +942,10 @@ static void load_patchdb_action(bool confirm) {
           return;
         }
 
+        // The copy works in words: don't let stale bytes follow the file data.
+        if (toread < sizeof(tmp))
+          memset((uint8_t*)tmp + toread, 0, sizeof(tmp) - toread);
+
         set_supercard_mode(MAPPED_SDRAM, true, false);
         dma_memcpy32(ROM_PATCHDB_U8 + off, tmp, (toread + 3) / 4);
         set_supercard_mode(MAPPED_SDRAM, true, true);
