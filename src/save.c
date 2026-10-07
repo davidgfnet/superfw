@@ -136,14 +136,13 @@ bool write_save_sram(const char *fn) {
     set_supercard_mode(MAPPED_SDRAM, true, true);
 
     res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
-    if (res != FR_OK) {
+    if (res != FR_OK || wrbytes != sizeof(tmpbuf)) {   // ie. card full
       f_close(&fd);
       return false;
     }
   }
-  f_close(&fd);
 
-  return true;
+  return FR_OK == f_close(&fd);
 }
 
 bool compare_save_sram(const char *fn) {
@@ -421,8 +420,23 @@ bool copy_save_contiguous_file(const char *fn, const char *dest, unsigned size) 
 }
 
 NOINLINE
+// A pending SRAM save that could not be written at boot is still in the SRAM,
+// and its sentinel is kept. Write it before a game replaces the SRAM contents
+// or the sentinel, and fail (keeping both) if it still can't be written.
+static bool flush_failed_pending_save() {
+  if (!check_file_exists(PENDING_SAVE_FILEPATH))
+    return true;
+  if (flush_pending_sram() == ERR_SAVE_FLUSH_WRITEFAIL)
+    return false;
+  f_unlink(PENDING_SAVE_FILEPATH);
+  return true;
+}
+
 unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, const char *savefn) {
   WRITE_LOG("Preparing SRAM-based save game. LdPol: %d SvPol: %d Save file: '%s'", loadp, savep, savefn);
+
+  if (!flush_failed_pending_save())
+    return ERR_SAVE_CANTWRITE;
 
   // Clear the SRAM before loading any data (avoid random garbage!), unless in manual mode ofc.
   if (loadp != SaveLoadDisable)
@@ -459,6 +473,9 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
 
   WRITE_LOG("Preparing save game. LdPol: %d SvPol: %d SavType: %d Uses DirSav: %d Save file: '%s'",
             loadp, savep, stype, dsinfo ? 1 : 0, savefn);
+
+  if (!flush_failed_pending_save())
+    return ERR_SAVE_CANTWRITE;
 
   // Branch on the two main saving modes: DirectSave and SRAM-based saving.
   if (savep == SaveDirect) {
