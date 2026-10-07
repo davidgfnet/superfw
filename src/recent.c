@@ -102,7 +102,8 @@ NOINLINE unsigned insert_recent_fn(t_rentry *rentries, unsigned rcount, const ch
   rentries[0].fname_offset = pbn - fn;
   rentries[0].flags = flags;
   memcpy32(rentries[0].fpath, fn, strlen(fn) + 1);
-  return rcount + 1;
+  // The oldest entry falls off the end when the list is full.
+  return MIN(rcount + 1, RECENT_MAXFN_CNT);
 }
 
 NOINLINE unsigned delete_recent(t_rentry *rentries, unsigned rcount, unsigned entry_num) {
@@ -127,8 +128,10 @@ NOINLINE unsigned recent_load(const char *fpath, t_rentry *rentries) {
   while (nentries < RECENT_MAXFN_CNT) {
     if (bcount <= 512) {
       UINT rdbytes;
-      if (FR_OK != f_read(&fi, &tmp[bcount], 512, &rdbytes))
+      if (FR_OK != f_read(&fi, &tmp[bcount], 512, &rdbytes)) {
+        f_close(&fi);
         return nentries;
+      }
       bcount += rdbytes;
       tmp[bcount] = 0;
     }
@@ -145,15 +148,19 @@ NOINLINE unsigned recent_load(const char *fpath, t_rentry *rentries) {
 
     *p = 0;        // Add the string end char.
 
-    unsigned cnt = strlen(tmp) + 1;
-    if (cnt > 1) {
+    unsigned cnt = strlen(tmp) + 1;      // Bytes consumed (line + separator)
+    unsigned len = cnt - 1;
+    if (len && tmp[len - 1] == '\r')
+      tmp[--len] = 0;                    // Edited on Windows
+    // Skip empty lines, and paths that can't be valid (too long).
+    if (len && len < MAX_FN_LEN) {
       rentries[nentries].flags = 0;
       if (!memcmp(tmp, "nor:", 4)) {
         rentries[nentries].flags |= FLAG_RECENT_NOR;
-        dma_memcpy16(rentries[nentries].fpath, &tmp[4], (cnt - 4 + 1) / 2);
+        dma_memcpy16(rentries[nentries].fpath, &tmp[4], (len - 4 + 2) / 2);
       }
       else
-        dma_memcpy16(rentries[nentries].fpath, tmp, (cnt + 1) / 2);
+        dma_memcpy16(rentries[nentries].fpath, tmp, (len + 2) / 2);
 
       rentries[nentries].fname_offset = file_basename(rentries[nentries].fpath) - rentries[nentries].fpath;
       nentries++;
