@@ -122,48 +122,48 @@ NOINLINE unsigned recent_load(const char *fpath, t_rentry *rentries) {
   if (FR_OK != f_open(&fi, fpath, FA_READ))
     return 0;
 
-  // Read data block by block.
+  // Read data block by block. Each line is a path (or "nor:" and a path),
+  // lines that can't be one (too long) are skipped.
   char tmp[1024 + 4];
   unsigned bcount = 0, nentries = 0;
+  bool eof = false, skipping = false;
   while (nentries < RECENT_MAXFN_CNT) {
-    if (bcount <= 512) {
+    if (bcount <= 512 && !eof) {
       UINT rdbytes;
-      if (FR_OK != f_read(&fi, &tmp[bcount], 512, &rdbytes)) {
-        f_close(&fi);
-        return nentries;
-      }
+      if (FR_OK != f_read(&fi, &tmp[bcount], 512, &rdbytes))
+        break;
+      eof = rdbytes < 512;
       bcount += rdbytes;
-      tmp[bcount] = 0;
     }
 
     if (!bcount)
       break;
 
-    // Attempt to parse the next path.
-    char *p = strchr(tmp, '\n');
-    if (!p)
-      p = strchr(tmp, '\0');
-    if (!p)
-      break;       // Some path is way too long!
+    // Find the end of the line. Without a newline in the buffer, it is
+    // either the last line of the file or a line too long to be a path,
+    // which is skipped up to its newline (that can come in later blocks).
+    char *nl = memchr(tmp, '\n', bcount);
+    unsigned len = nl ? (unsigned)(nl - tmp) : bcount;
+    unsigned cnt = nl ? len + 1 : bcount;      // Bytes consumed
 
-    *p = 0;        // Add the string end char.
-
-    unsigned cnt = strlen(tmp) + 1;      // Bytes consumed (line + separator)
-    unsigned len = cnt - 1;
-    if (len && tmp[len - 1] == '\r')
-      tmp[--len] = 0;                    // Edited on Windows
-    // Skip empty lines, and paths that can't be valid (too long).
-    if (len && len < MAX_FN_LEN) {
-      rentries[nentries].flags = 0;
-      if (!memcmp(tmp, "nor:", 4)) {
-        rentries[nentries].flags |= FLAG_RECENT_NOR;
-        dma_memcpy16(rentries[nentries].fpath, &tmp[4], (len - 4 + 2) / 2);
+    if (!nl && !eof)
+      skipping = true;
+    else if (skipping)
+      skipping = false;                        // End of a skipped line
+    else {
+      tmp[len] = 0;
+      if (len && tmp[len - 1] == '\r')
+        tmp[--len] = 0;                        // Edited on Windows
+      bool nor = len >= 4 && !memcmp(tmp, "nor:", 4);
+      const char *path = nor ? &tmp[4] : tmp;
+      unsigned plen = nor ? len - 4 : len;
+      // Skip empty lines, and paths that don't fit an entry.
+      if (plen && plen < MAX_FN_LEN) {
+        rentries[nentries].flags = nor ? FLAG_RECENT_NOR : 0;
+        dma_memcpy16(rentries[nentries].fpath, path, (plen + 2) / 2);
+        rentries[nentries].fname_offset = file_basename(rentries[nentries].fpath) - rentries[nentries].fpath;
+        nentries++;
       }
-      else
-        dma_memcpy16(rentries[nentries].fpath, tmp, (len + 2) / 2);
-
-      rentries[nentries].fname_offset = file_basename(rentries[nentries].fpath) - rentries[nentries].fpath;
-      nentries++;
     }
 
     // Consume the bytes
