@@ -226,6 +226,7 @@ const struct {
   { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) }, // Dark
 };
 #define THEME_COUNT (sizeof(themes) / sizeof(themes[0]))
+_Static_assert(THEME_COUNT == MENU_THEME_COUNT, "Update MENU_THEME_COUNT in settings.h");
 
 typedef struct {
   // ROM information

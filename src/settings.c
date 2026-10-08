@@ -229,19 +229,21 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
     uint16_t code = ((uint8_t)value[0]) | (((uint8_t)value[1]) << 8);
     lang_id = lang_lookup(code);
   } else {
+    // Values index tables: keep them in range, like the other settings.
     static const struct {
       const char *s;
       uint8_t * const var;
+      const unsigned modval;
     } uintset[] = {
-      { "theme",       &menu_theme },
-      { "recent_menu", &recent_menu },
-      { "hide_hidden", &hide_hidden },
-      { "anim_speed",  &anim_speed },
+      { "theme",       &menu_theme,  MENU_THEME_COUNT },
+      { "recent_menu", &recent_menu, 2 },
+      { "hide_hidden", &hide_hidden, 2 },
+      { "anim_speed",  &anim_speed,  animspd_cnt },
     };
     unsigned valu = parseuint(value);
     for (unsigned i = 0; i < sizeof(uintset)/sizeof(uintset[0]); i++)
       if (!strcmp(var, uintset[i].s)) {
-        *uintset[i].var = valu;
+        *uintset[i].var = valu % uintset[i].modval;
         break;
       }
   }

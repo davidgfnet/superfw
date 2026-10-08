@@ -34,6 +34,7 @@ extern const t_combo_key hotkey_list[13];
 
 extern const uint8_t animspd_lut[5];
 #define animspd_cnt (sizeof(animspd_lut)/sizeof(animspd_lut[0]))
+#define MENU_THEME_COUNT 6        // Number of menu color themes (see menu.c)
 
 enum { SaveSavegameDir = 0, SaveSavesDir = 1, SaveRomName = 2, SaveDirNORCNT = 2, SaveDirCNT = 3 };
 enum { StateSavestateDir = 0, StateSuperFWSavestateDir = 1, StateDirCNT = 2 };
