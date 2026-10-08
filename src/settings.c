@@ -338,13 +338,13 @@ static void parse_rom_launch_settings(void *usr, const char *var, const char *va
 bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_settings *rlh) {
   FIL fd;
   {
-    char fn[MAX_FN_LEN];
-    strcpy(fn, ROMCONFIG_PATH);
-    strcat(fn, file_basename(fn));
-    replace_extension(fn, ".config");
+    char path[MAX_FN_LEN];
+    strcpy(path, ROMCONFIG_PATH);
+    strcat(path, file_basename(fn));
+    replace_extension(path, ".config");
 
     // Attempt to open and read the file.
-    if (FR_OK != f_open(&fd, fn, FA_READ))
+    if (FR_OK != f_open(&fd, path, FA_READ))
       return false;
   }
 
@@ -374,12 +374,12 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
   // Proceed to create the file
   FIL fd;
   {
-    char fn[MAX_FN_LEN];
-    strcpy(fn, ROMCONFIG_PATH);
-    strcat(fn, file_basename(fn));
-    replace_extension(fn, ".config");
+    char path[MAX_FN_LEN];
+    strcpy(path, ROMCONFIG_PATH);
+    strcat(path, file_basename(fn));
+    replace_extension(path, ".config");
 
-    if (FR_OK != f_open(&fd, fn, FA_WRITE | FA_CREATE_ALWAYS))
+    if (FR_OK != f_open(&fd, path, FA_WRITE | FA_CREATE_ALWAYS))
       return false;
   }
 
