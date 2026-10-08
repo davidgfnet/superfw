@@ -915,6 +915,11 @@ void patch_gen_callback(bool confirm) {
 
 static void load_patchdb_action(bool confirm) {
   if (confirm) {
+    // The database area is 1MiB, the emulator assets follow it.
+    if (spop.p.pdb_ld.fs > ROM_OFF_ASSETS_BASE - ROM_OFF_PATCH_DB) {
+      spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+      return;
+    }
     FIL fd;
     FRESULT res = f_open(&fd, spop.p.pdb_ld.fn, FA_READ);
     if (res != FR_OK) {
@@ -924,15 +929,28 @@ static void load_patchdb_action(bool confirm) {
       for (unsigned off = 0; off < spop.p.pdb_ld.fs; off += 1024) {
         UINT rdbytes;
         uint32_t tmp[1024/4];
-        if (FR_OK != f_read(&fd, tmp, sizeof(tmp), &rdbytes)) {
+        unsigned toread = MIN(sizeof(tmp), spop.p.pdb_ld.fs - off);
+        if (FR_OK != f_read(&fd, tmp, toread, &rdbytes) || rdbytes != toread) {
+          f_close(&fd);
+          // A partial database is unusable: clear its signature so that no
+          // lookups use it (the built-in one comes back on reboot).
+          tmp[0] = 0;
+          set_supercard_mode(MAPPED_SDRAM, true, false);
+          dma_memcpy32(ROM_PATCHDB_U8, tmp, 1);
+          set_supercard_mode(MAPPED_SDRAM, true, true);
           spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
           return;
         }
 
+        // The copy works in words: don't let stale bytes follow the file data.
+        if (toread < sizeof(tmp))
+          memset((uint8_t*)tmp + toread, 0, sizeof(tmp) - toread);
+
         set_supercard_mode(MAPPED_SDRAM, true, false);
-        dma_memcpy32(ROM_PATCHDB_U8 + off, tmp, sizeof(tmp)/4);
+        dma_memcpy32(ROM_PATCHDB_U8 + off, tmp, (toread + 3) / 4);
         set_supercard_mode(MAPPED_SDRAM, true, true);
       }
+      f_close(&fd);
     }
     spop.alert_msg = msgs[lang_id][MSG_OK_GENERIC];
   }
