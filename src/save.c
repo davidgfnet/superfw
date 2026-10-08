@@ -106,16 +106,15 @@ bool wipe_sav_file(const char *fn) {
   for (unsigned i = 0; i < SRAM_CHIP_SIZE; i += sizeof(tmpbuf)) {
     UINT wrbytes = 0;
     res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
-    if (res != FR_OK) {
+    if (res != FR_OK || wrbytes != sizeof(tmpbuf)) {
       f_close(&fd);
       return false;
     }
   }
-  f_close(&fd);
 
   WRITE_LOG("Wiped save file: %s", fn);
 
-  return true;
+  return f_close(&fd) == FR_OK;
 }
 
 bool write_save_sram(const char *fn) {
@@ -136,14 +135,13 @@ bool write_save_sram(const char *fn) {
     set_supercard_mode(MAPPED_SDRAM, true, true);
 
     res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
-    if (res != FR_OK) {
+    if (res != FR_OK || wrbytes != sizeof(tmpbuf)) {
       f_close(&fd);
       return false;
     }
   }
-  f_close(&fd);
 
-  return true;
+  return f_close(&fd) == FR_OK;
 }
 
 bool compare_save_sram(const char *fn) {
