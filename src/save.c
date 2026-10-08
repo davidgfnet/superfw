@@ -190,14 +190,13 @@ bool rotate_savefile(const char *templ_fn, unsigned max_backups) {
   WRITE_LOG("Rotating save file '%s' (#backups: %d)", templ_fn, max_backups);
 
   // Backup renaming, f_rename doesn't like existing dest files tho.
-  if (max_backups) {
-    npf_snprintf(tmpfn, sizeof(tmpfn), "%s.%u.sav", templ_fn, max_backups+1);
-    f_unlink(tmpfn);
-    for (unsigned i = max_backups; i >= 1; i--) {
-      npf_snprintf(dstfn, sizeof(dstfn), "%s.%u.sav", templ_fn, i+1);
-      npf_snprintf(tmpfn, sizeof(tmpfn), "%s.%u.sav", templ_fn, i);
-      f_rename(tmpfn, dstfn);
-    }
+  npf_snprintf(tmpfn, sizeof(tmpfn), "%s.%u.sav", templ_fn, max_backups+1);
+  f_unlink(tmpfn);
+
+  for (unsigned i = max_backups; i >= 1; i--) {
+    npf_snprintf(dstfn, sizeof(dstfn), "%s.%u.sav", templ_fn, i+1);
+    npf_snprintf(tmpfn, sizeof(tmpfn), "%s.%u.sav", templ_fn, i);
+    f_rename(tmpfn, dstfn);
   }
 
   // Rename the .sav to .1.sav
@@ -228,6 +227,22 @@ bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups) {
   return rotate_savefile(templ_fn, max_backups);
 }
 
+bool write_save_sram_safe_overwrite(const char *templ_fn) {
+  char tmpfn[MAX_FN_LEN], finalfn[MAX_FN_LEN];
+  strcpy(tmpfn, templ_fn);
+  strcat(tmpfn, ".tmp.sav");
+  if (!write_save_sram(tmpfn))
+    return false;
+
+  strcpy(finalfn, templ_fn);
+  strcat(finalfn, ".sav");
+
+  // No way to do this atomic/safe, this is the closest probably :P
+  f_unlink(finalfn);
+  f_rename(tmpfn, finalfn);
+
+  return true;
+}
 
 // Writes a save game from SRAM using a pending file sentinel as input.
 unsigned flush_pending_sram() {

@@ -850,12 +850,10 @@ void create_paths(const char *fn) {
 }
 
 bool action_save_overw() {
-  // Just overwrites the .sav file with our data.
-  char finalfn[256];
-  strcpy(finalfn, savefile_pattern);
-  strcat(finalfn, ".sav");
-  create_paths(finalfn);     // Just in case it doesn't exist.
-  if (write_save_sram(finalfn))
+  // Just overwrites the .sav file with our data. We use a tmp file for safety though.
+
+  create_paths(savefile_pattern);     // Just in case it doesn't exist.
+  if (write_save_sram_safe_overwrite(savefile_pattern))
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEC];
   else
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];

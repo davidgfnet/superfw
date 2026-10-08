@@ -50,6 +50,9 @@ bool write_save_sram(const char *fn);
 // Writes an SRAM file to disk, maintaining backups and whatnot.
 bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups);
 
+// Write a .sav file to disk, using a temp file and a rename.
+bool write_save_sram_safe_overwrite(const char *templ_fn);
+
 // Writes a save game from SRAM using a pending file sentinel as input.
 unsigned flush_pending_sram();
 
