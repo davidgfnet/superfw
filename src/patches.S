@@ -657,8 +657,17 @@ START_FUNC(patch_rtc_gettimedate)
 1:
   mrs r3, CPSR                 // Save the current CPSR
   msr CPSR_c, $(0x1B | 0x80)   // Move to undefined mode, no interrupts
-  add lr, lr, sp, lsl #3       // UNDEF[SP] contains the RTC speed (0 to 5 -> 0,8,16,24,32,40)
-  mov r5, lr                   // Read UNDEF[LR]
+  // UNDEF[SP] holds speed (bits 0..2) plus a persistent speed accumulator
+  // (bits 3+). Each query subtracts 'speed' units from a 176-unit budget;
+  // when the budget underflows the timestamp advances by one second and the
+  // budget is refilled. At 60 GetTimeDate queries/sec the effective rates are
+  // approximately: 0=0x, 1=0.34x, 2=0.68x, 3=1.02x, 4=1.36x, 5=1.70x real
+  // time. Frozen (speed 0) subtracts zero, so the timestamp never changes.
+  and r1, sp, #7               // Extract RTC speed (0..5)
+  sub sp, sp, r1, lsl #3       // Decrement budget by speed units
+  addcc lr, lr, #1             // Budget underflow -> advance one second
+  addcc sp, sp, #0x580         // Refill the 176-unit budget
+  mov r5, lr                   // Read the (possibly advanced) timestamp
   msr CPSR_c, r3               // Restore original model and CPSR
 
   add r2, pc, $1
@@ -718,12 +727,11 @@ START_FUNC(patch_rtc_gettimedate)
   strb r0, [r4, #1]
 
   mov r0, r5
+  add r0, #1                   // Day of month is 1-based in BCD output
   bl bcdconv                   // Get day
   strb r0, [r4, #2]
 
-  pop {r4, r5}
-  pop {r0}                     // Return non-zero (true)
-  bx r0
+  pop {r4, r5, pc}             // Return with r0 != 0 (day BCD, never zero)
 
 // Division by N routine, divides r5 by r1.
 // Quotient stored back to r5, the remainder r0 is BCD converted.
