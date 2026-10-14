@@ -680,6 +680,11 @@ START_FUNC(patch_rtc_gettimedate)
   bl div_ts_bcd
   strb r0, [r4, #4]
 
+  add r0, r5, $6               // 2000-01-01 is Saturday (6); r5 = total number of days since 2000-01-01
+  mov r1, $7
+  swi 0x6                      // r1 = (total days + 6) % 7; 0 = Sunday
+  strb r1, [r4, #3]
+
   // r5 contains the number of days since 2000-01-01
   // it's a bit trickier to get year/month/day now.
 
@@ -694,7 +699,10 @@ START_FUNC(patch_rtc_gettimedate)
       add r2, $12    // Jump 12 months in the table
     2:
     sub r5, r1       // Decrement 365 or 366
-    bcs 1b           // Keep looping if the result was 0+
+    bcc 3f           // Underflowed, we found our year
+    add r0, $1       // Otherwise move on to the next year
+    b 1b
+  3:
 
   add r5, r1  // r5 underflowed, re-add r1 to go back one iteration
 
@@ -717,8 +725,8 @@ START_FUNC(patch_rtc_gettimedate)
   bl bcdconv                   // Get month
   strb r0, [r4, #1]
 
-  mov r0, r5
-  bl bcdconv                   // Get day
+  add r0, r5, $1
+  bl bcdconv                   // Get day (1 based)
   strb r0, [r4, #2]
 
   pop {r4, r5}
