@@ -1042,15 +1042,43 @@ void sstkey(uint16_t keyp) {
     state_slot = -num_dsk_savestates;
 }
 
-void rtckey(uint16_t keyp) {
-  if (copt < 5) {
-    uint8_t *rval = (uint8_t*)&rtc_date;
-    if (keyp & KEY_BUTTUP)
-      rval[copt]++;
-    if (keyp & KEY_BUTTDOWN)
-      rval[copt]--;
+// Long press key repeat for the RTC menu (the virtual clock fields).
+// The IGM is a standalone payload without systime(), so instead of the timer
+// based repeater in menu.c we count frames here: the IGM main loop runs exactly
+// one iteration per frame, so one call is one tick of ~50/3 ms. The timings
+// themselves come from ingame.h, shared with the boot menu.
+static uint8_t rtc_repwait;      // Frames left before the next repeat
+static uint8_t rtc_repcnt;       // Repeats already sent at the MID rate
 
-    fixdate(&rtc_date);
+void rtckey(uint16_t keyp) {
+  uint16_t dir = (~REG_KEYINPUT) & (KEY_BUTTUP | KEY_BUTTDOWN);
+  int delta = 0;
+
+  if (!dir) {                        // Released, reset the repeat state
+    rtc_repwait = 0;
+    rtc_repcnt  = 0;
+  } else if (keyp & dir) {           // Fresh press, act right away
+    rtc_repwait = KEY_REPEAT_INITIAL_F;
+    rtc_repcnt  = 0;
+    delta = (dir & KEY_BUTTUP) ? 1 : -1;
+  } else if (rtc_repwait) {          // Still within the initial delay
+    rtc_repwait--;
+  } else {                           // Repeat, at MID rate then FAST
+    if (rtc_repcnt >= KEY_REPEAT_CNT1)
+      rtc_repwait = KEY_REPEAT_FAST_F;
+    else {
+      rtc_repwait = KEY_REPEAT_MID_F;
+      rtc_repcnt++;
+    }
+    delta = (dir & KEY_BUTTUP) ? 1 : -1;
+  }
+
+  if (copt < 5) {
+    if (delta) {
+      uint8_t *rval = (uint8_t*)&rtc_date;
+      rval[copt] += delta;           // fixdate() wraps out of range values
+      fixdate(&rtc_date);
+    }
   } else if (copt == 5) {
     if (keyp & KEY_BUTTUP)
       rtc_speed++;
