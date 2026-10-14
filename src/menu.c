@@ -61,10 +61,7 @@ enum {
 
 #define ANIM_INITIAL_WAIT     128    // Intial wait (in anim cycles)
 
-#define KEY_REPEAT_INITIAL    384    // Initial wait for key repeat
-#define KEY_REPEAT_MID        160    // Next key presses
-#define KEY_REPEAT_FAST        96    // End speed
-#define KEY_REPEAT_CNT1         5
+// Key repeat timings live in ingame.h (shared with the in-game menu).
 
 enum {
   POPUP_NONE,

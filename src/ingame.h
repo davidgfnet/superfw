@@ -29,6 +29,22 @@
 #define FLASH_IGM_TRAMP_NOCHEATS_OFF    ( 8*4)    // Offsets in ingame_trampoline.S
 #define FLASH_IGM_TRAMP_CHEATS_OFF      (32*4)
 
+// Key repeat timing, shared by the boot menu (menu.c, which repeats keys using
+// systime() in milliseconds) and the in-game menu (ingame_menu.c). The IGM is
+// a standalone payload that does not link main.c, so it has no systime() and
+// counts frames instead: the IGM main loop runs exactly one iteration per frame
+// and systime() == frame_count * 50 / 3 (see main.c), i.e. one frame is 50/3 ms.
+#define KEY_REPEAT_INITIAL    384    // Initial wait for key repeat (ms)
+#define KEY_REPEAT_MID        160    // Next key presses (ms)
+#define KEY_REPEAT_FAST        96    // End speed (ms)
+#define KEY_REPEAT_CNT1         5    // MID rate repeats before switching to FAST
+
+// Same timings expressed in IGM frames (rounded up).
+#define MS_TO_FRAMES(ms)      (((ms) * 3 + 49) / 50)
+#define KEY_REPEAT_INITIAL_F  MS_TO_FRAMES(KEY_REPEAT_INITIAL)
+#define KEY_REPEAT_MID_F      MS_TO_FRAMES(KEY_REPEAT_MID)
+#define KEY_REPEAT_FAST_F     MS_TO_FRAMES(KEY_REPEAT_FAST)
+
 #ifndef __ASSEMBLER__
 
 // In-game menu patching structure
