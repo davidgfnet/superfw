@@ -683,8 +683,9 @@ START_FUNC(patch_rtc_gettimedate)
   // r5 contains the number of days since 2000-01-01
   // it's a bit trickier to get year/month/day now.
 
-  mov r0, $0         // Start on year 2000 (0)
+  sbc r0, r0         // Start on year 1999 (-1), C is always clear here.
   1:
+    add r0, $1       // Increment year in advance since we start at -1
     mov r1, $180     // Assume non-leap year
     add r1, $185
     adr r2, months
@@ -717,7 +718,7 @@ START_FUNC(patch_rtc_gettimedate)
   bl bcdconv                   // Get month
   strb r0, [r4, #1]
 
-  mov r0, r5
+  add r0, r5, $1
   bl bcdconv                   // Get day
   strb r0, [r4, #2]
 
