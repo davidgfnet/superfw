@@ -219,5 +219,10 @@
     "MSG_UIS_SPD2": "常规",
     "MSG_UIS_SPD3": "快",
     "MSG_UIS_SPD4": "非常快",
-    "MSG_STILLRTC": "静止"
+    "MSG_STILLRTC": "静止",
+    "MSG_STATE_TYPE_PT": "即时存档存放在 %s 目录中",
+    "MSG_SETT_SAVETX": "NOR游戏存档路径",
+    "MSG_SAVE_TYPE_PTX": "Save file lives (for in-flash games) in %s dir",
+    "MSG_SETT_VERNOR": "校验写入内容",
+    "MSG_VERNOR_I": "Checks ROMs written to flash"
 }
