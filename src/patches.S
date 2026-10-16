@@ -680,6 +680,11 @@ START_FUNC(patch_rtc_gettimedate)
   bl div_ts_bcd
   strb r0, [r4, #4]
 
+  add r0, r5, $6               // Jan 1st 2000 is saturday (#6)
+  mov r1, $7
+  swi 0x6                      // r1 = (days + 6) % 7
+  strb r1, [r4, #3]            // Store day of week
+
   // r5 contains the number of days since 2000-01-01
   // it's a bit trickier to get year/month/day now.
 
@@ -697,10 +702,9 @@ START_FUNC(patch_rtc_gettimedate)
                  (2 << 20) | /* Nov 30 */ \
                  (3 << 22)   /* Dec 31 */
 
-  sbc r0, r0         // Start on year 1999 (-1), C is always clear here.
+  mov r0, $0         // Start on year 2000.
   1:
     ldr r2, =DAYS_LUT
-    add r0, $1       // Increment year in advance since we start at -1
     mov r1, $180     // Assume non-leap year
     add r1, $185
     lsl r3, r0, $30
@@ -708,10 +712,12 @@ START_FUNC(patch_rtc_gettimedate)
       add r1, $1            // Leap year!
       add r2, $(1 << 2)     // Make february 29 days
     2:
+    add r0, $1       // Increment year (in advance)
     sub r5, r1       // Decrement 365 or 366
     bcs 1b           // Keep looping if the result was 0+
 
   add r5, r1  // r5 underflowed, re-add r1 to go back one iteration
+  sub r0, $1  // Correct year since we always preincrement
 
   // r0 is the year, r5 contains the day offset (in the year), r2 contains the 24 bit LUT word.
 
