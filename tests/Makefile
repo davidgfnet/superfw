@@ -22,6 +22,8 @@ all:
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o crc_test.bin crc_test.c ../src/crc.c
 	./crc_test.bin
 	lcov -c -d . -o crc_test.info
+	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o fatfs_names_test.bin fatfs_names_test.c ../fatfs/ff.c ../fatfs/ffunicode.c -I../
+	./fatfs_names_test.bin
 
 	lcov -a cimpl_test.info -a util_test.info -a utf_util_test.info -a crc_test.info -a sha256_test.info -a cheats_test.info -o total.info
 	rm -rf coverage/
