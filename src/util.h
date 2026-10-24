@@ -67,6 +67,12 @@ bool check_file_exists(const char *fn);
 // Creates a path to a file (recursively if needed)
 void create_basepath(const char *fn);
 
+// Calls cb for each line of a text file, without the line break ("\n" or
+// "\r\n"). Lines longer than FILE_LINE_MAX bytes are skipped. False if the
+// file cannot be opened.
+#define FILE_LINE_MAX  (2 * MAX_FN_LEN)
+bool file_read_lines(const char *fn, void (*cb)(char *line, void *usr), void *usr);
+
 // Parses a LE 32 bit unsigned int
 static inline uint32_t parse32le(const uint8_t *d) {
   return (d[0]) | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);

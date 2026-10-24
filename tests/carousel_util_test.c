@@ -30,6 +30,9 @@
 FRESULT f_mkdir (const TCHAR* path) {
   return FR_OK;
 }
+FRESULT f_open (FIL* fp, const TCHAR* path, BYTE mode) { return FR_NO_FILE; }
+FRESULT f_read (FIL* fp, void* buff, UINT btr, UINT* br) { *br = 0; return FR_OK; }
+FRESULT f_close (FIL* fp) { return FR_OK; }
 FRESULT f_stat (const TCHAR* path, FILINFO* fno) {
   return FR_OK;
 }

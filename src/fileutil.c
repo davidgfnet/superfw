@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "fatfs/ff.h"
+#include "util.h"
 
 #pragma GCC optimize ("Os")
 
@@ -55,3 +56,51 @@ void create_basepath(const char *fn) {
   }
 }
 
+
+bool file_read_lines(const char *fn, void (*cb)(char *line, void *usr), void *usr) {
+  FIL fd;
+  if (FR_OK != f_open(&fd, fn, FA_READ))
+    return false;
+
+  char buf[FILE_LINE_MAX + 1];
+  unsigned len = 0;
+  bool skip = false;          // Dropping the rest of a too long line
+  while (true) {
+    UINT rdbytes = 0;
+    if (FR_OK != f_read(&fd, &buf[len], FILE_LINE_MAX - len, &rdbytes))
+      break;
+    len += rdbytes;
+    buf[len] = 0;
+
+    unsigned start = 0;
+    for (unsigned i = 0; i < len; i++) {
+      if (buf[i] != '\n')
+        continue;
+      buf[i] = 0;
+      if (i > start && buf[i - 1] == '\r')
+        buf[i - 1] = 0;
+      if (!skip)
+        cb(&buf[start], usr);
+      skip = false;
+      start = i + 1;
+    }
+
+    if (!rdbytes) {           // End of file: a last line without a line break
+      if (start < len && !skip) {
+        if (buf[len - 1] == '\r')
+          buf[len - 1] = 0;
+        cb(&buf[start], usr);
+      }
+      break;
+    }
+    if (!start && len == FILE_LINE_MAX) {
+      skip = true;            // A full buffer without a line break
+      len = 0;
+    } else {
+      memmove(buf, &buf[start], len - start);
+      len -= start;
+    }
+  }
+  f_close(&fd);
+  return true;
+}

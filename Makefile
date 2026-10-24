@@ -168,7 +168,7 @@ INFILES=src/gba_ewram_crt0.S \
 
 all:	$(FWBINFILES) $(BIEMUFILES) lang.pack directsave.payload ingame_trampoline.payload
 	# Wrap the firmware around a ROM->EWRAM loader
-	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K
+	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K -Wl,--print-memory-usage
 	$(OBJCOPY) --output-target=binary firmware.elf superfw.gba
 	# Fix the header/checksum.
 	./tools/fw-fixer.py superfw.gba

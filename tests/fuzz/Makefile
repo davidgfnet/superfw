@@ -12,7 +12,7 @@ CFLAGS = -g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefi
          -Wno-gnu-variable-sized-type-not-at-end
 COMMON = stubs.c $(SRC)/util.c $(SRC)/nanoprintf.c $(SRC)/fileutil.c
 
-TARGETS = fuzz_cheats fuzz_recent fuzz_patch fuzz_flashmgr fuzz_settings fuzz_text
+TARGETS = fuzz_cheats fuzz_recent fuzz_patch fuzz_flashmgr fuzz_settings fuzz_text fuzz_lines
 
 all: $(TARGETS)
 
@@ -32,6 +32,9 @@ fuzz_settings: fuzz_settings.c $(COMMON) $(SRC)/settings.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 fuzz_text: fuzz_text.c $(COMMON) $(SRC)/utf_util.c $(SRC)/carousel_util.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+fuzz_lines: fuzz_lines.c $(COMMON)
 	$(CC) $(CFLAGS) -o $@ $^
 
 # Seed corpora: the test files we already have, plus whatever was found.

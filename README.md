@@ -56,12 +56,19 @@ folder currently open in the SD browser, and in all its subfolders, as a row
 of box art covers sorted by name:
 
  - Left/Right: previous/next game (covers slide and zoom in/out).
- - Up/Down: jump to the previous/next letter (shown big for a moment).
+ - Up/Down: jump to the previous/next letter (shown big for a moment). When
+   sorted by system they jump between systems, when sorted by recently played
+   they move 5 games.
  - A: open the game (same load options as the browser). If the game was
    written to the flash (SuperChis) from this SD file, it starts from flash.
  - Select: file menu, the same as in the SD browser (delete, hide, write to
    flash). For games already in flash it offers "Remove from flash" (same as
    the flash tab) and "Load from SD card" instead, and shows the flash usage.
+   "Add to favourites" / "Remove from favourites" is there too.
+ - Start: the view. "Show" picks the games: all of them, the favourites, or
+   one system (GBA, GB/GBC, NES, SMS...: only the ones on the card). "Sort by"
+   picks the order: name, system (games grouped by emulator) or recently
+   played. The top bar shows the view (ie. "NES 3/12"); it is remembered.
  - L/R switch tabs.
 
 ![The carousel tab](docs/images/carousel.png)
@@ -197,6 +204,7 @@ The following files are usually created:
  - .superfw/pending-save.txt: SRAM save information (temp file).
  - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
  - .superfw/carousel.cache: Game list of the carousel tab (rebuilt when needed).
+ - .superfw/favorites.txt: Favourite games of the carousel (full paths, one per line).
  - .superfw/lang.cache: Menu strings of the chosen language (rebuilt when needed).
 
 Other noteworthy paths:

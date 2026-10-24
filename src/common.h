@@ -61,7 +61,8 @@ extern const uint32_t ingame_trampoline_payload_size;
 // Memory map for assets/objects in SDRAM
 #define ROM_OFF_SCRATCH           0x00000000     // At 0x08000000
 #define ROM_OFF_FONTS_BASE        0x00E80000     // At 0x08E80000
-#define ROM_OFF_HISCRATCH         0x01000000     // At 0x09000000
+#define ROM_OFF_HISCRATCH         0x01000000     // At 0x09000000 (the patch generator uses 8 MiB)
+#define ROM_OFF_CAROUSEL          0x01B00000     // At 0x09B00000 (1 MiB, carousel views)
 #define ROM_OFF_USRPATCH_DB       0x01C00000     // At 0x09C00000
 #define ROM_OFF_PATCH_DB          0x01D00000     // At 0x09D00000
 #define ROM_OFF_ASSETS_BASE       0x01E00000     // At 0x09E00000
@@ -70,6 +71,7 @@ extern const uint32_t ingame_trampoline_payload_size;
 #define ROM_SCRATCH_U8          ((volatile uint8_t*)(0x08000000 + ROM_OFF_SCRATCH))
 #define ROM_FONTBASE_U8         ((volatile uint8_t*)(0x08000000 + ROM_OFF_FONTS_BASE))
 #define ROM_HISCRATCH_U8        ((volatile uint8_t*)(0x08000000 + ROM_OFF_HISCRATCH))
+#define ROM_CAROUSEL_U8         ((volatile uint8_t*)(0x08000000 + ROM_OFF_CAROUSEL))
 #define ROM_PATCHDB_U8          ((volatile uint8_t*)(0x08000000 + ROM_OFF_PATCH_DB))
 #define ROM_ASSETS_U8           ((volatile uint8_t*)(0x08000000 + ROM_OFF_ASSETS_BASE))
 

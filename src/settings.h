@@ -63,6 +63,8 @@ extern uint8_t hide_hidden;
 extern uint8_t anim_speed;
 extern uint8_t start_tab;
 extern uint8_t show_ext;
+extern uint8_t car_view;
+extern uint8_t car_sort;
 
 // Defaults/Settings
 extern t_patch_policy patcher_default;

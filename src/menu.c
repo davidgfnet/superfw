@@ -74,6 +74,7 @@ enum {
   POPUP_SAVFILE,               // Load/Store a SAV file
   POPUP_FWFLASH,               // Flash a new firmware image
   POPUP_FILE_MGR,              // Write ROM to flash, delete, hide/unhide...
+  POPUP_CAR_VIEW,              // Carousel view: games shown and their order
 #ifdef SUPPORT_NORGAMES
   POPUP_GBA_NORWRITE,          // Write a GBA ROM to NOR
   POPUP_GBA_NORLOAD,           // Launch a NOR game
@@ -100,6 +101,17 @@ enum {
 #define CAROUSEL_CACHE_PATH SUPERFW_DIR "/carousel.cache"
 #define CAROUSEL_CACHE_MAGIC 0x43434653    // "SFCC"
 #define CAROUSEL_CACHE_VER   1
+#define CAROUSEL_FAV_PATH    SUPERFW_DIR "/favorites.txt"   // Full paths, one per line
+#define CAROUSEL_FAV_TMP     SUPERFW_DIR "/favorites.tmp"
+
+// Carousel views (Start). car_view: CarViewAll, CarViewFav, or CarViewSys +
+// a system (0: GBA, 1+: emu_group() + 1). car_sort: CarSort*.
+enum { CarViewAll = 0, CarViewFav = 1, CarViewSys = 2 };
+enum { CarSortName = 0, CarSortSystem = 1, CarSortRecent = 2, CarSortCNT = 3 };
+#define CAROUSEL_MAX_SYS    16             // GBA + the emulated systems
+#define CATTR_SYS         0x0F             // carousel attributes: the system,
+#define CATTR_FAV         0x10             // favourite,
+#define CATTR_RANK_SH        8             // and position in the recent list (0xFF: none)
 
 typedef struct {
   uint32_t filesize;
@@ -252,6 +264,7 @@ enum {
 enum {
   FiMgrDelete,
   FiMgrHide,
+  FiMgrFav,                    // Carousel only: favourite on/off
 #ifdef SUPPORT_NORGAMES
   FiMgrWriteNOR,
   FiMgrRemoveNOR,
@@ -346,8 +359,10 @@ static struct {
 
   // Carousel state (games in the ROM browser's current dir and its subdirs)
   struct {
-    int selector;                 // Selected game
-    int count;                    // Number of games in the list
+    int selector;                 // Selected game (position in the view)
+    int count;                    // Number of games in the view (the ones shown)
+    int total;                    // Number of games in the list (carousel_games)
+    uint16_t syscnt[CAROUSEL_MAX_SYS];   // Games per system
     bool truncated;               // Too many games, the list is incomplete
     unsigned scan_frame;          // Frame "Looking for games" was shown (0: not shown)
     int offset;                   // Slide animation offset (pixels, even)
@@ -409,6 +424,7 @@ static struct {
     uint8_t attr;
     bool carousel;                // Opened from the carousel (compact layout)
     int nor_index;                // Its flash entry (-1: not in flash)
+    int cgame;                    // Its carousel game (-1: opened from the browser)
     uint8_t optcnt;
     uint8_t opts[FiMgrCNT];       // Options shown, in order
   } fmgr;
@@ -500,6 +516,18 @@ typedef struct {
 _Static_assert (sizeof(t_sdram_state) <= 14.5*1024*1024, "scratch SDRAM doesn't exceed 14.5MB");
 
 t_sdram_state *sdr_state = (t_sdram_state*)0x08000000;
+
+// Carousel view: the games shown, in order, and per game attributes. The
+// state above has no room left, so they live in their own SDRAM area
+// (ROM_OFF_CAROUSEL, above the 8 MiB of hiscratch the patch generator uses).
+typedef struct {
+  uint32_t view[CAROUSEL_MAX_GAMES];      // Games shown, in order (carousel_games index)
+  uint16_t attr[CAROUSEL_MAX_GAMES];      // CATTR_* (system, favourite, recent position)
+} t_carousel_ext;
+_Static_assert (sizeof(t_carousel_ext) <= ROM_OFF_USRPATCH_DB - ROM_OFF_CAROUSEL, "carousel area fits");
+_Static_assert (ROM_OFF_CAROUSEL >= ROM_OFF_HISCRATCH + 8*1024*1024, "above the patch generator area");
+
+t_carousel_ext *const cext = (t_carousel_ext*)ROM_CAROUSEL_U8;
 uint8_t *hiscratch = (uint8_t*)ROM_HISCRATCH_U8;
 
 typedef struct {
@@ -1881,7 +1909,8 @@ void render_filemgr(volatile uint8_t *frame) {
   // one is more compact (up to 4 options plus the flash usage).
   const bool compact = spop.fmgr.carousel;
   const unsigned titley = compact ? 24 : 32;
-  const unsigned opty = 60, optstep = compact ? 22 : 30;
+  const unsigned opty = compact ? 58 : 60, optstep = compact ? 20 : 30;
+  const unsigned boxh = compact ? 18 : 20, texty = compact ? 1 : 2;
 
   const char *bn = file_basename(spop.fmgr.path);
   unsigned twidth = font_width(bn);
@@ -1905,14 +1934,16 @@ void render_filemgr(volatile uint8_t *frame) {
     switch (spop.fmgr.opts[i]) {
     case FiMgrDelete:    msg = MSG_FMGR_DEL; break;
     case FiMgrHide:      msg = (spop.fmgr.attr & AM_HID) ? MSG_FMGR_UNHIDE : MSG_FMGR_HIDE; break;
+    case FiMgrFav:       msg = (spop.fmgr.cgame >= 0 && (cext->attr[spop.fmgr.cgame] & CATTR_FAV)) ?
+                               MSG_CAR_FAVDEL : MSG_CAR_FAVADD; break;
     #ifdef SUPPORT_NORGAMES
     case FiMgrWriteNOR:  msg = MSG_NOR_WRITE; break;
     case FiMgrRemoveNOR: msg = MSG_NOR_REMOVE; break;
     case FiMgrLoadSD:    msg = MSG_CAR_LOADSD; break;
     #endif
     };
-    draw_button_box(frame, 20, 220, opty + i*optstep, opty + 20 + i*optstep, i == spop.selector);
-    draw_central_text(msgs[lang_id][msg], frame, 120, opty + 2 + i*optstep);
+    draw_button_box(frame, 20, 220, opty + i*optstep, opty + boxh + i*optstep, i == spop.selector);
+    draw_central_text(msgs[lang_id][msg], frame, 120, opty + texty + i*optstep);
   }
 }
 
@@ -2317,8 +2348,14 @@ static bool carousel_is_game(const char *fn) {
   return ext && (!strcasecmp(ext, "gba") || get_emu_info(ext));
 }
 
+// Game (carousel_games index) at a view position. The view lives in SDRAM:
+// keep it in range.
+static unsigned carousel_gi(int n) {
+  return cext->view[n] % CAROUSEL_MAX_GAMES;
+}
+
 static const t_cgame *carousel_game(int n) {
-  return &sdr_state->carousel_games[n];
+  return &sdr_state->carousel_games[carousel_gi(n)];
 }
 
 static const char *carousel_name_ptr(const t_cgame *g) {
@@ -2513,7 +2550,7 @@ static void carousel_cache_write(unsigned poolsize) {
   memset(&hdr, 0, sizeof(hdr));
   hdr.magic = CAROUSEL_CACHE_MAGIC;
   hdr.version = CAROUSEL_CACHE_VER;
-  hdr.count = smenu.carousel.count;
+  hdr.count = smenu.carousel.total;
   hdr.poolsize = poolsize;
   hdr.signature = smenu.carousel.signature;
   hdr.flags = (smenu.carousel.truncated ? 1 : 0) | (hide_hidden ? 2 : 0);
@@ -2546,17 +2583,138 @@ static bool carousel_cache_load() {
   f_close(&fd);
 
   for (unsigned i = 0; ok && i < hdr.count; i++) {
-    const t_cgame *g = carousel_game(i);
+    const t_cgame *g = &sdr_state->carousel_games[i];
     ok = !(g->pathoff & 3) && g->pathoff + g->nameoff < hdr.poolsize;
   }
   if (!ok)
     return false;
 
-  smenu.carousel.count = hdr.count;
+  smenu.carousel.total = hdr.count;
   smenu.carousel.truncated = hdr.flags & 1;
   smenu.carousel.signature = hdr.signature;
   return true;
 }
+
+#pragma GCC push_options
+#pragma GCC optimize ("Os")   // Not speed critical: keep the flash images small
+
+// ---- Views: which games are shown (all, favourites, a system), and their order ----
+
+// Finds a game in the whole list (not just the view). -1 if it is not there.
+static int carousel_find_game(const char *fullpath) {
+  const unsigned rootlen = strlen(smenu.carousel.root);
+  if (strncmp(fullpath, smenu.carousel.root, rootlen))
+    return -1;
+  for (int g = 0; g < smenu.carousel.total; g++)
+    if (!strncmp(carousel_rel_ptr(&sdr_state->carousel_games[g]), &fullpath[rootlen], MAX_FN_LEN))
+      return g;
+  return -1;
+}
+
+// System of a game: 0 for GBA, emu_group() + 1 for the emulated ones.
+static unsigned carousel_system(const char *fname) {
+  const char *ext = find_extension(fname);
+  const int grp = (ext && strcasecmp(ext, "gba")) ? emu_group(ext) : -1;
+  return (grp < 0 || grp + 1 >= CAROUSEL_MAX_SYS) ? 0 : grp + 1;
+}
+
+static void car_fav_line(char *line, void *usr) {
+  const int g = carousel_find_game(line);
+  if (g >= 0)
+    cext->attr[g] |= CATTR_FAV;
+}
+
+// Per game attributes: system, favourite (favorites.txt) and position in the
+// recent list.
+static void carousel_load_attrs() {
+  memset(smenu.carousel.syscnt, 0, sizeof(smenu.carousel.syscnt));
+  for (int g = 0; g < smenu.carousel.total; g++) {
+    char fname[MAX_FN_LEN];
+    carousel_copy(carousel_name_ptr(&sdr_state->carousel_games[g]), fname);
+    const unsigned sys = carousel_system(fname);
+    cext->attr[g] = sys | (0xFF << CATTR_RANK_SH);
+    smenu.carousel.syscnt[sys]++;
+  }
+
+  // Newest first: the first entry of a game is its position.
+  for (int r = 0; r < MIN(smenu.recent.maxentries, 0xFF); r++) {
+    char path[MAX_FN_LEN];
+    carousel_copy(sdr_state->rentries[r].fpath, path);
+    const int g = carousel_find_game(path);
+    if (g >= 0 && (cext->attr[g] >> CATTR_RANK_SH) == 0xFF)
+      cext->attr[g] = (cext->attr[g] & 0xFF) | (r << CATTR_RANK_SH);
+  }
+
+  file_read_lines(CAROUSEL_FAV_PATH, car_fav_line, NULL);
+}
+
+// The list is sorted by name: other orders sort the view, ties by name.
+NOINLINE static int carousel_view_cmp(const void *a, const void *b) {
+  const unsigned ga = *(const uint32_t*)a % CAROUSEL_MAX_GAMES;
+  const unsigned gb = *(const uint32_t*)b % CAROUSEL_MAX_GAMES;
+  int r = 0;
+  if (car_sort == CarSortSystem)
+    r = (int)(cext->attr[ga] & CATTR_SYS) - (int)(cext->attr[gb] & CATTR_SYS);
+  else if (car_sort == CarSortRecent)
+    r = (int)(cext->attr[ga] >> CATTR_RANK_SH) - (int)(cext->attr[gb] >> CATTR_RANK_SH);
+  return r ? r : (int)ga - (int)gb;
+}
+
+static bool carousel_in_view(unsigned g) {
+  const uint16_t at = cext->attr[g];
+  return car_view == CarViewAll || (car_view == CarViewFav && (at & CATTR_FAV)) ||
+         (car_view >= CarViewSys && (at & CATTR_SYS) == car_view - CarViewSys);
+}
+
+// Builds the view (the games shown, in order). Stays on game keep if it is
+// still shown.
+static void carousel_build_view(int keep) {
+  int n = 0;
+  for (int g = 0; g < smenu.carousel.total; g++)
+    if (carousel_in_view(g))
+      cext->view[n++] = g;
+  if (car_sort == CarSortSystem || car_sort == CarSortRecent)
+    heapsort4(cext->view, n, 1, carousel_view_cmp);
+
+  smenu.carousel.count = n;
+  smenu.carousel.selector = 0;
+  for (int i = 0; keep >= 0 && i < n; i++)
+    if ((int)carousel_gi(i) == keep)
+      smenu.carousel.selector = i;
+  smenu.carousel.offset = 0;
+  smenu.carousel.info_for = -1;
+  for (unsigned i = 0; i < COVER_SLOTS; i++) {
+    smenu.carousel.slot_entry[i] = -1;
+    smenu.carousel.slot_state[i] = CoverNotLoaded;
+  }
+}
+
+static void carousel_view_name(unsigned v, char *out, unsigned size) {
+  if (v == CarViewAll || v == CarViewFav)
+    npf_snprintf(out, size, "%s", msgs[lang_id][v == CarViewAll ? MSG_CAR_VALL : MSG_CAR_VFAV]);
+  else if (v == CarViewSys)
+    npf_snprintf(out, size, "GBA");
+  else
+    emu_group_name(v - CarViewSys - 1, out, size);
+}
+
+// Adds/removes a game in favorites.txt (defined with the view pop up).
+static bool carousel_fav_store(const char *path, bool add);
+
+// Next view in a direction: all, favourites, then the systems on the card.
+static unsigned carousel_next_view(unsigned v, int dir) {
+  const unsigned nviews = CarViewSys + CAROUSEL_MAX_SYS;
+  if (v >= nviews)
+    v = CarViewAll;
+  for (unsigned i = 0; i < nviews; i++) {
+    v = (v + nviews + dir) % nviews;
+    if (v < CarViewSys || smenu.carousel.syscnt[v - CarViewSys])
+      return v;
+  }
+  return CarViewAll;
+}
+
+#pragma GCC pop_options
 
 // Picks the game to start at: the previous one (if any), the one selected in
 // the browser, or the last played one.
@@ -2599,12 +2757,14 @@ static void carousel_rebuild() {
     cscan_start(smenu.carousel.root, true);
     while (!cscan_step(~0U));
     heapsort4(sdr_state->carousel_games, cscan.cnt, sizeof(t_cgame) / sizeof(uint32_t), carousel_sort);
-    smenu.carousel.count = cscan.cnt;
+    smenu.carousel.total = cscan.cnt;
     smenu.carousel.truncated = cscan.truncated;
     smenu.carousel.signature = cscan.hash;
     carousel_cache_write(cscan.pooloff);
   }
 
+  carousel_load_attrs();
+  carousel_build_view(-1);
   carousel_pick_start(prevpath);
   smenu.carousel.offset = 0;
   smenu.carousel.info_for = -1;
@@ -2871,7 +3031,8 @@ void render_carousel(volatile uint8_t *frame) {
 
   if (!smenu.carousel.count) {
     draw_text_leftovf(smenu.carousel.root, frame, 8, 144, SCREEN_WIDTH - 8);
-    draw_central_text_wrapped(msgs[lang_id][MSG_CAR_EMPTY], frame, SCREEN_WIDTH / 2, 48, SCREEN_WIDTH - 32);
+    draw_central_text_wrapped(msgs[lang_id][smenu.carousel.total ? MSG_CAR_NOVIEW : MSG_CAR_EMPTY],
+                              frame, SCREEN_WIDTH / 2, 48, SCREEN_WIDTH - 32);
     carousel_verify_step();
     return;
   }
@@ -2926,7 +3087,9 @@ void render_carousel(volatile uint8_t *frame) {
   human_size(szstr, sizeof(szstr), carousel_game(smenu.carousel.selector)->filesize);
   npf_snprintf(info, sizeof(info), "%s \xc2\xb7 %s", ext, szstr);
   if (smenu.carousel.info_for == smenu.carousel.selector) {
+    const bool fav = cext->attr[carousel_gi(smenu.carousel.selector)] & CATTR_FAV;
     const char *tags[] = {
+      fav                       ? msgs[lang_id][MSG_CAR_FAV]   : NULL,
       smenu.carousel.info_save  ? msgs[lang_id][MSG_CAR_SAVE]  : NULL,
       smenu.carousel.info_last  ? msgs[lang_id][MSG_CAR_LAST]  : NULL,
       smenu.carousel.info_flash ? msgs[lang_id][MSG_CAR_FLASH] : NULL,
@@ -2950,13 +3113,44 @@ void render_carousel(volatile uint8_t *frame) {
     carousel_fill(frame, x, 139, w, 4, FT_COLOR);
   }
 
-  char selinfo[16];
-  npf_snprintf(selinfo, sizeof(selinfo), "%d/%d%s", smenu.carousel.selector + 1, smenu.carousel.count,
-               smenu.carousel.truncated ? "+" : "");
+  // Position, with the view's name unless all games are shown (and if it
+  // fits next to the tab icons).
+  char selinfo[48], vname[24] = "";
+  if (car_view != CarViewAll)
+    carousel_view_name(car_view, vname, sizeof(vname));
+  npf_snprintf(selinfo, sizeof(selinfo), "%s%s%d/%d%s", vname, vname[0] ? " " : "",
+               smenu.carousel.selector + 1, smenu.carousel.count, smenu.carousel.truncated ? "+" : "");
+  if (font_width(selinfo) > 92)
+    npf_snprintf(selinfo, sizeof(selinfo), "%d/%d%s", smenu.carousel.selector + 1, smenu.carousel.count,
+                 smenu.carousel.truncated ? "+" : "");
   draw_rightj_text(selinfo, frame, SCREEN_WIDTH - 1, 1);
 
   carousel_draw_letter(frame);
 }
+
+#pragma GCC push_options
+#pragma GCC optimize ("Os")   // Not speed critical: keep the flash images small
+
+// Start in the carousel: which games are shown, and in which order.
+void render_carousel_view(volatile uint8_t *frame) {
+  draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
+  for (unsigned i = 0; i < 2; i++) {
+    const unsigned y = 34 + i * 54;
+    char tmp[64], name[40];
+    if (i == 0)
+      carousel_view_name(car_view, name, sizeof(name));
+    else
+      npf_snprintf(name, sizeof(name), "%s", msgs[lang_id][MSG_CAR_SNAME + MIN(car_sort, CarSortCNT - 1)]);
+    npf_snprintf(tmp, sizeof(tmp), "< %s >", name);
+    draw_central_text(msgs[lang_id][i ? MSG_CAR_SORT : MSG_CAR_VIEW], frame, SCREEN_WIDTH / 2, y);
+    draw_central_text(tmp, frame, SCREEN_WIDTH / 2, y + 20);
+    if (i == (unsigned)spop.selector)
+      for (unsigned x = 8; x < 232; x += 16)
+        render_icon_trans(x, y + 20, 63);
+  }
+}
+
+#pragma GCC pop_options
 
 void reload_theme(unsigned thnum) {
   // Palette 0..15 contains the main menu template colors
@@ -2983,6 +3177,7 @@ static const struct {
   { render_sav_menu_popup, 1 },
   { render_fw_flash_popup, 1 },
   { render_filemgr,        1 },
+  { render_carousel_view,  1 },
   #ifdef SUPPORT_NORGAMES
   { render_gba_norwrite,   GbaNorWrCNT },
   { render_gba_norload,    GbaNorLoadCNT },
@@ -3221,6 +3416,11 @@ void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) 
     spop.pop_num = 0;
   }
 }
+
+// Key handlers run once per key press, not per frame (the work they start,
+// ie. loading or flashing, lives in other files): optimize them for size.
+#pragma GCC push_options
+#pragma GCC optimize ("Os")
 
 static void keypress_popup_loadgba(unsigned newkeys) {
   const unsigned maxm[] = {
@@ -3741,6 +3941,7 @@ static void filemgr_open(const char *path, uint32_t filesize, uint8_t attr, bool
   spop.fmgr.attr = attr;
   spop.fmgr.carousel = carousel;
   spop.fmgr.nor_index = nor_index;
+  spop.fmgr.cgame = carousel ? (int)carousel_gi(smenu.carousel.selector) : -1;
 
   spop.fmgr.optcnt = 0;
   spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrDelete;
@@ -3753,6 +3954,8 @@ static void filemgr_open(const char *path, uint32_t filesize, uint8_t attr, bool
     spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrLoadSD;
   }
   #endif
+  if (carousel)
+    spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrFav;
 
   spop.pop_num = POPUP_FILE_MGR;
   spop.anim = 0;
@@ -3800,6 +4003,25 @@ static void keypress_popup_filemgr(unsigned newkeys) {
       }
       else
         spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+      spop.pop_num = POPUP_NONE;
+      break;
+
+    case FiMgrFav:
+      if (spop.fmgr.cgame >= 0) {
+        const bool fav = !(cext->attr[spop.fmgr.cgame] & CATTR_FAV);
+        const int prev = smenu.carousel.selector;
+        if (!carousel_fav_store(spop.fmgr.path, fav))
+          spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+        else {
+          cext->attr[spop.fmgr.cgame] ^= CATTR_FAV;
+          if (car_view == CarViewFav) {
+            // It leaves (or joins) the view: stay around the same place.
+            carousel_build_view(spop.fmgr.cgame);
+            if (!fav)
+              smenu.carousel.selector = MAX(0, MIN(prev, smenu.carousel.count - 1));
+          }
+        }
+      }
       spop.pop_num = POPUP_NONE;
       break;
 
@@ -4242,7 +4464,10 @@ static void keypress_menu_info(unsigned newkeys) {
     enable_flashing = true;
 }
 
+// Up/Down jump key: the first letter, or the system when sorted by system.
 static unsigned carousel_letter(int n) {
+  if (car_sort == CarSortSystem)
+    return cext->attr[carousel_gi(n)] & CATTR_SYS;
   return carousel_letter_key(carousel_name_ptr(carousel_game(n)));
 }
 
@@ -4263,7 +4488,17 @@ static void carousel_flash_letter() {
 
 static void keypress_menu_carousel(unsigned newkeys) {
   // Ignore keys until the list for the current dir has been built.
-  if (smenu.carousel.browser_gen != browser_gen || smenu.carousel.stale || !smenu.carousel.count)
+  if (smenu.carousel.browser_gen != browser_gen || smenu.carousel.stale || !smenu.carousel.total)
+    return;
+
+  // Start: the view (which games are shown, and their order).
+  if (newkeys & KEY_BUTTSTA) {
+    spop.pop_num = POPUP_CAR_VIEW;
+    spop.selector = 0;
+    spop.anim = 0;
+    return;
+  }
+  if (!smenu.carousel.count)
     return;
 
   const int cnt = smenu.carousel.count;
@@ -4277,8 +4512,13 @@ static void keypress_menu_carousel(unsigned newkeys) {
     sel++;
     smenu.carousel.offset = MIN(smenu.carousel.offset + COVER_SPACING, COVER_SPACING);
   }
+  else if ((newkeys & (KEY_BUTTUP | KEY_BUTTDOWN)) && car_sort == CarSortRecent) {
+    // Recently played order: jump 5 games.
+    sel = (newkeys & KEY_BUTTDOWN) ? MIN(sel + 5, cnt - 1) : MAX(sel - 5, 0);
+    smenu.carousel.offset = 0;
+  }
   else if (newkeys & KEY_BUTTDOWN) {
-    // Jump to the first game starting with the next letter
+    // Jump to the first game starting with the next letter (or system)
     unsigned c = carousel_letter(sel);
     while (sel < cnt - 1 && carousel_letter(sel) == c)
       sel++;
@@ -4303,7 +4543,7 @@ static void keypress_menu_carousel(unsigned newkeys) {
     smenu.carousel.selector = sel;
     smenu.anim_state = 0;
   }
-  if (jumped)
+  if (jumped && car_sort == CarSortName)
     carousel_flash_letter();
   else if (newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT))
     smenu.carousel.letter_until = frame_count;    // Hide the letter when moving
@@ -4334,6 +4574,62 @@ static void keypress_menu_carousel(unsigned newkeys) {
       spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
   }
 }
+
+#pragma GCC push_options
+#pragma GCC optimize ("Os")   // Not speed critical: keep the flash images small
+
+static void keypress_popup_carview(unsigned newkeys) {
+  if (newkeys & (KEY_BUTTUP | KEY_BUTTDOWN))
+    spop.selector ^= 1;
+  const int dir = (newkeys & KEY_BUTTRIGHT) ? 1 : (newkeys & KEY_BUTTLEFT) ? -1 : 0;
+  if (dir) {
+    if (spop.selector == 0)
+      car_view = carousel_next_view(car_view, dir);
+    else
+      car_sort = (MIN(car_sort, CarSortCNT - 1) + CarSortCNT + dir) % CarSortCNT;
+    // Stay on the selected game if it is still shown.
+    carousel_build_view(smenu.carousel.count ? (int)carousel_gi(smenu.carousel.selector) : -1);
+    save_ui_settings();
+  }
+  if (newkeys & (KEY_BUTTA | KEY_BUTTSTA))
+    spop.pop_num = POPUP_NONE;
+}
+
+// Rewrites favorites.txt without path, and with it at the end if add.
+typedef struct {
+  FIL fd;
+  const char *path;
+  bool ok;
+} t_fav_update;
+
+static void fav_update_line(char *line, void *usr) {
+  t_fav_update *u = (t_fav_update*)usr;
+  UINT wr;
+  if (strcmp(line, u->path))
+    u->ok = u->ok && FR_OK == f_write(&u->fd, line, strlen(line), &wr) &&
+            FR_OK == f_write(&u->fd, "\n", 1, &wr);
+}
+
+static bool carousel_fav_store(const char *path, bool add) {
+  t_fav_update u = { .path = path, .ok = true };
+  f_mkdir(SUPERFW_DIR);
+  if (FR_OK != f_open(&u.fd, CAROUSEL_FAV_TMP, FA_WRITE | FA_CREATE_ALWAYS))
+    return false;
+  file_read_lines(CAROUSEL_FAV_PATH, fav_update_line, &u);
+  UINT wr;
+  if (add)
+    u.ok = u.ok && FR_OK == f_write(&u.fd, path, strlen(path), &wr) &&
+           FR_OK == f_write(&u.fd, "\n", 1, &wr);
+  u.ok = FR_OK == f_close(&u.fd) && u.ok;
+  if (!u.ok) {
+    f_unlink(CAROUSEL_FAV_TMP);
+    return false;
+  }
+  f_unlink(CAROUSEL_FAV_PATH);
+  return FR_OK == f_rename(CAROUSEL_FAV_TMP, CAROUSEL_FAV_PATH);
+}
+
+#pragma GCC pop_options
 
 // Reboots into the firmware in flash (used when the menu state can't be trusted).
 static void reboot_firmware() {
@@ -4414,6 +4710,7 @@ void menu_keypress(unsigned newkeys) {
         keypress_popup_savefile,
         keypress_popup_flash,
         keypress_popup_filemgr,
+        keypress_popup_carview,
         #ifdef SUPPORT_NORGAMES
         keypress_popup_norwrite,
         keypress_popup_norload,
@@ -4484,3 +4781,4 @@ uint16_t get_keypress() {
   return mkeys;
 }
 
+#pragma GCC pop_options
