@@ -7,3 +7,4 @@
 *.gcno
 *.info
 *.i
+__pycache__/
