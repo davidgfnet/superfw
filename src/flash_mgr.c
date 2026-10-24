@@ -100,9 +100,17 @@ bool flashmgr_load(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
   uint32_t blkm[BMSIZE(NOR_BLOCK_COUNT, uint32_t)] = {0};
 
   for (unsigned i = 0; i < ndata->gamecnt; i++) {
+    // The name must be terminated (it is used to build paths) and the
+    // basename offset must point inside it.
+    const t_flash_game_entry *e = &ndata->games[i];
+    if (!memchr(e->game_name, 0, sizeof(e->game_name)) || e->bnoffset >= strlen(e->game_name) + 1)
+      return false;
+
     for (unsigned j = 0; j < MAX_GAME_BLOCKS; j++) {
       uint8_t n = ndata->games[i].blkmap[j];
       if (n) {
+        if (n >= NOR_BLOCK_COUNT)
+          return false;      // Not a valid block (and out of the bitmap)
         if (BM_TEST(blkm, n))
           return false;      // Block is used twice!
         BM_SET(blkm, n);

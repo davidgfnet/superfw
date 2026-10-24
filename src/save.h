@@ -44,21 +44,24 @@ bool load_save_sram(const char *savefn);
 // Clears a save file on disk
 bool wipe_sav_file(const char *fn);
 
-// Writes SRAM to disk
-bool write_save_sram(const char *fn);
+// Size of the .sav files of the current game (0: the whole SRAM chip).
+extern unsigned sram_save_size;
+
+// Writes the first size bytes of SRAM to disk (0: the whole chip).
+bool write_save_sram(const char *fn, unsigned size);
 
 // Writes an SRAM file to disk, maintaining backups and whatnot.
-bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups);
+bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups, unsigned size);
 
 // Write a .sav file to disk, using a temp file and a rename.
-bool write_save_sram_safe_overwrite(const char *templ_fn);
+bool write_save_sram_safe_overwrite(const char *templ_fn, unsigned size);
 
 // Writes a save game from SRAM using a pending file sentinel as input.
 unsigned flush_pending_sram();
 
 // Writes/Clears a sentinel file to indicate that SRAM must be dumped and
 // stored during the next boot, to preserve the current game save storage.
-bool program_sram_dump(const char *save_filename, unsigned backup_count);
+bool program_sram_dump(const char *save_filename, unsigned backup_count, unsigned save_size);
 
 // Erases the SRAM (using ones since it seems to be the most common mem type)
 void erase_sram();

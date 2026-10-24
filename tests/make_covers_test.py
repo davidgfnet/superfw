@@ -1,0 +1,331 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Tests for tools/make-covers.py and tools/carousel-preview.py (no network).
+# Run: python3 tests/make_covers_test.py
+
+import importlib.util, io, json, os, struct, sys, tempfile, unittest, zlib
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOLS = os.path.join(os.path.dirname(HERE), "tools")
+
+def load(name, fn):
+  spec = importlib.util.spec_from_file_location(name, os.path.join(TOOLS, fn))
+  mod = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(mod)
+  return mod
+
+mc = load("make_covers", "make-covers.py")
+pv = load("carousel_preview", "carousel-preview.py")
+
+from PIL import Image
+
+def gba_rom(path, code, title="TEST", good_checksum=True):
+  h = bytearray(0xC0)
+  h[0:4] = b"\x2e\x00\x00\xea"
+  h[0xA0:0xAC] = title.encode().ljust(12, b"\0")
+  h[0xAC:0xB0] = code.encode()
+  h[0xB2] = 0x96
+  h[0xBD] = (-(sum(h[0xA0:0xBD]) + 0x19)) & 0xFF
+  if not good_checksum:
+    h[0xBD] ^= 0xFF
+  with open(path, "wb") as fd:
+    fd.write(h)
+
+BOXARTS = [
+  "Pokemon - Emerald Version (USA, Europe)",
+  "Pokemon - Ruby Version (USA)",
+  "Pokemon - Ruby Version (Europe)",
+  "Metroid Fusion (USA)",
+  "Metroid Fusion (Japan)",
+  "Legend of Zelda, The - The Minish Cap (USA)",
+  "Dragon Ball Z - The Legacy of Goku II International (Japan)",
+  "2 Games in 1 - Dragon Ball Z - The Legacy of Goku I _ II (USA)",
+  "Dragon Ball GT - Transformation (USA)",
+  "Super Mario Advance 4 - Super Mario Bros. 3 (USA)",
+]
+
+class NameMatching(unittest.TestCase):
+  @classmethod
+  def setUpClass(cls):
+    # A cached (fresh) index, so ThumbIndex never touches the network.
+    cls.tmp = tempfile.TemporaryDirectory()
+    tree = [["Named_Boxarts/%s.png" % n, "100644"] for n in BOXARTS]
+    with open(os.path.join(cls.tmp.name, "REPO.json"), "w", encoding="utf-8") as fd:
+      json.dump(tree, fd)
+    cls.idx = mc.ThumbIndex(cls.tmp.name)
+
+  @classmethod
+  def tearDownClass(cls):
+    cls.tmp.cleanup()
+
+  def match(self, romname):
+    m = self.idx.find("REPO", romname)
+    return m[0] if m else None
+
+  def test_norm(self):
+    self.assertEqual(mc.norm("1234 - Legend of Zelda, The - The Minish Cap (U)(Trashman)"),
+                     "legendofzeldaminishcap")
+    self.assertEqual(mc.norm("Lilo & Stitch"), mc.norm("Lilo _ Stitch (USA)"))
+
+  def test_exact_and_normalized(self):
+    self.assertEqual(self.match("Metroid Fusion (USA).gba"), "Metroid Fusion (USA)")
+    self.assertEqual(self.match("Metroid Fusion (U).gba"), "Metroid Fusion (USA)")
+    self.assertEqual(self.match("1190 - Super Mario Advance 4 - Super Mario Bros 3 (E)(Menace).gba"),
+                     "Super Mario Advance 4 - Super Mario Bros. 3 (USA)")
+
+  def test_region_preference(self):
+    self.assertEqual(self.match("Pokemon Ruby.gba"), "Pokemon - Ruby Version (USA)")
+
+  def test_prefix_and_suffix(self):
+    # The suffix match (closer) must win over "Goku II International".
+    self.assertEqual(self.match("Dragon Ball Z - The Legacy of Goku I & II (USA).gba"),
+                     "2 Games in 1 - Dragon Ball Z - The Legacy of Goku I _ II (USA)")
+
+  def test_fuzzy(self):
+    self.assertEqual(self.match("Dragonball GT - Transformation # GBA.GBA"),
+                     "Dragon Ball GT - Transformation (USA)")
+
+  def test_no_match(self):
+    self.assertIsNone(self.match("My Homebrew Game.gba"))
+
+DAT = '''clrmamepro (
+\tname "Test"
+)
+
+game (
+\tname "Metroid Fusion (USA)"
+\tregion "USA"
+\tserial "AMTE"
+\trom ( name "Metroid Fusion (USA).gba" size 16 crc %08X md5 0 sha1 0 serial "AMTE" )
+)
+game (
+\tname "Metroid Fusion (Japan)"
+\tserial "AMTJ"
+\trom ( name "Metroid Fusion (Japan).gba" size 16 crc 00000001 serial "AMTJ" )
+)
+game (
+\tname "Some NES Game (USA)"
+\trom ( name "Some NES Game (USA).nes" size 32 crc %08X )
+)
+'''
+
+class Identify(unittest.TestCase):
+  def setUp(self):
+    self.tmp = tempfile.TemporaryDirectory()
+    self.gba = os.path.join(self.tmp.name, "renamed.gba")
+    with open(self.gba, "wb") as fd:
+      fd.write(b"0123456789abcdef")
+    self.nes_body = bytes(range(32))
+    self.nes = os.path.join(self.tmp.name, "game.nes")
+    with open(self.nes, "wb") as fd:
+      fd.write(b"NES\x1a" + bytes(12) + self.nes_body)   # 16 byte iNES header
+    text = DAT % (zlib.crc32(b"0123456789abcdef"), zlib.crc32(self.nes_body))
+    # Cached DATs (fresh), so nothing is downloaded.
+    for repo in ("GBA", "NES"):
+      with open(os.path.join(self.tmp.name, "nointro-%s.dat" % repo), "w", encoding="utf-8") as fd:
+        fd.write(text)
+    self.ni = mc.NoIntro(self.tmp.name)
+
+  def tearDown(self):
+    self.tmp.cleanup()
+
+  def test_parse(self):
+    bycrc, byserial = mc.parse_dat(DAT % (5, 6))
+    self.assertEqual(bycrc[5], "Metroid Fusion (USA)")
+    self.assertEqual(bycrc[1], "Metroid Fusion (Japan)")
+    self.assertEqual(bycrc[6], "Some NES Game (USA)")
+    self.assertEqual(byserial["AMTE"], ["Metroid Fusion (USA)"])
+
+  def test_by_checksum(self):
+    self.assertEqual(self.ni.identify("GBA", self.gba), ("Metroid Fusion (USA)", "checksum"))
+
+  def test_headerless_checksum(self):
+    self.assertEqual(self.ni.identify("NES", self.nes), ("Some NES Game (USA)", "checksum"))
+
+  def test_by_game_code(self):
+    with open(self.gba, "wb") as fd:
+      fd.write(b"modified rom....")
+    self.assertEqual(self.ni.identify("GBA", self.gba, "AMTJ"), ("Metroid Fusion (Japan)", "game code"))
+    self.assertEqual(self.ni.identify("GBA", self.gba, "ZZZZ"), (None, None))
+
+  def test_crc_cache(self):
+    self.ni.identify("GBA", self.gba)
+    self.ni.save()
+    again = mc.NoIntro(self.tmp.name)
+    self.assertIn(os.path.abspath(self.gba), again.crcs)
+
+def png_bytes(color):
+  buf = io.BytesIO()
+  Image.new("RGB", (40, 40), color).save(buf, "PNG")
+  return buf.getvalue()
+
+class EndToEnd(unittest.TestCase):
+  # Runs the whole tool on a fake SD card with the network replaced.
+  def setUp(self):
+    self.tmp = tempfile.TemporaryDirectory()
+    self.sd = os.path.join(self.tmp.name, "sd")
+    self.cache = os.path.join(self.tmp.name, "cache")
+    os.makedirs(os.path.join(self.sd, "GBA", "Sub"))
+    os.makedirs(self.cache)
+    gba_rom(os.path.join(self.sd, "GBA", "Sub", "renamed rom.gba"), "AMTE")
+    with open(os.path.join(self.sd, "GBA", "Pokemon Ruby.gba"), "wb") as fd:
+      fd.write(b"\0" * 64)
+    repo = mc.SYSTEMS["gba"]
+    tree = [["Named_Boxarts/%s.png" % n, "100644"] for n in BOXARTS]
+    tree.append(["Named_Boxarts/Linked (USA).png", "120000"])
+    with open(os.path.join(self.cache, repo + ".json"), "w", encoding="utf-8") as fd:
+      json.dump(tree, fd)
+    with open(os.path.join(self.cache, "nointro-%s.dat" % repo), "w", encoding="utf-8") as fd:
+      fd.write(DAT % (1, 2))
+    self.requests = []
+    def fake_get(url, retries=3):
+      self.requests.append(url)
+      if "Linked" in url:
+        return b"Metroid Fusion (USA).png"      # Symlinks are served as text
+      return png_bytes((200, 40, 40))
+    self.real_get, mc.http_get = mc.http_get, fake_get
+
+  def tearDown(self):
+    mc.http_get = self.real_get
+    self.tmp.cleanup()
+
+  def run_tool(self, *extra):
+    argv = sys.argv
+    sys.argv = ["make-covers.py", self.sd, "--cache", self.cache] + list(extra)
+    try:
+      mc.main()
+    finally:
+      sys.argv = argv
+    return sorted(os.listdir(os.path.join(self.sd, mc.COVERS_DIR)))
+
+  def test_covers_written(self):
+    covers = self.run_tool()
+    # GBA game code cover for the identified ROM, file name cover for the other.
+    self.assertEqual(covers, ["AMTE.cov", "Pokemon Ruby.gba.cov"])
+    for c in covers:
+      with open(os.path.join(self.sd, mc.COVERS_DIR, c), "rb") as fd:
+        big, small, tint = mc.read_cover(fd.read())
+      self.assertIsNotNone(tint)
+    # Already present covers are skipped on the next run.
+    n = len(self.requests)
+    self.run_tool()
+    self.assertEqual(len(self.requests), n)
+
+  def test_symlink(self):
+    img = mc.ThumbIndex(self.cache).download(mc.SYSTEMS["gba"], "Named_Boxarts/Linked (USA).png", True)
+    self.assertEqual(img.size, (40, 40))
+    self.assertTrue(self.requests[-1].endswith("Metroid%20Fusion%20%28USA%29.png"))
+
+  def test_progress_events(self):
+    # What the window shows: one "rom" event per ROM, with its result.
+    events = []
+    def report(event, **kw):
+      events.append((event, kw))
+    parser, args = mc.make_args([self.sd, "--cache", self.cache])
+    mc.make_covers(args, report)
+    self.assertEqual(events[0], ("start", {"total": 2}))
+    roms = {kw["romname"]: kw for e, kw in events if e == "rom"}
+    self.assertEqual(roms["renamed rom.gba"]["status"], "made")
+    self.assertTrue(roms["renamed rom.gba"]["outfn"].endswith("AMTE.cov"))
+    self.assertEqual(roms["Pokemon Ruby.gba"]["status"], "made")
+    self.assertEqual(events[-1][0], "done")
+    # Second run: both present, with the cover file to preview.
+    events.clear()
+    mc.make_covers(args, report)
+    for e, kw in events:
+      if e == "rom":
+        self.assertEqual(kw["status"], "present")
+        self.assertTrue(os.path.exists(kw["outfn"]))
+
+  def test_stop(self):
+    events = []
+    parser, args = mc.make_args([self.sd, "--cache", self.cache])
+    mc.make_covers(args, lambda e, **kw: events.append(e), cancelled=lambda: True)
+    self.assertNotIn("rom", events)
+    self.assertFalse(os.path.exists(os.path.join(self.sd, mc.COVERS_DIR)))
+
+class GameCode(unittest.TestCase):
+  def test_codes(self):
+    with tempfile.TemporaryDirectory() as d:
+      p = os.path.join(d, "rom.gba")
+      gba_rom(p, "AMTE")
+      self.assertEqual(mc.gba_gamecode(p), "AMTE")
+      gba_rom(p, "AMTE", good_checksum=False)
+      self.assertIsNone(mc.gba_gamecode(p))
+      gba_rom(p, "amte")
+      self.assertIsNone(mc.gba_gamecode(p))
+      with open(p, "wb") as fd:
+        fd.write(b"\0" * 100)            # Too short
+      self.assertIsNone(mc.gba_gamecode(p))
+
+class CoverFormat(unittest.TestCase):
+  def test_roundtrip(self):
+    # A wide red image: letterboxed top/bottom, red tint.
+    img = Image.new("RGB", (160, 80), (220, 30, 30))
+    data = mc.cover_bytes(img)
+    self.assertEqual(len(data), 16 + mc.BIG * mc.BIG + mc.SMALL * mc.SMALL)
+    magic, ver, big, small, pal, tint = struct.unpack_from("<IBBBBH6x", data)
+    self.assertEqual((magic, ver, big, small, pal), (mc.COVER_MAGIC, 2, 80, 48, 0))
+    self.assertTrue(tint & mc.TINT_VALID)
+
+    bigimg, smallimg, t = mc.read_cover(data)
+    r, g, b = t & 31, (t >> 5) & 31, (t >> 10) & 31
+    self.assertGreater(r, 20)
+    self.assertLess(g, 10)
+    self.assertLess(b, 10)
+
+    # Letterbox rows use the carousel background, the image the color cube.
+    self.assertTrue(all(p == mc.BG_INDEX for p in bigimg[:mc.BIG * 10]))
+    middle = bigimg[mc.BIG * 40:mc.BIG * 41]
+    self.assertTrue(all(mc.PAL_BASE <= p < mc.PAL_BASE + 216 for p in middle))
+
+  def test_preview(self):
+    # Blue tall image: the sides are the tint (blue), the middle the image.
+    data = mc.cover_bytes(Image.new("RGB", (40, 80), (0, 0, 255)))
+    img = mc.cover_preview(data)
+    self.assertEqual(img.size, (mc.BIG * 2, mc.BIG * 2))
+    r, g, b = img.getpixel((0, 80))
+    self.assertTrue(b > 200 and r < 40 and g < 40)
+    self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))
+
+  def test_v1_files(self):
+    data = struct.pack("<IBBBB8x", mc.COVER_MAGIC, 1, 80, 48, 0) + bytes(80 * 80 + 48 * 48)
+    self.assertIsNone(mc.read_cover(data)[2])
+
+  def test_bad_files(self):
+    good = mc.cover_bytes(Image.new("RGB", (10, 10), (0, 0, 255)))
+    with self.assertRaises(ValueError):
+      mc.read_cover(good[:-1])
+    with self.assertRaises(ValueError):
+      mc.read_cover(b"XXXX" + good[4:])
+
+  def test_palette(self):
+    # Must match menu_init(): 6 levels per channel, r + 6g + 36b.
+    self.assertEqual(len(mc.PALETTE), 216)
+    self.assertEqual(mc.PALETTE[0], (0, 0, 0))
+    self.assertEqual(mc.PALETTE[215], (255, 255, 255))
+    self.assertEqual(mc.PALETTE[5], (255, 0, 0))
+    self.assertEqual(mc.PALETTE[30], (0, 255, 0))
+
+class PreviewParity(unittest.TestCase):
+  # Same expectations as tests/carousel_util_test.c
+  def test_titles(self):
+    cases = {
+      "Pokemon - Emerald Version (USA, Europe).gba": "Pokemon - Emerald Version",
+      "1190 - Super Mario Advance 4 - Super Mario Bros 3 (E)(Menace).gba":
+        "Super Mario Advance 4 - Super Mario Bros 3",
+      "007 - NightFire (USA, Europe).gba": "007 - NightFire",
+      "(Hack) My Game.gba": "(Hack) My Game",
+    }
+    for fn, title in cases.items():
+      self.assertEqual(pv.carousel_title(fn), title)
+
+  def test_sizes_and_mix(self):
+    self.assertEqual(pv.cover_size_at(0), 80)
+    self.assertEqual(pv.cover_size_at(76), 48)
+    self.assertTrue(all(pv.cover_size_at(d) % 4 == 0 for d in range(100)))
+    self.assertEqual(pv.rgb555_mix(0, 0x7FFF, 8), 16 | (16 << 5) | (16 << 10))
+
+if __name__ == "__main__":
+  unittest.main(verbosity=2)

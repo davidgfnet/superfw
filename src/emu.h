@@ -35,4 +35,9 @@ typedef struct {
 
 const t_emu_loader * get_emu_info(const char *ext);
 
+// Emulated systems, grouped by emulator (ie. gb and gbc share one). Group of
+// an extension (-1 if it is not emulated), and its name ("GB/GBC").
+int emu_group(const char *ext);
+void emu_group_name(int group, char *out, unsigned size);
+
 #endif
