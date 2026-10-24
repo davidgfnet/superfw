@@ -45,6 +45,16 @@
   #define SRAM_MAP_BANK(bank) set_supercard_mode(MAPPED_SDRAM, (bank) ? true : false, true)
 #endif
 
+// Size of the .sav files written in SRAM-based saving (0: the whole chip).
+// It is the game's save type size (ie. 32 KiB for SRAM games), so the files
+// work with emulators and other tools (issue #39). Set by
+// prepare_savegame(), passed on to the in-game menu by the loader.
+unsigned sram_save_size = 0;
+
+static unsigned save_size_or_chip(unsigned size) {
+  return (!size || size > SRAM_CHIP_SIZE) ? SRAM_CHIP_SIZE : size;
+}
+
 // Writes data to SRAM, write may not cross a bank boundary.
 void write_sram_buffer(const uint8_t *buffer, unsigned offset, unsigned len) {
   SRAM_MAP_BANK(offset / SRAM_BANK_SIZE);
@@ -117,25 +127,28 @@ bool wipe_sav_file(const char *fn) {
   return f_close(&fd) == FR_OK;
 }
 
-bool write_save_sram(const char *fn) {
+bool write_save_sram(const char *fn, unsigned size) {
+  size = save_size_or_chip(size);
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_WRITE | FA_CREATE_ALWAYS);
   if (res != FR_OK)
     return false;
 
-  for (unsigned i = 0; i < SRAM_CHIP_SIZE; i += 1024) {
+  for (unsigned i = 0; i < size; i += 1024) {
     UINT wrbytes = 0;
     uint8_t tmpbuf[1024];
+    const unsigned n = MIN(1024, size - i);
     // Read SRAM using byte access
     volatile uint8_t *sram_ptr = &SRAM_BASE_U8[i % SRAM_BANK_SIZE];
     unsigned bank = i / SRAM_BANK_SIZE;
     SRAM_MAP_BANK(bank);
-    for (unsigned j = 0; j < 1024; j++)
+    for (unsigned j = 0; j < n; j++)
       tmpbuf[j] = sram_ptr[j];
     set_supercard_mode(MAPPED_SDRAM, true, true);
 
-    res = f_write(&fd, tmpbuf, sizeof(tmpbuf), &wrbytes);
-    if (res != FR_OK || wrbytes != sizeof(tmpbuf)) {
+    // cppcheck-suppress uninitvar ; the n bytes written are filled just above
+    res = f_write(&fd, tmpbuf, n, &wrbytes);
+    if (res != FR_OK || wrbytes != n) {
       f_close(&fd);
       return false;
     }
@@ -144,18 +157,20 @@ bool write_save_sram(const char *fn) {
   return f_close(&fd) == FR_OK;
 }
 
-bool compare_save_sram(const char *fn) {
+bool compare_save_sram(const char *fn, unsigned size) {
+  size = save_size_or_chip(size);
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_READ);
   if (res != FR_OK)
     return false;
 
   bool mism = false;
-  for (unsigned i = 0; i < SRAM_CHIP_SIZE && !mism; i += 1024) {
+  for (unsigned i = 0; i < size && !mism; i += 1024) {
     UINT rdbytes = 0;
     uint8_t tmpbuf[1024];
-    res = f_read(&fd, tmpbuf, sizeof(tmpbuf), &rdbytes);
-    if (res != FR_OK || rdbytes == 0) {
+    const unsigned n = MIN(1024, size - i);
+    res = f_read(&fd, tmpbuf, n, &rdbytes);
+    if (res != FR_OK || rdbytes != n) {
       f_close(&fd);
       return false;
     }
@@ -164,7 +179,7 @@ bool compare_save_sram(const char *fn) {
     volatile uint8_t *sram_ptr = &SRAM_BASE_U8[i % SRAM_BANK_SIZE];
     unsigned bank = i / SRAM_BANK_SIZE;
     SRAM_MAP_BANK(bank);
-    for (unsigned j = 0; j < 1024; j++)
+    for (unsigned j = 0; j < n; j++)
       if (tmpbuf[j] != sram_ptr[j])
         mism = true;
     set_supercard_mode(MAPPED_SDRAM, true, true);
@@ -215,19 +230,19 @@ bool rotate_savefile(const char *templ_fn, unsigned max_backups) {
 }
 
 // Performs a write to SD and rotates (renames) files as backup goes (see above).
-bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups) {
+bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups, unsigned size) {
   char tmpfn[MAX_FN_LEN];
-  if (!path_join(tmpfn, templ_fn, ".tmp.sav", "") || !write_save_sram(tmpfn))
+  if (!path_join(tmpfn, templ_fn, ".tmp.sav", "") || !write_save_sram(tmpfn, size))
     return false;
 
   return rotate_savefile(templ_fn, max_backups);
 }
 
-bool write_save_sram_safe_overwrite(const char *templ_fn) {
+bool write_save_sram_safe_overwrite(const char *templ_fn, unsigned size) {
   char tmpfn[MAX_FN_LEN], finalfn[MAX_FN_LEN];
   if (!path_join(tmpfn, templ_fn, ".tmp.sav", "") ||
       !path_join(finalfn, templ_fn, ".sav", "") ||
-      !write_save_sram(tmpfn))
+      !write_save_sram(tmpfn, size))
     return false;
 
   // No way to do this atomic/safe, this is the closest probably :P
@@ -261,10 +276,12 @@ unsigned flush_pending_sram() {
 
   // Extract the filename and options
   const char *savefn = content;
-  const char *bkpn = NULL;
+  const char *bkpn = NULL, *sizen = NULL;
   for (unsigned i = strlen(content) + 1; i < l + 1; ) {
     if (!strncmp(&content[i], "backup_count=", 13))
       bkpn = &content[i + 13];
+    else if (!strncmp(&content[i], "save_size=", 10))
+      sizen = &content[i + 10];
     i += strlen(&content[i]) + 1;
   }
 
@@ -272,6 +289,14 @@ unsigned flush_pending_sram() {
   unsigned backup_num = 0;
   if (bkpn)
     backup_num = MIN(parseuint(bkpn), MAX_BACKUP_CNT);
+  // Save size: one of the save type sizes, else (or for files written by
+  // older versions) the whole chip.
+  unsigned save_size = 0;
+  if (sizen) {
+    unsigned v = parseuint(sizen);
+    if (v == 512 || v == 8*1024 || v == 32*1024 || v == 64*1024)
+      save_size = v;
+  }
 
   // Validate the filename! Should start with "/" and leave room for the
   // suffixes (".tmp.sav", ".N.sav"). Let the FatFS check it too.
@@ -283,7 +308,7 @@ unsigned flush_pending_sram() {
     char tmpfn[MAX_FN_LEN];
     path_join(tmpfn, savefn, ".sav", "");   // Fits, checked above
     // Do not write nor rotate backups if the SRAM did not change!
-    if (compare_save_sram(tmpfn))
+    if (compare_save_sram(tmpfn, save_size))
       return 0;
   }
 
@@ -291,7 +316,7 @@ unsigned flush_pending_sram() {
   create_basepath(savefn);
 
   // Use the rotate function to ensure we write this properly.
-  if (!write_save_sram_rotate(savefn, backup_num))
+  if (!write_save_sram_rotate(savefn, backup_num, save_size))
     return ERR_SAVE_FLUSH_WRITEFAIL;
 
   return 0;
@@ -301,7 +326,7 @@ unsigned flush_pending_sram() {
 // stored during the next boot, to preserve the current game save storage.
 // The file contains one or more lines: filename template (without .sav),
 // options (ie. backup_count=N)
-bool program_sram_dump(const char *save_filename, unsigned backup_cnt) {
+bool program_sram_dump(const char *save_filename, unsigned backup_cnt, unsigned save_size) {
   if (!save_filename) {
     if (check_file_exists(PENDING_SAVE_FILEPATH)) {
       if (FR_OK != f_unlink(PENDING_SAVE_FILEPATH))
@@ -315,7 +340,8 @@ bool program_sram_dump(const char *save_filename, unsigned backup_cnt) {
 
     // Write filename along with backup count.
     char content[512];
-    npf_snprintf(content, sizeof(content), "%s\nbackup_count=%u", save_filename, backup_cnt);
+    npf_snprintf(content, sizeof(content), "%s\nbackup_count=%u\nsave_size=%u",
+                 save_filename, backup_cnt, save_size);
 
     FIL fd;
     if (FR_OK != f_open(&fd, PENDING_SAVE_FILEPATH, FA_WRITE | FA_CREATE_ALWAYS))
@@ -428,8 +454,9 @@ bool copy_save_contiguous_file(const char *fn, const char *dest, unsigned size) 
 }
 
 NOINLINE
-unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, const char *savefn) {
-  WRITE_LOG("Preparing SRAM-based save game. LdPol: %d SvPol: %d Save file: '%s'", loadp, savep, savefn);
+unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, unsigned save_size, const char *savefn) {
+  WRITE_LOG("Preparing SRAM-based save game. LdPol: %d SvPol: %d Size: %u Save file: '%s'", loadp, savep, save_size, savefn);
+  sram_save_size = save_size;
 
   // Clear the SRAM before loading any data (avoid random garbage!), unless in manual mode ofc.
   if (loadp != SaveLoadDisable)
@@ -446,11 +473,11 @@ unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_polic
     // Program auto-save on reboot, write basename to the config file
     char savetmpl[MAX_FN_LEN];
     if (!path_join_ext(savetmpl, "", savefn, "") ||
-        !program_sram_dump(savetmpl, backup_sram_default))
+        !program_sram_dump(savetmpl, backup_sram_default, save_size))
       return ERR_SAVE_CANTWRITE;
   }
   else { /* Save disabled */
-    if (!program_sram_dump(NULL, 0))   // Remove sentinel file, no save on reboot.
+    if (!program_sram_dump(NULL, 0, 0))   // Remove sentinel file, no save on reboot.
       return ERR_SAVE_CANTWRITE;
   }
 
@@ -471,7 +498,7 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
     if (loadp == SaveLoadDisable)
       return ERR_SAVE_BADARG;         // This option is invalid, this should never happen.
 
-    if (!program_sram_dump(NULL, 0))   // Remove sentinel file, no save on reboot!
+    if (!program_sram_dump(NULL, 0, 0))   // Remove sentinel file, no save on reboot!
       return ERR_SAVE_CANTWRITE;
 
     unsigned ssize = savetype_size(stype);
@@ -518,8 +545,8 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
 
     dsinfo->sector_lba = lba;
   } else {
-    // SRAM-based (on reboot/manual) saving!
-    return prepare_sram_based_savegame(loadp, savep, savefn);
+    // SRAM-based (on reboot/manual) saving! The .sav is the game's save size.
+    return prepare_sram_based_savegame(loadp, savep, stype == SaveTypeNone ? 0 : savetype_size(stype), savefn);
   }
 
   return 0;

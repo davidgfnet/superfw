@@ -45,6 +45,7 @@ extern uint32_t cheat_base_addr;
 extern uint32_t menu_anim_speed;
 extern uint16_t ingame_menu_palette[8];
 extern uint32_t savefile_backups;                // Num of save backups to create
+extern uint32_t savefile_size;                   // .sav file size (0: the whole SRAM)
 extern uint32_t scratch_base, scratch_size;      // Space to write snapshots (in memory)
 extern uint32_t spill_addr;                      // Spill buffer that gets reloaded on IGM exit
 extern char savefile_pattern[256];
@@ -790,7 +791,7 @@ bool action_reset_fw() {
 }
 bool action_reset_fw_nosave() {
   // Skip saving on reboot!
-  program_sram_dump(NULL, 0);
+  program_sram_dump(NULL, 0, 0);
   // Go ahead and reboot to flash.
   reset_fw();
   return false;
@@ -858,7 +859,7 @@ bool action_save_overw() {
   // Just overwrites the .sav file with our data. We use a tmp file for safety though.
 
   create_paths(savefile_pattern);     // Just in case it doesn't exist.
-  if (write_save_sram_safe_overwrite(savefile_pattern))
+  if (write_save_sram_safe_overwrite(savefile_pattern, savefile_size))
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEC];
   else
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
@@ -871,7 +872,7 @@ bool action_save_backup() {
 
   // Write save generating a backup, honoring the backup_count.
   unsigned bc = MAX(savefile_backups, 1);
-  if (write_save_sram_rotate(savefile_pattern, bc))
+  if (write_save_sram_rotate(savefile_pattern, bc, savefile_size))
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEC];
   else
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
@@ -884,11 +885,11 @@ bool action_save_reset() {
 
   // Update the sav file before
   create_paths(savefile_pattern);     // Just in case it doesn't exist.
-  if (!write_save_sram_safe_overwrite(savefile_pattern))
+  if (!write_save_sram_safe_overwrite(savefile_pattern, savefile_size))
     popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEERR];
   else {
     // Do not write any file on reboot (it's done already!)
-    program_sram_dump(NULL, 0);
+    program_sram_dump(NULL, 0, 0);
     // Go ahead and reboot to flash.
     reset_fw();
   }
