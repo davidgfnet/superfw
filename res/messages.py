@@ -81,6 +81,8 @@ en_strings = [
   "MSG_CAR_SAVE":    "Save",
   "MSG_CAR_LAST":    "Last played",
   "MSG_CAR_FLASH":   "Flash",
+  "MSG_CAR_LOADSD":  "Load from SD card",
+  "MSG_NOR_REMOVE":  "Remove from flash",
 
   "MSG_UIS_THEME": "Theme color",
   "MSG_UIS_LANG":  "Language",

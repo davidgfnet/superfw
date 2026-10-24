@@ -59,7 +59,10 @@ of box art covers sorted by name:
  - Up/Down: jump to the previous/next letter (shown big for a moment).
  - A: open the game (same load options as the browser). If the game was
    written to the flash (SuperChis) from this SD file, it starts from flash.
- - Select: always load the game from the SD card. L/R switch tabs.
+ - Select: file menu, the same as in the SD browser (delete, hide, write to
+   flash). For games already in flash it offers "Remove from flash" (same as
+   the flash tab) and "Load from SD card" instead, and shows the flash usage.
+ - L/R switch tabs.
 
 The background takes the color of the selected cover. Below the title it shows
 the system, the size, whether there is a save file, whether it is the last

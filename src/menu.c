@@ -245,11 +245,16 @@ enum {
   FlashingWriting  = 4,
 };
 
+// File manager options. The SD browser shows Delete, Hide and Write (NOR); the
+// carousel shows the same plus Remove (NOR) / Load from SD for games already
+// in flash. spop.fmgr.opts holds the options shown, in order.
 enum {
   FiMgrDelete,
   FiMgrHide,
 #ifdef SUPPORT_NORGAMES
   FiMgrWriteNOR,
+  FiMgrRemoveNOR,
+  FiMgrLoadSD,
 #endif
   FiMgrCNT
 };
@@ -394,6 +399,18 @@ static struct {
   char submenu;                   // Which submenu tab we are in (if any)
   char selector;                  // Option selector (if any)
   unsigned anim;                  // Animation state
+
+  // File manager pop up target (outside of the union: it is still needed
+  // while its confirmation questions are shown).
+  struct {
+    char path[MAX_FN_LEN];        // File to act on
+    uint32_t filesize;
+    uint8_t attr;
+    bool carousel;                // Opened from the carousel (compact layout)
+    int nor_index;                // Its flash entry (-1: not in flash)
+    uint8_t optcnt;
+    uint8_t opts[FiMgrCNT];       // Options shown, in order
+  } fmgr;
 
   // Pop up message (for whatever action). Allows returning to previous popup.
   struct {
@@ -1829,24 +1846,43 @@ void render_filemgr(volatile uint8_t *frame) {
   // Draw the file name and the options available
   draw_box_outline(frame, 2, 240-2, 18, 158, FG_COLOR);
 
-  t_centry *e = sdr_state->fileorder[smenu.browser.selector];
-  const char *bn = file_basename(e->fname);
+  // The SD browser layout (title + up to 3 options) is unchanged; the carousel
+  // one is more compact (up to 4 options plus the flash usage).
+  const bool compact = spop.fmgr.carousel;
+  const unsigned titley = compact ? 24 : 32;
+  const unsigned opty = 60, optstep = compact ? 22 : 30;
 
+  const char *bn = file_basename(spop.fmgr.path);
   unsigned twidth = font_width(bn);
   if (twidth > SCREEN_WIDTH - 20)
-    draw_text_ovf_rotate(bn, frame, 10, 32, SCREEN_WIDTH - 20, &spop.anim);
+    draw_text_ovf_rotate(bn, frame, 10, titley, SCREEN_WIDTH - 20, &spop.anim);
   else
-    draw_central_text_ovf(bn, frame, SCREEN_WIDTH/2, 32, SCREEN_WIDTH - 20);
-
-  for (unsigned i = 0; i < FiMgrCNT; i++)
-    draw_button_box(frame, 20, 220, 60 + i*30, 80 + i*30, i == spop.selector);
-
-  draw_central_text(msgs[lang_id][MSG_FMGR_DEL], frame, 120, 62 + 30*FiMgrDelete);
-  draw_central_text(msgs[lang_id][(e->attr & AM_HID) ? MSG_FMGR_UNHIDE : MSG_FMGR_HIDE], frame, 120, 62 + 30*FiMgrHide);
+    draw_central_text_ovf(bn, frame, SCREEN_WIDTH/2, titley, SCREEN_WIDTH - 20);
 
   #ifdef SUPPORT_NORGAMES
-  draw_central_text(msgs[lang_id][MSG_NOR_WRITE], frame, 120, 62 + 30*FiMgrWriteNOR);
+  if (compact) {
+    char tmp[48], tmp1[16], tmp2[16];
+    human_size(tmp1, sizeof(tmp1), smenu.fbrowser.usedblks * NOR_BLOCK_SIZE);
+    human_size(tmp2, sizeof(tmp2), NOR_GAMEBLOCK_COUNT * NOR_BLOCK_SIZE);
+    npf_snprintf(tmp, sizeof(tmp), "Flash: %s/%s", tmp1, tmp2);
+    draw_central_text(tmp, frame, SCREEN_WIDTH/2, 40);
+  }
   #endif
+
+  for (unsigned i = 0; i < spop.fmgr.optcnt; i++) {
+    unsigned msg = MSG_FMGR_DEL;
+    switch (spop.fmgr.opts[i]) {
+    case FiMgrDelete:    msg = MSG_FMGR_DEL; break;
+    case FiMgrHide:      msg = (spop.fmgr.attr & AM_HID) ? MSG_FMGR_UNHIDE : MSG_FMGR_HIDE; break;
+    #ifdef SUPPORT_NORGAMES
+    case FiMgrWriteNOR:  msg = MSG_NOR_WRITE; break;
+    case FiMgrRemoveNOR: msg = MSG_NOR_REMOVE; break;
+    case FiMgrLoadSD:    msg = MSG_CAR_LOADSD; break;
+    #endif
+    };
+    draw_button_box(frame, 20, 220, opty + i*optstep, opty + 20 + i*optstep, i == spop.selector);
+    draw_central_text(msgs[lang_id][msg], frame, 120, opty + 2 + i*optstep);
+  }
 }
 
 
@@ -3641,28 +3677,70 @@ static void keypress_popup_norload(unsigned newkeys) {
 }
 #endif
 
+#ifdef SUPPORT_NORGAMES
+// Removes a game from the flash (NOR) list and stores the new list. Used by
+// the flash tab and the carousel (same question, same behaviour).
+static void nor_remove_game(unsigned idx) {
+  if (idx >= sdr_state->nordata.gamecnt)
+    return;
+
+  // Remove game entry, just memmove the other games on top.
+  sdr_state->nordata.gamecnt--;
+  memmove32(&sdr_state->nordata.games[idx],
+            &sdr_state->nordata.games[idx + 1],
+            (sdr_state->nordata.gamecnt - idx) * sizeof(t_flash_game_entry));
+
+  // Go ahead and write a new metadata entry;
+  if (!flashmgr_store(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE, (t_reg_entry*)&sdr_state->nordata))
+    spop.alert_msg = msgs[lang_id][MSG_ERR_NORUPD];
+  flashbrowser_reload();   // Force list reload, free block calculation, etc.
+}
+#endif
+
+// Opens the file manager pop up for a file.
+static void filemgr_open(const char *path, uint32_t filesize, uint8_t attr, bool carousel, int nor_index) {
+  strcpy(spop.fmgr.path, path);
+  spop.fmgr.filesize = filesize;
+  spop.fmgr.attr = attr;
+  spop.fmgr.carousel = carousel;
+  spop.fmgr.nor_index = nor_index;
+
+  spop.fmgr.optcnt = 0;
+  spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrDelete;
+  spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrHide;
+  #ifdef SUPPORT_NORGAMES
+  if (nor_index < 0)
+    spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrWriteNOR;
+  else {
+    spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrRemoveNOR;
+    spop.fmgr.opts[spop.fmgr.optcnt++] = FiMgrLoadSD;
+  }
+  #endif
+
+  spop.pop_num = POPUP_FILE_MGR;
+  spop.anim = 0;
+  spop.selector = 0;
+}
+
 static void keypress_popup_filemgr(unsigned newkeys) {
   if (newkeys & KEY_BUTTUP)
     spop.selector = MAX(0, spop.selector - 1);
   if (newkeys & KEY_BUTTDOWN)
-    spop.selector = MIN(FiMgrCNT - 1, spop.selector + 1);
+    spop.selector = MIN(spop.fmgr.optcnt - 1, spop.selector + 1);
 
   if (newkeys & KEY_BUTTA) {
-    t_centry *e = sdr_state->fileorder[smenu.browser.selector];
-    switch (spop.selector) {
+    switch (spop.fmgr.opts[(unsigned)spop.selector]) {
     case FiMgrDelete:
       {
         void remove_file_action(bool confirm) {
-          char tmpfn[MAX_FN_LEN];
           if (confirm) {
-            if (!path_join(tmpfn, smenu.browser.cpath, sdr_state->fileorder[smenu.browser.selector]->fname, ""))
-              spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
-            else if (FR_OK != f_unlink(tmpfn))
+            if (FR_OK != f_unlink(spop.fmgr.path))
               spop.alert_msg = msgs[lang_id][MSG_ERR_DELFILE];
             else
               spop.alert_msg = msgs[lang_id][MSG_OK_DELFILE];
 
             browser_reload();   // Force reload so the file disappears!
+            smenu.carousel.stale = true;
           }
         }
         spop.qpop.message = msgs[lang_id][MSG_Q0_DELFILE];
@@ -3674,25 +3752,25 @@ static void keypress_popup_filemgr(unsigned newkeys) {
       }
       break;
     case FiMgrHide:
-      {
-        char tmpfn[MAX_FN_LEN];
-        if (!path_join(tmpfn, smenu.browser.cpath, sdr_state->fileorder[smenu.browser.selector]->fname, ""))
-          spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
-        else if (FR_OK == f_chmod(tmpfn, e->attr ^ AM_HID, AM_HID))
-          e->attr ^= AM_HID;
+      if (FR_OK == f_chmod(spop.fmgr.path, spop.fmgr.attr ^ AM_HID, AM_HID)) {
+        if (spop.fmgr.carousel) {
+          // The file can be in any folder: reload, the carousel rescans.
+          browser_reload();
+          smenu.carousel.stale = true;
+        }
         else
-          spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
+          sdr_state->fileorder[smenu.browser.selector]->attr ^= AM_HID;
       }
+      else
+        spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
       spop.pop_num = POPUP_NONE;
       break;
 
     #ifdef SUPPORT_NORGAMES
     case FiMgrWriteNOR:
-      {
-      char path[MAX_FN_LEN];
-      if (e->filesize > MAX_GBA_ROM_SIZE)
+      if (spop.fmgr.filesize > MAX_GBA_ROM_SIZE)
         spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
-      else if (!path_join(path, smenu.browser.cpath, e->fname, "") || !rom_path_ok(path))
+      else if (!rom_path_ok(spop.fmgr.path))
         spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
       else {
         // Load default loading settings if any.
@@ -3702,9 +3780,9 @@ static void keypress_popup_filemgr(unsigned newkeys) {
           .use_rtc = rtcpatch_default,
           .use_dsaving = autosave_prefer_ds
         };
-        load_rom_settings(path, &ld_sett, NULL);
+        load_rom_settings(spop.fmgr.path, &ld_sett, NULL);
 
-        if (!prepare_gba_info(&spop.p.norwr.i, &ld_sett, path, e->filesize, false))
+        if (!prepare_gba_info(&spop.p.norwr.i, &ld_sett, spop.fmgr.path, spop.fmgr.filesize, false))
           spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
         else {
           spop.pop_num = POPUP_GBA_NORWRITE;
@@ -3712,7 +3790,25 @@ static void keypress_popup_filemgr(unsigned newkeys) {
           spop.selector = 0;
         }
       }
+      break;
+
+    case FiMgrRemoveNOR:
+      {
+        void remove_nor_action(bool confirm) {
+          if (confirm)
+            nor_remove_game(spop.fmgr.nor_index);
+        }
+        spop.qpop.message = msgs[lang_id][MSG_Q5_DELNORG];
+        spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
+        spop.qpop.confirm_button = msgs[lang_id][MSG_Q_YES];
+        spop.qpop.option = 0;
+        spop.qpop.callback = remove_nor_action;
+        spop.qpop.clear_popup_ok = true;
       }
+      break;
+
+    case FiMgrLoadSD:
+      browser_open(spop.fmgr.path, spop.fmgr.filesize);
       break;
     #endif
     };
@@ -3819,9 +3915,12 @@ static void keypress_menu_browse(unsigned newkeys) {
     }
     else if (newkeys & KEY_BUTTSEL) {
       // Shows a file management menu.
-      spop.pop_num = POPUP_FILE_MGR;
-      spop.anim = 0;
-      spop.selector = 0;
+      t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+      char path[MAX_FN_LEN];
+      if (path_join(path, smenu.browser.cpath, e->fname, ""))
+        filemgr_open(path, e->filesize, e->attr, false, -1);
+      else
+        spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
     }
   }
   if (newkeys & KEY_BUTTB) {
@@ -3863,19 +3962,8 @@ static void keypress_menu_norbrowse(unsigned newkeys) {
     else if (newkeys & KEY_BUTTSEL) {
       // Prompt NOR entry deletion.
       void remove_nor_action(bool confirm) {
-        if (!confirm)
-          return;
-
-        // Remove game entry, just memmove the other games on top.
-        sdr_state->nordata.gamecnt--;
-        memmove32(&sdr_state->nordata.games[smenu.fbrowser.selector],
-                  &sdr_state->nordata.games[smenu.fbrowser.selector + 1],
-                  (sdr_state->nordata.gamecnt - smenu.fbrowser.selector) * sizeof(t_flash_game_entry));
-
-        // Go ahead and write a new metadata entry;
-        if (!flashmgr_store(ROM_FLASHMETA_ADDR, FLASH_METADATA_SIZE, (t_reg_entry*)&sdr_state->nordata))
-          spop.alert_msg = msgs[lang_id][MSG_ERR_NORUPD];
-        flashbrowser_reload();   // Force list reload, free block calculation, etc.
+        if (confirm)
+          nor_remove_game(smenu.fbrowser.selector);
       }
       spop.qpop.message = msgs[lang_id][MSG_Q5_DELNORG];
       spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
@@ -4179,21 +4267,30 @@ static void keypress_menu_carousel(unsigned newkeys) {
   else if (newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT))
     smenu.carousel.letter_until = frame_count;    // Hide the letter when moving
 
-  // A: start the game (from flash if it was written there), Select: always
-  // load it from the SD card.
+  // A: start the game (from flash if it was written there).
+  // Select: the file manager, like in the SD browser (plus flash options).
   if (newkeys & (KEY_BUTTA | KEY_BUTTSEL)) {
+    int nor_index = -1;
     #ifdef SUPPORT_NORGAMES
-    const t_flash_game_entry *fe = (newkeys & KEY_BUTTA) ? carousel_nor_entry(sel) : NULL;
-    if (fe) {
+    const t_flash_game_entry *fe = carousel_nor_entry(sel);
+    if (fe && (newkeys & KEY_BUTTA)) {
       browser_open_nor(fe);
       return;
     }
+    if (fe)
+      nor_index = fe - sdr_state->nordata.games;
     #endif
+
     char path[MAX_FN_LEN];
-    if (carousel_fullpath(sel, path))
-      browser_open(path, carousel_game(sel)->filesize);
-    else
+    FILINFO info;
+    if (!carousel_fullpath(sel, path))
       spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
+    else if (newkeys & KEY_BUTTA)
+      browser_open(path, carousel_game(sel)->filesize);
+    else if (FR_OK == f_stat(path, &info))
+      filemgr_open(path, carousel_game(sel)->filesize, info.fattrib, true, nor_index);
+    else
+      spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
   }
 }
 
