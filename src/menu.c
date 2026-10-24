@@ -117,7 +117,7 @@ typedef struct {
   uint32_t filesize;
   uint32_t pathoff;         // Offset of the path (relative to the scan root) in the pool
   uint16_t nameoff;         // Offset of the file name within the path
-  uint16_t pad;
+  uint16_t attr;            // CATTR_* (not cached: set by carousel_load_attrs())
 } t_cgame;
 _Static_assert (sizeof(t_cgame) % 4 == 0, "t_cgame must be word-friendly");
 
@@ -509,6 +509,7 @@ typedef struct {
   t_reg_entry_max nordata;
   t_cgame carousel_games[CAROUSEL_MAX_GAMES];
   char carousel_pool[CAROUSEL_POOL_SIZE];
+  uint32_t carousel_view[CAROUSEL_MAX_GAMES];   // Games shown, in order (carousel_games index)
   uint8_t cover_big[COVER_SLOTS][COVER_BIG * COVER_BIG];
   uint8_t cover_small[COVER_SLOTS][COVER_SMALL * COVER_SMALL];
 } t_sdram_state;
@@ -517,17 +518,6 @@ _Static_assert (sizeof(t_sdram_state) <= 14.5*1024*1024, "scratch SDRAM doesn't 
 
 t_sdram_state *sdr_state = (t_sdram_state*)0x08000000;
 
-// Carousel view: the games shown, in order, and per game attributes. The
-// state above has no room left, so they live in their own SDRAM area
-// (ROM_OFF_CAROUSEL, above the 8 MiB of hiscratch the patch generator uses).
-typedef struct {
-  uint32_t view[CAROUSEL_MAX_GAMES];      // Games shown, in order (carousel_games index)
-  uint16_t attr[CAROUSEL_MAX_GAMES];      // CATTR_* (system, favourite, recent position)
-} t_carousel_ext;
-_Static_assert (sizeof(t_carousel_ext) <= ROM_OFF_USRPATCH_DB - ROM_OFF_CAROUSEL, "carousel area fits");
-_Static_assert (ROM_OFF_CAROUSEL >= ROM_OFF_HISCRATCH + 8*1024*1024, "above the patch generator area");
-
-t_carousel_ext *const cext = (t_carousel_ext*)ROM_CAROUSEL_U8;
 uint8_t *hiscratch = (uint8_t*)ROM_HISCRATCH_U8;
 
 typedef struct {
@@ -1934,7 +1924,7 @@ void render_filemgr(volatile uint8_t *frame) {
     switch (spop.fmgr.opts[i]) {
     case FiMgrDelete:    msg = MSG_FMGR_DEL; break;
     case FiMgrHide:      msg = (spop.fmgr.attr & AM_HID) ? MSG_FMGR_UNHIDE : MSG_FMGR_HIDE; break;
-    case FiMgrFav:       msg = (spop.fmgr.cgame >= 0 && (cext->attr[spop.fmgr.cgame] & CATTR_FAV)) ?
+    case FiMgrFav:       msg = (spop.fmgr.cgame >= 0 && (sdr_state->carousel_games[spop.fmgr.cgame].attr & CATTR_FAV)) ?
                                MSG_CAR_FAVDEL : MSG_CAR_FAVADD; break;
     #ifdef SUPPORT_NORGAMES
     case FiMgrWriteNOR:  msg = MSG_NOR_WRITE; break;
@@ -2351,7 +2341,7 @@ static bool carousel_is_game(const char *fn) {
 // Game (carousel_games index) at a view position. The view lives in SDRAM:
 // keep it in range.
 static unsigned carousel_gi(int n) {
-  return cext->view[n] % CAROUSEL_MAX_GAMES;
+  return sdr_state->carousel_view[n] % CAROUSEL_MAX_GAMES;
 }
 
 static const t_cgame *carousel_game(int n) {
@@ -2621,7 +2611,7 @@ static unsigned carousel_system(const char *fname) {
 static void car_fav_line(char *line, void *usr) {
   const int g = carousel_find_game(line);
   if (g >= 0)
-    cext->attr[g] |= CATTR_FAV;
+    sdr_state->carousel_games[g].attr |= CATTR_FAV;
 }
 
 // Per game attributes: system, favourite (favorites.txt) and position in the
@@ -2632,7 +2622,7 @@ static void carousel_load_attrs() {
     char fname[MAX_FN_LEN];
     carousel_copy(carousel_name_ptr(&sdr_state->carousel_games[g]), fname);
     const unsigned sys = carousel_system(fname);
-    cext->attr[g] = sys | (0xFF << CATTR_RANK_SH);
+    sdr_state->carousel_games[g].attr = sys | (0xFF << CATTR_RANK_SH);
     smenu.carousel.syscnt[sys]++;
   }
 
@@ -2641,8 +2631,8 @@ static void carousel_load_attrs() {
     char path[MAX_FN_LEN];
     carousel_copy(sdr_state->rentries[r].fpath, path);
     const int g = carousel_find_game(path);
-    if (g >= 0 && (cext->attr[g] >> CATTR_RANK_SH) == 0xFF)
-      cext->attr[g] = (cext->attr[g] & 0xFF) | (r << CATTR_RANK_SH);
+    if (g >= 0 && (sdr_state->carousel_games[g].attr >> CATTR_RANK_SH) == 0xFF)
+      sdr_state->carousel_games[g].attr = (sdr_state->carousel_games[g].attr & 0xFF) | (r << CATTR_RANK_SH);
   }
 
   file_read_lines(CAROUSEL_FAV_PATH, car_fav_line, NULL);
@@ -2654,14 +2644,14 @@ NOINLINE static int carousel_view_cmp(const void *a, const void *b) {
   const unsigned gb = *(const uint32_t*)b % CAROUSEL_MAX_GAMES;
   int r = 0;
   if (car_sort == CarSortSystem)
-    r = (int)(cext->attr[ga] & CATTR_SYS) - (int)(cext->attr[gb] & CATTR_SYS);
+    r = (int)(sdr_state->carousel_games[ga].attr & CATTR_SYS) - (int)(sdr_state->carousel_games[gb].attr & CATTR_SYS);
   else if (car_sort == CarSortRecent)
-    r = (int)(cext->attr[ga] >> CATTR_RANK_SH) - (int)(cext->attr[gb] >> CATTR_RANK_SH);
+    r = (int)(sdr_state->carousel_games[ga].attr >> CATTR_RANK_SH) - (int)(sdr_state->carousel_games[gb].attr >> CATTR_RANK_SH);
   return r ? r : (int)ga - (int)gb;
 }
 
 static bool carousel_in_view(unsigned g) {
-  const uint16_t at = cext->attr[g];
+  const uint16_t at = sdr_state->carousel_games[g].attr;
   return car_view == CarViewAll || (car_view == CarViewFav && (at & CATTR_FAV)) ||
          (car_view >= CarViewSys && (at & CATTR_SYS) == car_view - CarViewSys);
 }
@@ -2672,9 +2662,9 @@ static void carousel_build_view(int keep) {
   int n = 0;
   for (int g = 0; g < smenu.carousel.total; g++)
     if (carousel_in_view(g))
-      cext->view[n++] = g;
+      sdr_state->carousel_view[n++] = g;
   if (car_sort == CarSortSystem || car_sort == CarSortRecent)
-    heapsort4(cext->view, n, 1, carousel_view_cmp);
+    heapsort4(sdr_state->carousel_view, n, 1, carousel_view_cmp);
 
   smenu.carousel.count = n;
   smenu.carousel.selector = 0;
@@ -3087,7 +3077,7 @@ void render_carousel(volatile uint8_t *frame) {
   human_size(szstr, sizeof(szstr), carousel_game(smenu.carousel.selector)->filesize);
   npf_snprintf(info, sizeof(info), "%s \xc2\xb7 %s", ext, szstr);
   if (smenu.carousel.info_for == smenu.carousel.selector) {
-    const bool fav = cext->attr[carousel_gi(smenu.carousel.selector)] & CATTR_FAV;
+    const bool fav = sdr_state->carousel_games[carousel_gi(smenu.carousel.selector)].attr & CATTR_FAV;
     const char *tags[] = {
       fav                       ? msgs[lang_id][MSG_CAR_FAV]   : NULL,
       smenu.carousel.info_save  ? msgs[lang_id][MSG_CAR_SAVE]  : NULL,
@@ -4008,12 +3998,12 @@ static void keypress_popup_filemgr(unsigned newkeys) {
 
     case FiMgrFav:
       if (spop.fmgr.cgame >= 0) {
-        const bool fav = !(cext->attr[spop.fmgr.cgame] & CATTR_FAV);
+        const bool fav = !(sdr_state->carousel_games[spop.fmgr.cgame].attr & CATTR_FAV);
         const int prev = smenu.carousel.selector;
         if (!carousel_fav_store(spop.fmgr.path, fav))
           spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
         else {
-          cext->attr[spop.fmgr.cgame] ^= CATTR_FAV;
+          sdr_state->carousel_games[spop.fmgr.cgame].attr ^= CATTR_FAV;
           if (car_view == CarViewFav) {
             // It leaves (or joins) the view: stay around the same place.
             carousel_build_view(spop.fmgr.cgame);
@@ -4467,7 +4457,7 @@ static void keypress_menu_info(unsigned newkeys) {
 // Up/Down jump key: the first letter, or the system when sorted by system.
 static unsigned carousel_letter(int n) {
   if (car_sort == CarSortSystem)
-    return cext->attr[carousel_gi(n)] & CATTR_SYS;
+    return sdr_state->carousel_games[carousel_gi(n)].attr & CATTR_SYS;
   return carousel_letter_key(carousel_name_ptr(carousel_game(n)));
 }
 
