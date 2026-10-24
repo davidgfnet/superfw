@@ -75,6 +75,7 @@ uint8_t lang_id = 0;
 uint8_t recent_menu = 1;
 uint8_t hide_hidden = 0;
 uint8_t anim_speed = animspd_cnt / 2;
+uint8_t start_tab = 0;          // 0: Recent/SD browser, 1: Carousel
 
 // Default settings
 t_patch_policy patcher_default = PatchAuto;
@@ -122,8 +123,9 @@ bool save_ui_settings() {
     "langcode=%c%c\n"
     "recent_menu=%u\n"
     "anim_speed=%u\n"
-    "hide_hidden=%u\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden);
+    "hide_hidden=%u\n"
+    "start_tab=%u\n",
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden, start_tab);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -237,6 +239,7 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
       { "recent_menu", &recent_menu },
       { "hide_hidden", &hide_hidden },
       { "anim_speed",  &anim_speed },
+      { "start_tab",   &start_tab },
     };
     unsigned valu = parseuint(value);
     for (unsigned i = 0; i < sizeof(uintset)/sizeof(uintset[0]); i++)

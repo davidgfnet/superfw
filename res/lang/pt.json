@@ -220,6 +220,15 @@
     "MSG_UIS_SPD3": "Rápido",
     "MSG_UIS_SPD4": "Muito rápido",
     "MSG_STILLRTC": "Congelado",
+    "MSG_CAR_SCAN": "Procurando jogos...",
+    "MSG_CAR_EMPTY": "Nenhum jogo nesta pasta nem nas subpastas.",
+    "MSG_CAR_UPDATE": "Atualizando lista de jogos...",
+    "MSG_CAR_SAVE": "Salvo",
+    "MSG_CAR_LAST": "Último jogado",
+    "MSG_CAR_FLASH": "Flash",
+    "MSG_UIS_START": "Aba inicial",
+    "MSG_UIS_STB0": "< Navegador >",
+    "MSG_UIS_STB1": "< Carrossel >",
     "MSG_ERR_LOADRST": "Erro ao carregar. A: reiniciar",
     "MSG_ERR_PATHLEN": "Caminho muito longo!"
 }

@@ -48,6 +48,55 @@ the SD card (and supported by SuperFW).
 
 Check https://superfw.davidgf.net/docs/usermanual/emulators/ for details.
 
+Carousel (cover art) tab
+------------------------
+
+The carousel tab (the icon after the SD/NOR browsers) shows the games in the
+folder currently open in the SD browser, and in all its subfolders, as a row
+of box art covers sorted by name:
+
+ - Left/Right: previous/next game (covers slide and zoom in/out).
+ - Up/Down: jump to the previous/next letter (shown big for a moment).
+ - A: open the game (same load options as the browser). If the game was
+   written to the flash (SuperChis) from this SD file, it starts from flash.
+ - Select: always load the game from the SD card. L/R switch tabs.
+
+The background takes the color of the selected cover. Below the title it shows
+the system, the size, whether there is a save file, whether it is the last
+played game and whether it is in flash, plus a bar with the position in the
+list. The bottom bar shows the game's folder. Set UI settings, "Start tab" to
+start SuperFW on the carousel (it opens at the last played game).
+
+The game list is kept in `/.superfw/carousel.cache`, so it shows up at once.
+It is then checked against the card in the background, and rescanned if games
+were added, removed or renamed.
+
+Covers are read from `/.superfw/covers/<rom file name>.cov` (for example
+`Metroid Fusion (USA).gba.cov`) or, for GBA games, from
+`/.superfw/covers/<game code>.cov` (for example `AMTE.cov`), which keeps
+working after renaming the ROM. Games without a cover show a plain card. To
+create the covers, run the PC tool with the SD card inserted (needs Python 3
+and Pillow, `pip install pillow`):
+
+    python tools/make-covers.py E:
+It scans the whole card and identifies each ROM exactly by its checksum (or
+GBA game code) using the No-Intro game lists, then downloads the box art for
+that official name from the libretro thumbnails collection. ROMs it cannot
+identify (hacks, homebrew, bad dumps) are matched by file name instead. Use
+`--images <folder>` to provide your own images (named like the ROM, ie.
+`Metroid Fusion (USA).png`), `--dry-run` to see the matches first,
+`--force` to regenerate covers and `--no-checksum` to skip reading the ROMs.
+
+On Windows the tool can also be packaged as a single .exe that you copy to
+the SD card root and double-click (it then works on its own folder):
+
+    pip install pyinstaller pillow
+    pyinstaller --onefile --console --name make-covers tools/make-covers.py
+
+`tools/carousel-preview.py` renders a PC preview of the tab. The carousel
+helpers (`src/carousel_util.c`) and both tools have tests: `make` in `tests/`
+and `python3 tests/make_covers_test.py`.
+
 ROM patching
 ------------
 

@@ -61,6 +61,7 @@ extern uint8_t lang_id;
 extern uint8_t recent_menu;
 extern uint8_t hide_hidden;
 extern uint8_t anim_speed;
+extern uint8_t start_tab;
 
 // Defaults/Settings
 extern t_patch_policy patcher_default;
