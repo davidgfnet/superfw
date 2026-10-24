@@ -214,6 +214,9 @@ en_strings = [
   "MSG_ERR_SETSAVE": "Error saving settings!",             # alertmsg
   "MSG_ERR_DELFILE": "Error deleting file!",               # alertmsg
   "MSG_ERR_READ":    "Error: could not load ROM!",         # alertmsg
+  "MSG_ERR_LOADRST": "Load failed. A: restart",            # alertmsg
+  "MSG_ERR_PATHLEN": "Path too long!",                     # alertmsg
+  "MSG_ERR_DIROPEN": "Cannot open this folder!",           # alertmsg
   "MSG_ERR_NOEMU":   "Can't find emulator!",               # alertmsg
   "MSG_ERR_TOOBIG":  "The GBA file is too big!",           # alertmsg
   "MSG_ERR_SAVERD":  "Error: can't read save file",        # alertmsg

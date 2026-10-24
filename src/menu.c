@@ -419,6 +419,7 @@ static bool enable_flashing = false;
 static unsigned framen = 0;
 static unsigned objnum = 0;
 static t_oamobj fobjs[64];
+static bool reboot_on_alert = false;   // Reboot once the alert message is dismissed
 
 unsigned lang_lookup(uint16_t code) {
   for (unsigned i = 0; i < LANG_COUNT; i++)
@@ -751,9 +752,8 @@ static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *
   data->cheats_size = 0;
   data->cheats_found = false;
   if (enable_cheats) {
-    strcpy(data->cheatsfn, fn);
-    replace_extension(data->cheatsfn, ".cht");
-    data->cheats_found = check_file_exists(data->cheatsfn);
+    data->cheats_found = path_join_ext(data->cheatsfn, "", fn, ".cht") &&
+                         check_file_exists(data->cheatsfn);
     if (!data->cheats_found) {
       WRITE_LOG("No cheat file found at '%s'", data->cheatsfn);
       // Create a path using the game ID and version.
@@ -915,6 +915,12 @@ void patch_gen_callback(bool confirm) {
 
 static void load_patchdb_action(bool confirm) {
   if (confirm) {
+    // It must fit its SDRAM area, or it would overwrite the assets after it
+    // (bundled emulators, language pack).
+    if (spop.p.pdb_ld.fs > PATCHDB_MAX_SIZE) {
+      spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
+      return;
+    }
     FIL fd;
     FRESULT res = f_open(&fd, spop.p.pdb_ld.fn, FA_READ);
     if (res != FR_OK) {
@@ -1001,13 +1007,21 @@ void start_emu_game(const t_emu_loader *ldinfo, const char *fn, uint32_t fs) {
         break;
       ldinfo++;
     }
+    // ERR_LOAD_NOEMU means nothing was written yet. Any other error happened
+    // after writing to SDRAM (see keypress_popup_loadgba), so reboot.
+    reboot_on_alert = (errcode != ERR_LOAD_NOEMU);
     unsigned errmsg = (errcode == ERR_LOAD_NOEMU) ? MSG_ERR_NOEMU :
-                                                    MSG_ERR_READ;
+                                                    MSG_ERR_LOADRST;
     spop.alert_msg = msgs[lang_id][errmsg];
   }
 }
 
 NOINLINE static void browser_open(const char *fn, uint32_t fs) {
+  if (!rom_path_ok(fn)) {
+    spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
+    return;
+  }
+
   const char *ext = find_extension(fn);
   if (ext && !strcasecmp(ext, "gba"))
     // GBA ROMs (most likely)
@@ -1118,8 +1132,14 @@ static void browser_reload() {
 
   unsigned fcount = 0;
   DIR d;
-  if (FR_OK != f_opendir(&d, smenu.browser.cpath))
-    return;   // FIXME: Implement error reporting!
+  if (FR_OK != f_opendir(&d, smenu.browser.cpath)) {
+    // Show an empty list (not the previous dir's files, which would be opened
+    // with this dir's path) and tell the user. B still goes up.
+    smenu.browser.maxentries = 0;
+    browser_reload_filter();
+    spop.alert_msg = msgs[lang_id][MSG_ERR_DIROPEN];
+    return;
+  }
 
   while (1) {
     FILINFO info;
@@ -1136,6 +1156,7 @@ static void browser_reload() {
     dma_memcpy16(e->fname, info.fname, MAX_FN_LEN/2);
     sortable_utf8_u16(info.fname, e->sortname);
   }
+  f_closedir(&d);
   smenu.browser.maxentries = fcount;
 
   // Filter and sort list of files/dirs
@@ -1235,13 +1256,18 @@ static void draw_text_ovf_rotate(const char *t, volatile uint8_t *frame, unsigne
     unsigned anim = *franim > ANIM_INITIAL_WAIT ? (*franim - ANIM_INITIAL_WAIT) >> 4 : 0;
 
     // Wrap around once the text end reaches the mid point aprox.
+    // Text + 6 spaces + text again (long texts are cut, it's just a marquee).
     char tmpbuf[540];
-    strcpy(tmpbuf, t);
-    strcat(tmpbuf, "      ");
+    unsigned tl = strlen(t);
+    if (tl > (sizeof(tmpbuf) - 7) / 2)
+      tl = (sizeof(tmpbuf) - 7) / 2;
+    memcpy(tmpbuf, t, tl);
+    memcpy(&tmpbuf[tl], "      ", 7);
     unsigned pixw = font_width(tmpbuf);
     if (anim > pixw)
       *franim = ANIM_INITIAL_WAIT + ((anim - pixw) << 4);
-    strcat(tmpbuf, t);
+    memcpy(&tmpbuf[tl + 6], t, tl);
+    tmpbuf[tl * 2 + 6] = 0;
 
     draw_text_idx8_bus16_range(tmpbuf, basept, anim, maxw, SCREEN_WIDTH, FT_COLOR);
   }
@@ -2076,7 +2102,10 @@ void menu_render(unsigned fcnt) {
   // Render the main area
   dma_memset16(&frame[16*SCREEN_WIDTH], dup8(BG_COLOR), SCREEN_WIDTH*(SCREEN_HEIGHT-16) / 2);
 
-  if (spop.qpop.message)
+  if (reboot_on_alert) {
+    // Failed ROM load, the lists in SDRAM are garbage: only show the alert.
+  }
+  else if (spop.qpop.message)
     render_popupq(frame, fcnt);
   else if (spop.rtcpop.callback)
     render_rtcpop(frame);
@@ -2125,6 +2154,13 @@ void menu_flip() {
 }
 
 void menu_init(int sram_testres) {
+  // ui-settings.txt values are used as table indexes but are not range
+  // checked when parsed (the file could be damaged or edited by hand).
+  if (menu_theme >= THEME_COUNT)
+    menu_theme = 0;
+  if (anim_speed >= animspd_cnt)
+    anim_speed = animspd_cnt / 2;
+
   // Reset to ROM browser and SD card root.
   memset(&smenu, 0, sizeof(smenu));
   memset(&spop, 0, sizeof(spop));
@@ -2446,9 +2482,11 @@ static void keypress_popup_loadgba(unsigned newkeys) {
         spop.p.load.l.use_cheats ? spop.p.load.l.cheats_size : 0,
         loadrom_progress);
       if (err) {
-        // Show any errors that might have happened!
-        spop.alert_msg = msgs[lang_id][MSG_ERR_READ];
-        // TODO: We cannot (in many cases) continue since we trash the SDRAM!
+        // Loading writes the in-game menu and the ROM over the SDRAM, where the
+        // menu keeps its file lists, fonts and patch database. Unless it failed
+        // before writing anything, the menu cannot continue: reboot instead.
+        reboot_on_alert = (err != ERR_NO_PAYLOAD_SPACE);
+        spop.alert_msg = msgs[lang_id][reboot_on_alert ? MSG_ERR_LOADRST : MSG_ERR_READ];
       }
     }
   }
@@ -2697,15 +2735,19 @@ static void keypress_popup_norload(unsigned newkeys) {
       if (recent_menu)
         insert_recent_flush(e->game_name, FLAG_RECENT_NOR);
 
-      // TODO Handle errors, finish missing stuff.
-      unsigned err = launch_gba_nor(
-        e->game_name,
-        spop.p.norld.l.sram_save_type == SaveDisable ? NULL : spop.p.norld.l.savefn,
-        e->blkmap, e->numblks,
-        uses_dsave ? &dsinfo : NULL,
-        uses_rtc ? &rtci : NULL,
-        uses_igm,
-        spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0);
+      // Does not return when the game starts. If it ever does, the in-game
+      // menu may already be in SDRAM (over the menu data): reboot.
+      if (launch_gba_nor(
+            e->game_name,
+            spop.p.norld.l.sram_save_type == SaveDisable ? NULL : spop.p.norld.l.savefn,
+            e->blkmap, e->numblks,
+            uses_dsave ? &dsinfo : NULL,
+            uses_rtc ? &rtci : NULL,
+            uses_igm,
+            spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0)) {
+        reboot_on_alert = true;
+        spop.alert_msg = msgs[lang_id][MSG_ERR_LOADRST];
+      }
     }
     else if (spop.selector == GBALdRemember) {
       // Save settings to disk now!
@@ -2751,11 +2793,10 @@ static void keypress_popup_filemgr(unsigned newkeys) {
       {
         void remove_file_action(bool confirm) {
           char tmpfn[MAX_FN_LEN];
-          strcpy(tmpfn, smenu.browser.cpath);
-          strcat(tmpfn, sdr_state->fileorder[smenu.browser.selector]->fname);
-
           if (confirm) {
-            if (FR_OK != f_unlink(tmpfn))
+            if (!path_join(tmpfn, smenu.browser.cpath, sdr_state->fileorder[smenu.browser.selector]->fname, ""))
+              spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
+            else if (FR_OK != f_unlink(tmpfn))
               spop.alert_msg = msgs[lang_id][MSG_ERR_DELFILE];
             else
               spop.alert_msg = msgs[lang_id][MSG_OK_DELFILE];
@@ -2774,10 +2815,9 @@ static void keypress_popup_filemgr(unsigned newkeys) {
     case FiMgrHide:
       {
         char tmpfn[MAX_FN_LEN];
-        strcpy(tmpfn, smenu.browser.cpath);
-        strcat(tmpfn, sdr_state->fileorder[smenu.browser.selector]->fname);
-
-        if (FR_OK == f_chmod(tmpfn, e->attr ^ AM_HID, AM_HID))
+        if (!path_join(tmpfn, smenu.browser.cpath, sdr_state->fileorder[smenu.browser.selector]->fname, ""))
+          spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
+        else if (FR_OK == f_chmod(tmpfn, e->attr ^ AM_HID, AM_HID))
           e->attr ^= AM_HID;
         else
           spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
@@ -2787,13 +2827,13 @@ static void keypress_popup_filemgr(unsigned newkeys) {
 
     #ifdef SUPPORT_NORGAMES
     case FiMgrWriteNOR:
+      {
+      char path[MAX_FN_LEN];
       if (e->filesize > MAX_GBA_ROM_SIZE)
         spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
+      else if (!path_join(path, smenu.browser.cpath, e->fname, "") || !rom_path_ok(path))
+        spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
       else {
-        char path[MAX_FN_LEN];
-        strcpy(path, smenu.browser.cpath);
-        strcat(path, e->fname);
-
         // Load default loading settings if any.
         t_rom_load_settings ld_sett = {
           .patch_policy = patcher_default,
@@ -2810,6 +2850,7 @@ static void keypress_popup_filemgr(unsigned newkeys) {
           spop.submenu = GbaLoadPopInfo;
           spop.selector = 0;
         }
+      }
       }
       break;
     #endif
@@ -2895,9 +2936,13 @@ static void keypress_menu_browse(unsigned newkeys) {
     // Move into a new dir and/or open a file
     if (newkeys & KEY_BUTTA) {
       t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+      char path[MAX_FN_LEN];
       if (e->isdir) {
-        strcat(smenu.browser.cpath, e->fname);
-        strcat(smenu.browser.cpath, "/");
+        if (!path_join(path, smenu.browser.cpath, e->fname, "/")) {
+          spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
+          return;
+        }
+        strcpy(smenu.browser.cpath, path);
         // Push selector history and reset it in the new dir
         memmove(&smenu.browser.selhist[1], &smenu.browser.selhist[0],
                 sizeof(smenu.browser.selhist) - sizeof(smenu.browser.selhist[0]));
@@ -2905,10 +2950,10 @@ static void keypress_menu_browse(unsigned newkeys) {
         smenu.browser.selector = 0;
         browser_reload();
       } else {
-        char path[MAX_FN_LEN];
-        strcpy(path, smenu.browser.cpath);
-        strcat(path, e->fname);
-        browser_open(path, e->filesize);
+        if (path_join(path, smenu.browser.cpath, e->fname, ""))
+          browser_open(path, e->filesize);
+        else
+          spop.alert_msg = msgs[lang_id][MSG_ERR_PATHLEN];
       }
     }
     else if (newkeys & KEY_BUTTSEL) {
@@ -3099,6 +3144,10 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       lang_id = (lang_id + 1) % LANG_COUNT;
   }
 
+  // Apply the hidden files filter now (not only after changing folders).
+  if ((newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) && smenu.uiset.selector == UiSetHid)
+    browser_reload_filter();
+
   if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
     smenu.uiset.selector = 0;
     if (save_ui_settings())
@@ -3147,7 +3196,7 @@ static void keypress_menu_tools(unsigned newkeys) {
       slowsd = use_slowld;
       int ret = sdbench_read(loadrom_progress_abort);
       slowsd = true;
-      if (ret < 0)
+      if (ret <= 0)
         spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
       else {
         unsigned speed = 8*1024*1024 / (unsigned)ret;
@@ -3197,11 +3246,28 @@ static void keypress_menu_info(unsigned newkeys) {
 }
 
 
+// Reboots into the firmware in flash (used when the menu state can't be trusted).
+static void reboot_firmware() {
+  // The game never ran, so do not dump its SRAM to the .sav on the next boot.
+  program_sram_dump(NULL, 0);
+
+  #ifdef SUPERCHIS_IO
+  reset_superchis_normap();
+  #endif
+  set_supercard_mode(MAPPED_FIRMWARE, false, false);
+
+  REG_WAITCNT = 0;    // Power-on default
+  launch_reset(false, false);
+}
+
 void menu_keypress(unsigned newkeys) {
   if (spop.alert_msg) {
     // Modal message pop up!
-    if (newkeys & (KEY_BUTTA | KEY_BUTTB))
+    if (newkeys & (KEY_BUTTA | KEY_BUTTB)) {
       spop.alert_msg = NULL;
+      if (reboot_on_alert)
+        reboot_firmware();
+    }
   }
   else if (spop.qpop.message) {
     // Modal confirm/question dialog

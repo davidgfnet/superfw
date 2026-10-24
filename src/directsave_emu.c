@@ -130,6 +130,7 @@ bool load_cache_metadata(t_cache_meta *cache) {
     cache_bytes[i] = metablk[i];
 
   // Now proceed to read the local structure and validate it.
+  // cppcheck-suppress uninitvar ; filled byte by byte from SRAM above
   if (cache->magic != FLASH_CACHE_MAGIC)
     return false;
 

@@ -41,9 +41,16 @@ bool predecode_cheats(uint32_t *codes, unsigned cnt) {
     // Overwrite buffer with the new format
     memcpy(&codes[2*i], &h, sizeof(h));
 
-    if (h.opcode == 4 * 2)
+    // The extra codes these opcodes consume must be there (the count comes
+    // from the cheat file, it could point past the parsed codes).
+    if (h.opcode == 4 * 2) {
+      if (i + 1 >= cnt)
+        return false;
       i++;                    // Extra addr + value for opc4
+    }
     else if (h.opcode == 5 * 2) {
+      if (i + h.value >= cnt)
+        return false;
       // Extra buffer. We perform some endianess conversion here.
       for (unsigned j = 0; j < h.value; j++) {
         i++;
@@ -76,8 +83,8 @@ static bool parse_hex(const char *s, uint32_t *val, unsigned nibcnt) {
   return true;
 }
 
-// Parses RAW codes into a uint32 buffer
-int parse_cheat_codes(const char *s, uint32_t *codes) {
+// Parses RAW codes into a uint32 buffer (room for maxcodes codes, 2 words each)
+int parse_cheat_codes(const char *s, uint32_t *codes, unsigned maxcodes) {
   // Codes are in the format:
   // 0123ABCD+67EF 125634AB+78CD ....
   // We parse them assuming that the separators are space or plus. We admit multiple separators.
@@ -100,6 +107,8 @@ int parse_cheat_codes(const char *s, uint32_t *codes) {
     s += 4;  // Consume the hex16
 
     // A full code (addr+val) has been parsed, just write it raw into the buffer.
+    if (cnt >= maxcodes)
+      return -1;   // Too many codes in one line
     *codes++ = addr;
     *codes++ = val;
     cnt++;
@@ -158,8 +167,17 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
 
       // Fill entry, string or cheat codes.
       if (parse_name) {
-        // Fill title and header.
-        strcpy(chdr.title, s);
+        // Fill title and header. slen is 8 bits and word aligned, so titles
+        // can have up to 251 bytes: truncate longer ones (without splitting
+        // an utf-8 character).
+        unsigned tlen = strlen(s);
+        if (tlen > MAX_CHEAT_TITLE) {
+          tlen = MAX_CHEAT_TITLE;
+          while (tlen && ((uint8_t)s[tlen] & 0xC0) == 0x80)
+            tlen--;
+        }
+        memcpy(chdr.title, s, tlen);
+        chdr.title[tlen] = 0;
         chdr.h.slen = (strlen(chdr.title) + 1 + 3) & ~3U;  // Word aligned!
         chdr.h.enabled = 0;
         chdr.h.codelen = 0;
@@ -167,16 +185,18 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
         // Parse the cheat codes (in hex), and generate the respective code.
         uint32_t codes[74];  // Enough codes for a 1024 byte cheat line.
         memset(codes, 0, sizeof(codes));
-        int numcodes = parse_cheat_codes(tmp, codes);
+        int numcodes = parse_cheat_codes(tmp, codes, sizeof(codes) / 8);
         if (numcodes < 0)
           return -1;
         // Process the raw codes and format them into t_cheat_predec (predecoded opcode)
         if (!predecode_cheats(codes, numcodes))
           return -1;
-        // Each code takes 8 bytes
+        // Each code takes 8 bytes. codelen is 8 bits: cheats with more codes
+        // than that cannot be stored, skip them (instead of a corrupt list).
+        bool fits = 8 * (numcodes + 1) <= 255;
         chdr.h.codelen = 8 * (numcodes + 1);
 
-        { // Copy the data to the actual buffer.
+        if (fits) { // Copy the data to the actual buffer.
           unsigned pheadl = sizeof(t_cheathdr) + chdr.h.slen;
           memcpy32(&buffer[bufsz], &chdr, pheadl);
           memcpy32(&buffer[bufsz + pheadl], codes, chdr.h.codelen);
@@ -189,8 +209,11 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
       parse_name = !parse_name;
     }
 
-    // Consume bytes
+    // Consume bytes (the last line might not have a line break, then there
+    // is no separator to consume after it).
     unsigned cnt = strlen(tmp) + 1;
+    if (cnt > bcount)
+      cnt = bcount;
     memmove(&tmp[0], &tmp[cnt], bcount - cnt);
     bcount -= cnt;
   } while (bcount);
