@@ -69,6 +69,13 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
       dbh->dbversion != 0x00010000)        // Version check
     return false;
 
+  // The database can be loaded from the SD card: keep every access inside its
+  // area (PATCHDB_MAX_SIZE), whatever the counts and offsets say.
+  if (dbh->idxcnt > (PATCHDB_MAX_SIZE - 1024) / 512 ||
+      dbh->patchcnt > dbh->idxcnt * 512 / sizeof(t_db_idx))
+    return false;
+  const uint32_t entries_off = 1024 + 512 * dbh->idxcnt;
+
   // Skip header and program block.
   const t_db_idx *dbidx = (t_db_idx*)&dbptr[1024];
   // Skip the index block to address data entries.
@@ -95,6 +102,9 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
   for (unsigned i = 0; i < dbh->patchcnt; i++) {
     if (!gcodecmp(dbidx[i].gcode, gamecode)) {
       uint32_t offset = dbidx[i].offset >> 8;
+      // Header + up to MAX_PATCH_OPS ops + hole word must be inside the area.
+      if (entries_off + (offset + 2 + MAX_PATCH_OPS) * 4 > PATCHDB_MAX_SIZE)
+        return false;
       const uint32_t *p = &entries[offset];
       const uint32_t pheader = *p++;
 

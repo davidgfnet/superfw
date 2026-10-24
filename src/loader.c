@@ -157,10 +157,8 @@ void load_ingame_menu(
 
   // Calculate the basename, so we can produce proper sav/backup files
   // Only used if saving is enabled and DirSav is disabled.
-  if (savefn && !useds) {
-    char save_basename[MAX_FN_LEN];
-    strcpy(save_basename, savefn);
-    replace_extension(save_basename, "");
+  char save_basename[MAX_FN_LEN];
+  if (savefn && !useds && path_join_ext(save_basename, "", savefn, "")) {
     memcpy32(igm->savefile_pattern, save_basename, sizeof(igm->savefile_pattern));
   }
   else
@@ -539,13 +537,11 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
     set_supercard_mode(MAPPED_SDRAM, true, true);
   }
   else {
-    char emupath[64];
-    strcpy(emupath, EMULATORS_PATH);
-    strcat(emupath, ldinfo->emu_name);
-    strcat(emupath, ".gba");
+    char emupath[MAX_FN_LEN];
 
     // Load the emulator from disk, check whether it exists tho.
-    if (FR_OK != f_open(&fd, emupath, FA_READ))
+    if (!path_join(emupath, EMULATORS_PATH, ldinfo->emu_name, ".gba") ||
+        FR_OK != f_open(&fd, emupath, FA_READ))
       return ERR_LOAD_NOEMU;
 
     while (1) {

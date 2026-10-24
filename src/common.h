@@ -65,6 +65,7 @@ extern const uint32_t ingame_trampoline_payload_size;
 #define ROM_OFF_USRPATCH_DB       0x01C00000     // At 0x09C00000
 #define ROM_OFF_PATCH_DB          0x01D00000     // At 0x09D00000
 #define ROM_OFF_ASSETS_BASE       0x01E00000     // At 0x09E00000
+#define PATCHDB_MAX_SIZE          (ROM_OFF_ASSETS_BASE - ROM_OFF_PATCH_DB)   // 1 MiB
 
 #define ROM_SCRATCH_U8          ((volatile uint8_t*)(0x08000000 + ROM_OFF_SCRATCH))
 #define ROM_FONTBASE_U8         ((volatile uint8_t*)(0x08000000 + ROM_OFF_FONTS_BASE))

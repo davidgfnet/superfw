@@ -34,7 +34,7 @@ void heapsort4(
 // String misc routines
 const char *file_basename(const char *fullpath);
 void file_dirname(const char *fullpath, char *dirname);
-void replace_extension(char *fn, const char *newext);
+bool replace_extension(char *fn, const char *newext);
 const char *find_extension(const char *s);
 
 unsigned parseuint(const char *s);
@@ -51,6 +51,8 @@ void fixdate(t_dec_date *d);
 
 // Builds dir + name + suffix into out (MAX_FN_LEN). False if it does not fit.
 bool path_join(char *out, const char *dir, const char *name, const char *suffix);
+// Same, but name loses its extension and ext is appended (dir + base + ext).
+bool path_join_ext(char *out, const char *dir, const char *name, const char *ext);
 
 // Longest ROM paths accepted. Save, backup, savestate, config and patch file
 // names are derived from them (adding a dir prefix and/or a suffix) using

@@ -132,7 +132,7 @@ unsigned load_nds(const char *filename, const void *dldi_driver) {
   bool arm7_on_wram = (hdr->arm7_entrypoint >> 24) == 3;
 
   const t_dldi_driver *driver = (t_dldi_driver*)dldi_driver;
-  const unsigned driver_size = (1 << driver->h.req_size);
+  const unsigned driver_size = driver ? (1 << driver->h.req_size) : 0;
 
   // ARM9 size, addresses and entrypoint
   if (hdr->arm9_load_size > MAINRAM_MAX_PAYLOAD)

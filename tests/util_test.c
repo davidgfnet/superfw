@@ -83,6 +83,29 @@ int main() {
   replace_extension(tmp, ".doc");
   assert(!strcmp(tmp, "/foo/bar/lol.doc"));
 
+  // Results that would not fit in MAX_FN_LEN are refused.
+  {
+    char big[MAX_FN_LEN], out[MAX_FN_LEN];
+    memset(big, 'a', MAX_FN_LEN - 5);
+    strcpy(&big[MAX_FN_LEN - 5], ".gb");      // 254 chars
+    assert(replace_extension(big, ".gba"));   // 255 chars, fits
+    assert(strlen(big) == MAX_FN_LEN - 1);
+    assert(!replace_extension(big, ".sav0")); // 256 chars, too long
+    assert(!strcmp(&big[MAX_FN_LEN - 5], ".gba"));   // Left as it was
+    assert(!path_join_ext(out, "/", big, ".gba"));
+    assert(path_join_ext(out, "", big, ".sav"));
+    assert(!strcmp(&out[MAX_FN_LEN - 5], ".sav"));
+  }
+  {
+    char out[MAX_FN_LEN];
+    assert(path_join_ext(out, "/SAVES/", "game.gba", ".sav"));
+    assert(!strcmp(out, "/SAVES/game.sav"));
+    assert(path_join_ext(out, "", "/a.b/game", ".sav"));
+    assert(!strcmp(out, "/a.b/game.sav"));
+    assert(path_join_ext(out, "/x/", "game.gba", ""));
+    assert(!strcmp(out, "/x/game"));
+  }
+
   assert(!strcmp(find_extension("/foo/bar.lol"), "lol"));
   assert(find_extension("/foo/barlol") == NULL);
   assert(find_extension("/barlol") == NULL);

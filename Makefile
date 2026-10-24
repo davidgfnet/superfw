@@ -230,6 +230,18 @@ apultra.elf:	tools/apultra.cc
 upkr.elf:	tools/upkr.cc
 	g++ -o $@ $< -O3 -ffast-math
 
+# Worst case stack usage of the menu firmware (see tools/stack-check.py).
+# Built without LTO so GCC can write per function stack and call graph info.
+STACK_LIMIT ?= 16384
+stack-check:	src/messages_data.h src/menu_messages.h
+	rm -rf stackcheck && mkdir -p stackcheck
+	for f in $(filter %.c,$(INFILES)); do \
+	  $(CC) $(filter-out -flto -flto-partition=none,$(CFLAGS)) -fstack-usage -fcallgraph-info=su \
+	    -c $$f -o stackcheck/$$(echo $$f | tr / _).o || exit 1; \
+	done
+	python3 tools/stack-check.py --limit $(STACK_LIMIT) stackcheck
+
 clean:
+	rm -rf stackcheck
 	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp lang.pack src/menu_messages.h src/messages_data.h
 
