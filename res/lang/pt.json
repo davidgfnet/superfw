@@ -221,5 +221,6 @@
     "MSG_UIS_SPD4": "Muito rápido",
     "MSG_STILLRTC": "Congelado",
     "MSG_ERR_LOADRST": "Erro ao carregar. A: reiniciar",
-    "MSG_ERR_PATHLEN": "Caminho muito longo!"
+    "MSG_ERR_PATHLEN": "Caminho muito longo!",
+    "MSG_ERR_DIROPEN": "Não foi possível abrir a pasta!"
 }

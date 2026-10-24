@@ -1127,8 +1127,14 @@ static void browser_reload() {
 
   unsigned fcount = 0;
   DIR d;
-  if (FR_OK != f_opendir(&d, smenu.browser.cpath))
-    return;   // FIXME: Implement error reporting!
+  if (FR_OK != f_opendir(&d, smenu.browser.cpath)) {
+    // Show an empty list (not the previous dir's files, which would be opened
+    // with this dir's path) and tell the user. B still goes up.
+    smenu.browser.maxentries = 0;
+    browser_reload_filter();
+    spop.alert_msg = msgs[lang_id][MSG_ERR_DIROPEN];
+    return;
+  }
 
   while (1) {
     FILINFO info;
@@ -1145,6 +1151,7 @@ static void browser_reload() {
     dma_memcpy16(e->fname, info.fname, MAX_FN_LEN/2);
     sortable_utf8_u16(info.fname, e->sortname);
   }
+  f_closedir(&d);
   smenu.browser.maxentries = fcount;
 
   // Filter and sort list of files/dirs
@@ -2137,6 +2144,13 @@ void menu_flip() {
 }
 
 void menu_init(int sram_testres) {
+  // ui-settings.txt values are used as table indexes but are not range
+  // checked when parsed (the file could be damaged or edited by hand).
+  if (menu_theme >= THEME_COUNT)
+    menu_theme = 0;
+  if (anim_speed >= animspd_cnt)
+    anim_speed = animspd_cnt / 2;
+
   // Reset to ROM browser and SD card root.
   memset(&smenu, 0, sizeof(smenu));
   memset(&spop, 0, sizeof(spop));
@@ -2711,15 +2725,19 @@ static void keypress_popup_norload(unsigned newkeys) {
       if (recent_menu)
         insert_recent_flush(e->game_name, FLAG_RECENT_NOR);
 
-      // TODO Handle errors, finish missing stuff.
-      unsigned err = launch_gba_nor(
-        e->game_name,
-        spop.p.norld.l.sram_save_type == SaveDisable ? NULL : spop.p.norld.l.savefn,
-        e->blkmap, e->numblks,
-        uses_dsave ? &dsinfo : NULL,
-        uses_rtc ? &rtci : NULL,
-        uses_igm,
-        spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0);
+      // Does not return when the game starts. If it ever does, the in-game
+      // menu may already be in SDRAM (over the menu data): reboot.
+      if (launch_gba_nor(
+            e->game_name,
+            spop.p.norld.l.sram_save_type == SaveDisable ? NULL : spop.p.norld.l.savefn,
+            e->blkmap, e->numblks,
+            uses_dsave ? &dsinfo : NULL,
+            uses_rtc ? &rtci : NULL,
+            uses_igm,
+            spop.p.norld.l.use_cheats ? spop.p.norld.l.cheats_size : 0)) {
+        reboot_on_alert = true;
+        spop.alert_msg = msgs[lang_id][MSG_ERR_LOADRST];
+      }
     }
     else if (spop.selector == GBALdRemember) {
       // Save settings to disk now!
@@ -3115,6 +3133,10 @@ static void keypress_menu_uisettings(unsigned newkeys) {
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + 1) % LANG_COUNT;
   }
+
+  // Apply the hidden files filter now (not only after changing folders).
+  if ((newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) && smenu.uiset.selector == UiSetHid)
+    browser_reload_filter();
 
   if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
     smenu.uiset.selector = 0;

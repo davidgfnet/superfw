@@ -106,6 +106,9 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
       pdata->save_mode = (pheader >> 13) & 0x7;    // 3 bits
 
       const unsigned numops = pdata->wcnt_ops + pdata->save_ops + pdata->irqh_ops + pdata->rtc_ops;
+      // The database can be loaded from the SD card: do not trust the counts.
+      if (numops > MAX_PATCH_OPS)
+        return false;
 
       if ((pheader >> 28) & 0x1) {
         // Hole/Trailing space information, placed in the last op
