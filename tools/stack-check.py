@@ -27,6 +27,14 @@ KNOWN_ASM = {
 # Functions whose indirect calls only reach assembly routines (UNKNOWN_FUNC):
 # the SD driver picks sc_read/write_sectors_w0/w1 (supercard_io.S) from a table.
 ASM_INDIRECT = {"sdcard_read_blocks", "sdcard_write_blocks"}
+# Callers whose indirect calls only reach some callbacks: (caller name regex,
+# callback name regex). nanoprintf only calls its character output functions,
+# parse_file() the settings line parsers and heapsort4() the sort comparators.
+INDIRECT_TARGETS = [
+  (re.compile(r"^npf_"), re.compile(r"putc")),
+  (re.compile(r"^parse_file$"), re.compile(r"^parse_")),
+  (re.compile(r"^heapsort4$"), re.compile(r"sort$")),
+]
 
 NODE_RE = re.compile(r'node:\s*\{\s*title:\s*"([^"]+)"\s*label:\s*"([^"]*)"')
 EDGE_RE = re.compile(r'edge:\s*\{\s*sourcename:\s*"([^"]+)"\s*targetname:\s*"([^"]+)"')
@@ -89,6 +97,10 @@ def main():
         cand = (UNKNOWN_FUNC, ["<indirect call to assembly>"])
       elif "indirect" in dst:
         cand = (indirect_cost, ["<indirect call>"])
+        for callers, targets in INDIRECT_TARGETS:
+          if callers.search(plain(t)):
+            cand = (group_cost.get(targets.pattern, UNKNOWN_FUNC),
+                    ["<indirect call to %s>" % targets.pattern])
       else:
         r = resolve(dst)
         if r:
@@ -115,9 +127,14 @@ def main():
         called.add(r)
   callbacks = [t for t in nodes if t not in called and t != entry]
 
-  # First pass: indirect calls cost nothing, to find the deepest callback.
+  # First pass: indirect calls cost nothing, to find the deepest callback
+  # (in general, and for each INDIRECT_TARGETS group).
+  group_cost = {}
   worst_cb = max([depth(t, [], 0) + (t,) for t in callbacks] or [(0, [], None)])
   indirect_cost = max(worst_cb[0], UNKNOWN_FUNC)
+  for _, targets in INDIRECT_TARGETS:
+    group_cost[targets.pattern] = max([depth(t, [], 0)[0] for t in callbacks
+                                       if targets.search(plain(t))] + [UNKNOWN_FUNC])
   # Second pass: indirect calls can reach that callback.
   memo.clear()
   total, chain = depth(entry, [], indirect_cost)
@@ -125,7 +142,8 @@ def main():
   print("Worst case stack from %s: %d bytes (limit %d)" % (args.entry, total, args.limit))
   print("  " + "\n  ".join(chain))
   if worst_cb[2]:
-    print("Indirect calls counted as %d bytes (deepest callback: %s)" % (indirect_cost, plain(worst_cb[2])))
+    print("Indirect calls counted as %d bytes, the deepest callback:" % indirect_cost)
+    print("  " + "\n  ".join(worst_cb[1]))
   for w in sorted(warnings):
     print("warning:", w)
   print("Biggest frames:")
