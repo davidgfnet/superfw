@@ -217,9 +217,7 @@ bool rotate_savefile(const char *templ_fn, unsigned max_backups) {
 // Performs a write to SD and rotates (renames) files as backup goes (see above).
 bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups) {
   char tmpfn[MAX_FN_LEN];
-  strcpy(tmpfn, templ_fn);
-  strcat(tmpfn, ".tmp.sav");
-  if (!write_save_sram(tmpfn))
+  if (!path_join(tmpfn, templ_fn, ".tmp.sav", "") || !write_save_sram(tmpfn))
     return false;
 
   return rotate_savefile(templ_fn, max_backups);
@@ -227,13 +225,10 @@ bool write_save_sram_rotate(const char *templ_fn, unsigned max_backups) {
 
 bool write_save_sram_safe_overwrite(const char *templ_fn) {
   char tmpfn[MAX_FN_LEN], finalfn[MAX_FN_LEN];
-  strcpy(tmpfn, templ_fn);
-  strcat(tmpfn, ".tmp.sav");
-  if (!write_save_sram(tmpfn))
+  if (!path_join(tmpfn, templ_fn, ".tmp.sav", "") ||
+      !path_join(finalfn, templ_fn, ".sav", "") ||
+      !write_save_sram(tmpfn))
     return false;
-
-  strcpy(finalfn, templ_fn);
-  strcat(finalfn, ".sav");
 
   // No way to do this atomic/safe, this is the closest probably :P
   f_unlink(finalfn);
@@ -286,8 +281,7 @@ unsigned flush_pending_sram() {
   // Check if the save file exists and contains the same data.
   {
     char tmpfn[MAX_FN_LEN];
-    strcpy(tmpfn, savefn);
-    strcat(tmpfn, ".sav");
+    path_join(tmpfn, savefn, ".sav", "");   // Fits, checked above
     // Do not write nor rotate backups if the SRAM did not change!
     if (compare_save_sram(tmpfn))
       return 0;
@@ -451,9 +445,8 @@ unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_polic
   if (savep == SaveReboot) {
     // Program auto-save on reboot, write basename to the config file
     char savetmpl[MAX_FN_LEN];
-    strcpy(savetmpl, savefn);
-    replace_extension(savetmpl, "");
-    if (!program_sram_dump(savetmpl, backup_sram_default))
+    if (!path_join_ext(savetmpl, "", savefn, "") ||
+        !program_sram_dump(savetmpl, backup_sram_default))
       return ERR_SAVE_CANTWRITE;
   }
   else { /* Save disabled */
@@ -488,8 +481,8 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
     // If backups are disabled and the file was already contiguous, we do some unnecessary work.
 
     char tmpfilen[MAX_FN_LEN];
-    strcpy(tmpfilen, savefn);
-    replace_extension(tmpfilen, ".tmp.sav");
+    if (!path_join_ext(tmpfilen, "", savefn, ".tmp.sav"))
+      return ERR_SAVE_CANTWRITE;
 
     if (loadp == SaveLoadReset) {
       if (!copy_save_contiguous_file(NULL, tmpfilen, ssize))
@@ -500,9 +493,8 @@ unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, En
     }
 
     // Proceed to rotate (if at all) the backup.
-    strcpy(tmpfilen, savefn);
-    replace_extension(tmpfilen, "");
-    if (!rotate_savefile(tmpfilen, backup_sram_default))
+    if (!path_join_ext(tmpfilen, "", savefn, "") ||
+        !rotate_savefile(tmpfilen, backup_sram_default))
       return ERR_SAVE_CANTWRITE;
 
     // Clear SRAM (since config bits are also stored there)

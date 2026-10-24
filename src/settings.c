@@ -226,6 +226,8 @@ static void parse_settings(void *usr, const char *var, const char *value) {
 
 static void parse_ui_settings(void *usr, const char *var, const char *value) {
   if (!strcmp(var, "langcode")) {
+    if (!value[0] || !value[1])
+      return;     // Language codes are two letters
     uint16_t code = ((uint8_t)value[0]) | (((uint8_t)value[1]) << 8);
     lang_id = lang_lookup(code);
   } else {
@@ -292,25 +294,21 @@ void load_settings() {
   }
 }
 
+// ROM paths are checked before (see rom_path_ok) so these fit. If they did not,
+// the name is left empty and opening it fails.
 void sram_filename_calc(const char *rom, char *savefn, unsigned save_path) {
-  if (save_path == SaveRomName) {
-    strcpy(savefn, rom);   // Use the full ROM path
-  }
-  else {
-    const char *p = file_basename(rom);
-    const char *path = save_paths[save_path];
-    strcpy(savefn, path);   // Add the base path
-    strcat(savefn, p);      // Append just the basename
-  }
-
-  replace_extension(savefn, ".sav");
+  bool ok;
+  if (save_path == SaveRomName)    // Use the full ROM path
+    ok = path_join_ext(savefn, "", rom, ".sav");
+  else                             // Base path + just the basename
+    ok = path_join_ext(savefn, save_paths[save_path], file_basename(rom), ".sav");
+  if (!ok)
+    savefn[0] = 0;
 }
 
 void savestate_filename_calc(const char *rom, char *statefn) {
-  const char *p = file_basename(rom);
-  strcpy(statefn, savestates_paths[state_path_default]);   // Add the base path
-  strcat(statefn, p);               // Append just the basename
-  replace_extension(statefn, "");
+  if (!path_join_ext(statefn, savestates_paths[state_path_default], file_basename(rom), ""))
+    statefn[0] = 0;
 }
 
 static void parse_rom_load_settings(void *usr, const char *var, const char *value) {
@@ -339,12 +337,10 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
   FIL fd;
   {
     char path[MAX_FN_LEN];
-    strcpy(path, ROMCONFIG_PATH);
-    strcat(path, file_basename(fn));
-    replace_extension(path, ".config");
 
     // Attempt to open and read the file.
-    if (FR_OK != f_open(&fd, path, FA_READ))
+    if (!path_join_ext(path, ROMCONFIG_PATH, file_basename(fn), ".config") ||
+        FR_OK != f_open(&fd, path, FA_READ))
       return false;
   }
 
@@ -375,11 +371,8 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
   FIL fd;
   {
     char path[MAX_FN_LEN];
-    strcpy(path, ROMCONFIG_PATH);
-    strcat(path, file_basename(fn));
-    replace_extension(path, ".config");
-
-    if (FR_OK != f_open(&fd, path, FA_WRITE | FA_CREATE_ALWAYS))
+    if (!path_join_ext(path, ROMCONFIG_PATH, file_basename(fn), ".config") ||
+        FR_OK != f_open(&fd, path, FA_WRITE | FA_CREATE_ALWAYS))
       return false;
   }
 

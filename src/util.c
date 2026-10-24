@@ -31,8 +31,13 @@ const char *file_basename(const char *fullpath) {
   return &ret[1];
 }
 
+// dirname is a MAX_FN_LEN buffer.
 void file_dirname(const char *fullpath, char *dirname) {
-  strcpy(dirname, fullpath);
+  size_t l = strlen(fullpath);
+  if (l >= MAX_FN_LEN)
+    l = MAX_FN_LEN - 1;
+  memcpy(dirname, fullpath, l);
+  dirname[l] = 0;
   char *p = strrchr(dirname, '/');
   if (p)
     *p = 0;
@@ -60,18 +65,30 @@ bool path_join(char *out, const char *dir, const char *name, const char *suffix)
   return true;
 }
 
+bool path_join_ext(char *out, const char *dir, const char *name, const char *ext) {
+  const char *e = find_extension(name);
+  size_t nlen = e ? (size_t)(e - name - 1) : strlen(name);
+  size_t dlen = strlen(dir);
+  if (dlen + nlen + strlen(ext) >= MAX_FN_LEN)
+    return false;
+  memcpy(out, dir, dlen);
+  memcpy(&out[dlen], name, nlen);
+  strcpy(&out[dlen + nlen], ext);
+  return true;
+}
+
 bool rom_path_ok(const char *fn) {
   return strlen(fn) <= MAX_ROM_PATH_LEN && strlen(file_basename(fn)) <= MAX_ROM_BASENAME_LEN;
 }
 
-void replace_extension(char *fn, const char *newext) {
-  // Change or append the extension (if it has none)
+bool replace_extension(char *fn, const char *newext) {
+  // Change or append the extension (if it has none). fn is a MAX_FN_LEN buffer.
   const char *p = find_extension(fn);
-  if (p)
-    fn[p - fn - 1] = 0;   // Truncate file at extension
-
-  // Just append .sav since we could not replace the extension.
-  strcat(fn, newext);
+  size_t base = p ? (size_t)(p - fn - 1) : strlen(fn);
+  if (base + strlen(newext) >= MAX_FN_LEN)
+    return false;         // Does not fit, fn is left as it was.
+  strcpy(&fn[base], newext);
+  return true;
 }
 
 unsigned parseuint(const char *s) {

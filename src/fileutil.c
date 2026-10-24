@@ -36,6 +36,8 @@ void create_basepath(const char *fn) {
     return;        // Empty path
 
   char tmp[FF_MAX_LFN];
+  if (strlen(fn) >= sizeof(tmp))
+    return;        // Too long for FatFS anyway
   strcpy(tmp, fn);
 
   // Iteratively attempt to create dirs, will fail if the dir already exists.

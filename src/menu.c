@@ -752,9 +752,8 @@ static void prepare_gba_cheats(const char *gcode, uint8_t ver, t_load_gba_lcfg *
   data->cheats_size = 0;
   data->cheats_found = false;
   if (enable_cheats) {
-    strcpy(data->cheatsfn, fn);
-    replace_extension(data->cheatsfn, ".cht");
-    data->cheats_found = check_file_exists(data->cheatsfn);
+    data->cheats_found = path_join_ext(data->cheatsfn, "", fn, ".cht") &&
+                         check_file_exists(data->cheatsfn);
     if (!data->cheats_found) {
       WRITE_LOG("No cheat file found at '%s'", data->cheatsfn);
       // Create a path using the game ID and version.
@@ -916,6 +915,12 @@ void patch_gen_callback(bool confirm) {
 
 static void load_patchdb_action(bool confirm) {
   if (confirm) {
+    // It must fit its SDRAM area, or it would overwrite the assets after it
+    // (bundled emulators, language pack).
+    if (spop.p.pdb_ld.fs > PATCHDB_MAX_SIZE) {
+      spop.alert_msg = msgs[lang_id][MSG_ERR_TOOBIG];
+      return;
+    }
     FIL fd;
     FRESULT res = f_open(&fd, spop.p.pdb_ld.fn, FA_READ);
     if (res != FR_OK) {
@@ -1251,13 +1256,18 @@ static void draw_text_ovf_rotate(const char *t, volatile uint8_t *frame, unsigne
     unsigned anim = *franim > ANIM_INITIAL_WAIT ? (*franim - ANIM_INITIAL_WAIT) >> 4 : 0;
 
     // Wrap around once the text end reaches the mid point aprox.
+    // Text + 6 spaces + text again (long texts are cut, it's just a marquee).
     char tmpbuf[540];
-    strcpy(tmpbuf, t);
-    strcat(tmpbuf, "      ");
+    unsigned tl = strlen(t);
+    if (tl > (sizeof(tmpbuf) - 7) / 2)
+      tl = (sizeof(tmpbuf) - 7) / 2;
+    memcpy(tmpbuf, t, tl);
+    memcpy(&tmpbuf[tl], "      ", 7);
     unsigned pixw = font_width(tmpbuf);
     if (anim > pixw)
       *franim = ANIM_INITIAL_WAIT + ((anim - pixw) << 4);
-    strcat(tmpbuf, t);
+    memcpy(&tmpbuf[tl + 6], t, tl);
+    tmpbuf[tl * 2 + 6] = 0;
 
     draw_text_idx8_bus16_range(tmpbuf, basept, anim, maxw, SCREEN_WIDTH, FT_COLOR);
   }
@@ -3186,7 +3196,7 @@ static void keypress_menu_tools(unsigned newkeys) {
       slowsd = use_slowld;
       int ret = sdbench_read(loadrom_progress_abort);
       slowsd = true;
-      if (ret < 0)
+      if (ret <= 0)
         spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
       else {
         unsigned speed = 8*1024*1024 / (unsigned)ret;

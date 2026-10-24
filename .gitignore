@@ -7,3 +7,7 @@
 *.gcno
 *.info
 *.i
+tests/fuzz/fuzz_*
+!tests/fuzz/fuzz_*.c
+tests/fuzz/corpus/
+stackcheck/
