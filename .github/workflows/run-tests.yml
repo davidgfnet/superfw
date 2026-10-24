@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Install dependencies
-        run: sudo apt-get install gcc lcov
+        run: sudo apt-get install gcc g++ lcov
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -18,6 +18,8 @@ jobs:
         run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
       - name: Build and run tests
         run: cd tests && make
+      - name: Run language pack tests
+        run: make upkr.elf && python3 tests/messages_test.py
       - name: Upload coverage report
         if: ${{ success() }}
         uses: actions/upload-artifact@v4

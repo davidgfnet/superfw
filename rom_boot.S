@@ -761,6 +761,13 @@ assets_start:
   .balign 4
   #endif
 
+  .ascii "LANG"                                        @ Menu strings (all languages)
+  .word (lang_pack_end - lang_pack_start)
+  lang_pack_start:
+    .incbin "lang.pack"
+  lang_pack_end:
+  .balign 4
+
   .word 0               @ End of asset list
   .word 0
 assets_end:
