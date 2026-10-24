@@ -78,7 +78,8 @@ working after renaming the ROM. Games without a cover show a plain card. To
 create the covers, run the PC tool with the SD card inserted (needs Python 3
 and Pillow, `pip install pillow`):
 
-    python tools/make-covers.py E:
+    python tools/make-covers.py E:\
+
 It scans the whole card and identifies each ROM exactly by its checksum (or
 GBA game code) using the No-Intro game lists, then downloads the box art for
 that official name from the libretro thumbnails collection. ROMs it cannot
@@ -176,6 +177,7 @@ The following files are usually created:
  - .superfw/recent.txt: Recently played ROMs, in order.
  - .superfw/pending-save.txt: SRAM save information (temp file).
  - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
+ - .superfw/carousel.cache: Game list of the carousel tab (rebuilt when needed).
 
 Other noteworthy paths:
 
@@ -183,6 +185,7 @@ Other noteworthy paths:
  - .superfw/patches/: Patch cache (created by PatchEngine).
  - .superfw/cheats/: Cheat database, contains .cht files.
  - .superfw/emulators/: Emulator ROMs, used to play other device's ROMs.
+ - .superfw/covers/: Cover art for the carousel tab (made by tools/make-covers.py).
 
 Limits
 ------
@@ -191,8 +194,45 @@ The following restrictions apply to the firmware due to memory/storage/cpu
 constraints:
 
  - Maximum ROM size: 32MiB (Supercard's memory size)
- - File path and name limit: 255 utf-8 bytes (not exactly characters!)
+ - File path and name limit: 255 utf-8 bytes (not exactly characters!).
+   ROMs are limited to 240 bytes of path and 224 bytes of file name, so the
+   save, savestate, config and patch file names made from them always fit.
  - Maximum number of files+dirs in a directory: 16384
+ - Cheats: titles are cut at 251 bytes, cheats with more than 30 codes are
+   skipped (the other cheats in the file still load).
+ - Carousel: up to 4096 games, in the browsed folder and up to 7 levels of
+   subfolders below it.
+
+Development notes
+-----------------
+
+Firmware builds need `gcc-arm-none-eabi` (`make BOARD=sd|lite|chis`), the
+GitHub workflows run the tests on every push and build all three boards for
+master and tags.
+
+ - Tests: `make` in `tests/` (C unit tests, run on the host),
+   `python3 tests/make_covers_test.py` (cover tools, no network needed) and
+   `make upkr.elf && python3 tests/messages_test.py` (language pack).
+ - Menu strings: `res/messages.py` (English) and `res/lang/*.json`. They are
+   not compiled into the firmware: `res/messages.py pack` builds `lang.pack`
+   (all languages, compressed together with upkr), bundled as the `LANG`
+   virtual file. `lang_load()` (src/menu.c) unpacks it to the SDRAM scratch
+   area and copies only the chosen language into EWRAM, at boot and when the
+   language changes. Anything else using `sdr_state->scratch` must call
+   `lang_scratch_used()`. Missing translations fall back to English.
+ - Carousel: drawing, the game list scanner and the list cache are in
+   src/menu.c (`render_carousel()`, `cscan_*`, `carousel_cache_*`); the
+   hardware independent helpers (cover header, sorting, titles, sizes,
+   colors) are in src/carousel_util.c and are unit tested. Game list, path
+   pool and cover slots live in SDRAM (`t_sdram_state`). Cover files: 16
+   byte header (`t_cover_header`, magic "SFCV"), then an 80x80 and a 48x48
+   8bpp image using a fixed 6x6x6 color cube at BG palette entries 20..235;
+   entry 236 is the (tinted) carousel background. `tools/make-covers.py`
+   writes them and `tools/carousel-preview.py` renders a PC preview using
+   the same layout code.
+ - Files read from the SD card (cheats, patches, settings, the pending save
+   and the NOR metadata) can be damaged or edited by hand: their parsers
+   check sizes and counts before using them as lengths or indexes.
 
 Licenses
 --------
