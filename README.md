@@ -64,6 +64,19 @@ of box art covers sorted by name:
    the flash tab) and "Load from SD card" instead, and shows the flash usage.
  - L/R switch tabs.
 
+![The carousel tab](docs/images/carousel.png)
+
+| Letter jump (Up/Down) | Another color theme |
+|---|---|
+| ![Letter jump](docs/images/carousel-letter.png) | ![Another theme](docs/images/carousel-theme.png) |
+
+![Scrolling through the games](docs/images/carousel.gif)
+
+The games and covers in these pictures are made up (drawn by
+`docs/images/make-examples.py`, so no real box art is in the repository); the
+screens are rendered by `tools/carousel-preview.py` with the firmware's layout
+and assets.
+
 The background takes the color of the selected cover. Below the title it shows
 the system, the size, whether there is a save file, whether it is the last
 played game and whether it is in flash, plus a bar with the position in the
