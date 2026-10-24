@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "config.h"
+
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
@@ -46,6 +48,16 @@ typedef struct {
 uint32_t date2timestamp(const t_dec_date *d);
 void timestamp2date(uint32_t ts, t_dec_date *out);
 void fixdate(t_dec_date *d);
+
+// Builds dir + name + suffix into out (MAX_FN_LEN). False if it does not fit.
+bool path_join(char *out, const char *dir, const char *name, const char *suffix);
+
+// Longest ROM paths accepted. Save, backup, savestate, config and patch file
+// names are derived from them (adding a dir prefix and/or a suffix) using
+// MAX_FN_LEN buffers, so leave room for those.
+#define MAX_ROM_PATH_LEN       (MAX_FN_LEN - 16)
+#define MAX_ROM_BASENAME_LEN   (MAX_FN_LEN - 32)
+bool rom_path_ok(const char *fn);
 
 // Just checks that a file exists.
 bool check_file_exists(const char *fn);

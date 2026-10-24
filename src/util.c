@@ -51,6 +51,19 @@ const char *find_extension(const char *s) {
   return NULL;     // Has no extension, nor a path
 }
 
+bool path_join(char *out, const char *dir, const char *name, const char *suffix) {
+  if (strlen(dir) + strlen(name) + strlen(suffix) >= MAX_FN_LEN)
+    return false;
+  strcpy(out, dir);
+  strcat(out, name);
+  strcat(out, suffix);
+  return true;
+}
+
+bool rom_path_ok(const char *fn) {
+  return strlen(fn) <= MAX_ROM_PATH_LEN && strlen(file_basename(fn)) <= MAX_ROM_BASENAME_LEN;
+}
+
 void replace_extension(char *fn, const char *newext) {
   // Change or append the extension (if it has none)
   const char *p = find_extension(fn);
