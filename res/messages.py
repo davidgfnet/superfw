@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, sys, json
+import os, sys, json, struct, subprocess, tempfile, zlib
 
 # Main menu/firmware string database.
 
@@ -75,12 +75,14 @@ en_strings = [
   "MSG_DEFS_PATCH":  "Patching",
   "MSG_BROW_EMPTY":  "Empty directory",
 
+
   "MSG_UIS_THEME": "Theme color",
   "MSG_UIS_LANG":  "Language",
   "MSG_UIS_RECNT": "Recent ROMs",
   "MSG_UIS_ANSPD": "Text speed",
   "MSG_UIS_BHID":  "Show hidden files",
   "MSG_UIS_SAVE":  "Save to SD card",
+
 
   "MSG_UIS_SPD0":  "Very slow",
   "MSG_UIS_SPD1":  "Slow",
@@ -311,6 +313,105 @@ en_menu_strings = [
   }),
 ]
 
+all_entries = {
+  "main": en_strings,
+  "menu": en_menu_strings,
+}
+
+def flatten():
+  # Returns {menu name: {key: (english value, condition)}}
+  strall = {}
+  for mname, smenu in all_entries.items():
+    tmp = {}
+    for c, entries in smenu:
+      for k, v in entries.items():
+        tmp[k] = (v, c)
+    strall[mname] = tmp
+  return strall
+
+def resolve(strall, en_v):
+  # Resolves "~menu.KEY" references to another menu's english string
+  if en_v.startswith("~"):
+    mn, mk = en_v[1:].split(".")
+    return mk, strall[mn][mk][0]
+  return None, en_v
+
+def load_lang(l):
+  langdir = os.path.join(os.path.dirname(__file__), "lang")
+  with open(os.path.join(langdir, "%s.json" % l), encoding="utf-8") as fd:
+    return json.load(fd)
+
+def lang_strings(strall, mname, l):
+  # Resolved strings of a language for a menu, in enum (sorted key) order.
+  d = {} if l == "en" else load_lang(l)
+  out = []
+  for k, (en_v, c) in sorted(strall[mname].items()):
+    ref, en_text = resolve(strall, en_v)
+    key = ref if ref else k
+    v = d[key] if key in d and d[key] else en_text
+    out.append((k, v, c))
+  return out
+
+# Language pack (main menu only), bundled as the "LANG" virtual file. All the
+# language blobs are compressed together (upkr) since that is much smaller than
+# compressing them one by one. The firmware unpacks the stream into the SDRAM
+# scratch area and copies only the chosen language into EWRAM (see lang_load()
+# in src/menu.c). Blob layout:
+#   uint16 offset[MSG_COUNT]   (from the blob start)
+#   NUL terminated utf-8 strings, padded to a multiple of 4 bytes
+# Pack layout (little endian):
+#   uint32 magic "LNGP", uint16 version (2), uint16 language count,
+#   uint16 message count, uint16 reserved, uint32 unpacked size,
+#   uint32 CRC32 of the upkr stream (identifies the pack, see lang.cache),
+#   per language: uint32 blob offset (in the unpacked data), uint32 blob size
+#   upkr stream of all the blobs, one after the other
+PACK_MAGIC = 0x504E474C    # "LNGP"
+PACK_VERSION = 2
+PACK_LANGS = ["en"] + OTHER_LANGS
+
+def lang_blob(strall, l, conds):
+  entries = [e for e in lang_strings(strall, "main", l) if not e[2] or e[2] in conds]
+  data = bytearray(2 * len(entries))
+  seen = {}
+  for i, (k, v, c) in enumerate(entries):
+    if "\\" in v or '"' in v:
+      sys.exit("%s/%s: backslashes and quotes are not supported in the language pack" % (l, k))
+    raw = v.encode("utf-8") + b"\0"
+    if raw not in seen:
+      seen[raw] = len(data)
+      data += raw
+    if seen[raw] > 0xFFFF:
+      sys.exit("language blob too big for 16 bit offsets")
+    struct.pack_into("<H", data, 2 * i, seen[raw])
+  while len(data) % 4:
+    data.append(0)
+  return bytes(data)
+
+def build_pack(conds, upkr, level):
+  strall = flatten()
+  blobs = [lang_blob(strall, l, conds) for l in PACK_LANGS]
+  raw = b"".join(blobs)
+  with tempfile.TemporaryDirectory() as tmp:
+    fin, fout = os.path.join(tmp, "lang.bin"), os.path.join(tmp, "lang.comp")
+    with open(fin, "wb") as fd:
+      fd.write(raw)
+    subprocess.run([upkr, "-l", str(level), fin, fout], check=True, stdout=subprocess.DEVNULL)
+    with open(fout, "rb") as fd:
+      stream = fd.read()
+
+  nmsgs = len([1 for k, (v, c) in strall["main"].items() if not c or c in conds])
+  hdr = struct.pack("<IHHHHII", PACK_MAGIC, PACK_VERSION, len(blobs), nmsgs, 0, len(raw),
+                    zlib.crc32(stream))
+  index, off = b"", 0
+  for blob in blobs:
+    index += struct.pack("<II", off, len(blob))
+    off += len(blob)
+  return hdr + index + stream
+
+def max_blob_size(conds):
+  strall = flatten()
+  return max(len(lang_blob(strall, l, conds)) for l in PACK_LANGS)
+
 if len(sys.argv) > 1 and sys.argv[1] == "json":
   # Dump english strings for translation
   allentries = {}
@@ -320,24 +421,15 @@ if len(sys.argv) > 1 and sys.argv[1] == "json":
         if not v.startswith("~"):
           allentries[k] = v
   print(json.dumps(allentries, indent=2))
-elif len(sys.argv) > 1 and sys.argv[1] == "h":
-  all_entries = {
-    "main": en_strings,
-    "menu": en_menu_strings,
-  }
-
-  strlist = {}
-  strall = {}
-
-  # Flatten all strings
-  for mname, smenu in all_entries.items():
-    tmp = {}
-    for c, entries in smenu:
-      for k, v in entries.items():
-        if mname == sys.argv[2]:
-          strlist[k] = (v, c)
-        tmp[k] = (v, c)
-    strall[mname] = tmp
+elif len(sys.argv) > 2 and sys.argv[1] == "pack":
+  # pack <output> <upkr binary> <level> [defines...]: language pack file
+  out, upkr, level = sys.argv[2], sys.argv[3], int(sys.argv[4])
+  with open(out, "wb") as fd:
+    fd.write(build_pack(set(sys.argv[5:]), upkr, level))
+elif len(sys.argv) > 2 and sys.argv[1] == "h":
+  mname = sys.argv[2]
+  strall = flatten()
+  strlist = strall[mname]
 
   print("enum TranslationID {")
   for k, (_, c) in sorted(strlist.items()):
@@ -346,49 +438,41 @@ elif len(sys.argv) > 1 and sys.argv[1] == "h":
     print("  %s," % k)
     if c:
       print("#endif")
+  print("  MSG_COUNT")
   print("};")
 
-  print("const char * const msg_en[] = {")
-  for k, (v, c) in sorted(strlist.items()):
-    if c:
-      print("#ifdef %s" % c)
-    # Could be a reference to another menu, resolve it
-    if v.startswith("~"):
-      mn, mk = v[1:].split(".")
-      v = strall[mn][mk][0]
-    print('  /* %s */ "%s",' % (k.ljust(20), v))
-    if c:
-      print("#endif")
-  print("};")
-
-  # Attempt to load strings for all other languages
-  langdir = os.path.join(os.path.dirname(__file__), "lang")
-  for l in OTHER_LANGS:
-    d = json.load(open(os.path.join(langdir, "%s.json" % l)))
-    print("const char * const msg_%s[] = {" % l)
-    for k, (en_v, c) in sorted(strlist.items()):
-      if c:
-        print("#ifdef %s" % c)
-      if en_v.startswith("~"):
-        mn, mk = en_v[1:].split(".")
-        v = d[mk] if mk in d and d[mk] else en_v
-      else:
-        v = d[k] if k in d and d[k] else en_v
-      print('  /* %s */ "%s",' % (k.ljust(20), v))
-      if c:
-        print("#endif")
+  if mname == "main":
+    # Strings live in the language pack. Only the chosen language is unpacked
+    # into msg_table (src/menu.c), msgs[any language] points to it.
+    print("#define LANG_BLOB_MAX_PLAIN %d" % max_blob_size(set()))
+    print("#define LANG_BLOB_MAX_NOR   %d" % max_blob_size({"SUPPORT_NORGAMES"}))
+    print("#ifdef SUPPORT_NORGAMES")
+    print("  #define LANG_BLOB_MAX LANG_BLOB_MAX_NOR")
+    print("#else")
+    print("  #define LANG_BLOB_MAX LANG_BLOB_MAX_PLAIN")
+    print("#endif")
+    print("const char *msg_table[MSG_COUNT] __attribute__((section(\".ewram\")));")
+    print("const char * const *msgs[] = {")
+    for l in PACK_LANGS:
+      print("  msg_table,     // %s" % l)
     print("};")
-
-  print("const char * const * const msgs[] = {")
-  for l in ["en"] + OTHER_LANGS:
-    print("  msg_%s," % l)
-  print("};")
-
-  if sys.argv[2] == "main":
     print("const uint16_t lang_codes[] = {")
-    for l in ["en"] + OTHER_LANGS:
+    for l in PACK_LANGS:
       c = ord(l[0]) | (ord(l[1]) << 8)
       print("  0x%04x,     // %s" % (c, l))
     print("};")
+  else:
+    for l in PACK_LANGS:
+      print("const char * const msg_%s[] = {" % l)
+      for k, v, c in lang_strings(strall, mname, l):
+        if c:
+          print("#ifdef %s" % c)
+        print('  /* %s */ "%s",' % (k.ljust(20), v))
+        if c:
+          print("#endif")
+      print("};")
 
-
+    print("const char * const * const msgs[] = {")
+    for l in PACK_LANGS:
+      print("  msg_%s," % l)
+    print("};")

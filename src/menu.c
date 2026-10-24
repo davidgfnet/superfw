@@ -428,6 +428,125 @@ unsigned lang_lookup(uint16_t code) {
   return 0;  // Fallback to default (english)
 }
 
+// Menu strings: the strings of all languages live compressed in the "LANG"
+// virtual file (SDRAM). Only the chosen language is kept in EWRAM, in
+// lang_blob, and msg_table points into it (see res/messages.py). Unpacking
+// takes a while, so the chosen language is also kept unpacked on the SD card
+// (lang.cache): boots only read that file, unless the language or the
+// firmware (pack CRC) changed.
+#define LANG_PACK_MAGIC    0x504E474C    // "LNGP"
+#define LANG_PACK_VERSION  2
+#define LANG_CACHE_MAGIC   0x434E474C    // "LNGC"
+#define LANG_CACHE_PATH    SUPERFW_DIR "/lang.cache"
+
+typedef struct {
+  uint32_t magic;
+  uint16_t version, nlangs, nmsgs, reserved;
+  uint32_t rawsize;         // Size of all the blobs, unpacked
+  uint32_t crc;             // CRC32 of the compressed stream (identifies the pack)
+} t_lang_pack_hdr;
+
+typedef struct {
+  uint32_t magic;
+  uint32_t packcrc;         // Pack it was unpacked from
+  uint16_t lang, nmsgs;
+  uint32_t size;            // Blob size, follows this header
+} t_lang_cache_hdr;
+
+typedef struct {
+  uint32_t offset, size;    // Blob position in the unpacked data
+} t_lang_pack_entry;
+
+// +4: the unpacker can write one byte past the end.
+static uint32_t lang_blob[(LANG_BLOB_MAX + 4) / 4] __attribute__((section(".ewram")));
+
+// The unpacked pack stays in the scratch area, so switching languages is fast.
+// Anything else using the scratch area must call lang_scratch_used().
+static bool lang_unpacked = false;
+
+static void lang_scratch_used() {
+  lang_unpacked = false;
+}
+
+// Reads the cached blob of a language. False if missing or not for this pack.
+static bool lang_cache_read(unsigned lang, uint32_t packcrc, unsigned *blobsize) {
+  FIL fd;
+  if (FR_OK != f_open(&fd, LANG_CACHE_PATH, FA_READ))
+    return false;
+
+  UINT rdbytes;
+  t_lang_cache_hdr ch;
+  bool ok = FR_OK == f_read(&fd, &ch, sizeof(ch), &rdbytes) && rdbytes == sizeof(ch) &&
+            ch.magic == LANG_CACHE_MAGIC && ch.packcrc == packcrc && ch.lang == lang &&
+            ch.nmsgs == MSG_COUNT && ch.size >= MSG_COUNT * 2 && ch.size <= LANG_BLOB_MAX &&
+            FR_OK == f_read(&fd, lang_blob, ch.size, &rdbytes) && rdbytes == ch.size;
+  f_close(&fd);
+  if (ok)
+    *blobsize = ch.size;
+  return ok;
+}
+
+static void lang_cache_write(unsigned lang, uint32_t packcrc, unsigned blobsize) {
+  t_lang_cache_hdr ch = {
+    .magic = LANG_CACHE_MAGIC, .packcrc = packcrc,
+    .lang = lang, .nmsgs = MSG_COUNT, .size = blobsize,
+  };
+  FIL fd;
+  f_mkdir(SUPERFW_DIR);
+  if (FR_OK != f_open(&fd, LANG_CACHE_PATH, FA_WRITE | FA_CREATE_ALWAYS))
+    return;
+  UINT wrbytes;
+  bool ok = FR_OK == f_write(&fd, &ch, sizeof(ch), &wrbytes) && wrbytes == sizeof(ch) &&
+            FR_OK == f_write(&fd, lang_blob, blobsize, &wrbytes) && wrbytes == blobsize;
+  f_close(&fd);
+  if (!ok)
+    f_unlink(LANG_CACHE_PATH);
+}
+
+// Loads the strings of a language. Must be called before any text is shown
+// and every time lang_id changes. Shows "?" for every string if it fails.
+void lang_load(unsigned lang) {
+  const uint16_t *offs = (const uint16_t*)lang_blob;
+  unsigned blobsize = 0;
+
+  // Read the pack header (the assets area is not reachable with the SD card
+  // interface mapped), keep what we need.
+  set_supercard_mode(MAPPED_SDRAM, true, false);
+  const t_lang_pack_hdr *hdr = get_vfile_ptr("LANG");
+  bool valid = hdr && hdr->magic == LANG_PACK_MAGIC && hdr->version == LANG_PACK_VERSION &&
+               hdr->nmsgs == MSG_COUNT && lang < hdr->nlangs && hdr->rawsize <= scratch_mem_size - 4;
+  const uint32_t packcrc = valid ? hdr->crc : 0;
+  set_supercard_mode(MAPPED_SDRAM, true, true);
+
+  // Fast path: the unpacked language is on the SD card already.
+  if (valid && !lang_cache_read(lang, packcrc, &blobsize)) {
+    set_supercard_mode(MAPPED_SDRAM, true, false);
+    const t_lang_pack_entry *entries = (const t_lang_pack_entry*)&hdr[1];
+    const t_lang_pack_entry *e = &entries[lang];
+    if (e->size >= MSG_COUNT * 2 && e->size <= LANG_BLOB_MAX && !(e->offset & 3) &&
+        e->offset + e->size <= hdr->rawsize) {
+      // Unpack all the languages to the scratch area (unless they are still
+      // there), keep only this one.
+      if (!lang_unpacked)
+        lang_unpacked = upkr_unpack16(sdr_state->scratch, (const uint8_t*)&entries[hdr->nlangs]) >= hdr->rawsize;
+      if (lang_unpacked) {
+        memcpy32(lang_blob, &sdr_state->scratch[e->offset], ROUND_UP2(e->size, 4));
+        blobsize = e->size;
+      }
+    }
+    set_supercard_mode(MAPPED_SDRAM, true, true);
+
+    if (blobsize)
+      lang_cache_write(lang, packcrc, blobsize);
+  }
+
+  // Strings must end inside the buffer, even with a damaged cache file.
+  memset(&((uint8_t*)lang_blob)[blobsize], 0, 4);
+
+  for (unsigned i = 0; i < MSG_COUNT; i++)
+    msg_table[i] = (blobsize && offs[i] < blobsize) ? (const char*)lang_blob + offs[i] : "?";
+}
+
 inline uint16_t curr_pressed_keys() {
   return REG_KEYINPUT ^ 0x3FF;
 }
@@ -2125,6 +2244,9 @@ void menu_flip() {
 }
 
 void menu_init(int sram_testres) {
+  // Unpack the strings of the language in use (loaded from the settings).
+  lang_load(lang_id);
+
   // Reset to ROM browser and SD card root.
   memset(&smenu, 0, sizeof(smenu));
   memset(&spop, 0, sizeof(spop));
@@ -2182,6 +2304,7 @@ int movedir_up() {
 
 void start_flash_update(const char *fn, unsigned fwsize, bool validate_superfw) {
   // We read the file into SDRAM, apply the update from there.
+  lang_scratch_used();
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_READ);
   if (res != FR_OK)
@@ -2572,6 +2695,7 @@ static void keypress_popup_norwrite(unsigned newkeys) {
         flashmgr_allocate_blocks(ne.blkmap, blkcnt, (t_reg_entry*)&sdr_state->nordata);
 
         // Go ahead and start the flasher-loader with patching support.
+        lang_scratch_used();
         unsigned errc = flash_gba_nor(info->romfn, info->romfs, &info->romh, p,
                                       info->use_dsaving, info->ingame_menu_enabled,
                                       info->rtc_patch_enabled,
@@ -3098,6 +3222,9 @@ static void keypress_menu_uisettings(unsigned newkeys) {
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + 1) % LANG_COUNT;
   }
+
+  if ((newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) && smenu.uiset.selector == UiSetLang)
+    lang_load(lang_id);
 
   if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
     smenu.uiset.selector = 0;

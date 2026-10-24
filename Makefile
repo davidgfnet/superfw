@@ -28,6 +28,7 @@ else ifeq ($(BOARD),sd)
   FWFLAVOUR = "SD"
 else ifeq ($(BOARD),chis)
   GLOBAL_DEFINES += -DSUPPORT_NORGAMES -DSUPERCHIS_IO -DFONTS_EXT
+  LANG_DEFINES = SUPPORT_NORGAMES
   BUNDLE_GBC_EMULATOR = 1
   BUNDLE_OTHER_EMULATORS = 1
   # Can't be over 2MiB (hardlimit)
@@ -164,7 +165,7 @@ INFILES=src/gba_ewram_crt0.S \
         src/fonts/font_render.c \
         ${FATFSFILES}
 
-all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload ingame_trampoline.payload
+all:	$(FWBINFILES) $(BIEMUFILES) lang.pack directsave.payload ingame_trampoline.payload
 	# Wrap the firmware around a ROM->EWRAM loader
 	$(CC) $(CFLAGS) -o firmware.elf rom_boot.S -T ldscripts/gba_romboot.ld -nostartfiles -nostdlib -Wl,--defsym,MAX_FLASH_SIZE=$(MAXFSIZE)K
 	$(OBJCOPY) --output-target=binary firmware.elf superfw.gba
@@ -197,10 +198,14 @@ ingame_trampoline.payload:	src/ingame_trampoline.S
 	$(CC) $(BASEFLAGS) -nostartfiles -T ldscripts/gba_ingametramp.ld -o ingame_trampoline.elf src/ingame_trampoline.S
 	$(OBJCOPY) --output-target=binary ingame_trampoline.elf ingame_trampoline.payload
 
-src/messages_data.h:	res/messages.py
+src/messages_data.h:	res/messages.py $(wildcard res/lang/*.json)
 	./res/messages.py h main > src/messages_data.h
 
-src/menu_messages.h:	res/messages.py
+# Menu strings for all languages, compressed (see res/messages.py)
+lang.pack:	res/messages.py $(wildcard res/lang/*.json) ./upkr.elf
+	./res/messages.py pack $@ ./upkr.elf $(COMPRESSION_RATIO) $(LANG_DEFINES)
+
+src/menu_messages.h:	res/messages.py $(wildcard res/lang/*.json)
 	./res/messages.py h menu > src/menu_messages.h
 
 firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr.elf
@@ -225,5 +230,5 @@ upkr.elf:	tools/upkr.cc
 	g++ -o $@ $< -O3 -ffast-math
 
 clean:
-	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h
+	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp lang.pack src/menu_messages.h src/messages_data.h
 
