@@ -217,6 +217,34 @@ class EndToEnd(unittest.TestCase):
     self.assertEqual(img.size, (40, 40))
     self.assertTrue(self.requests[-1].endswith("Metroid%20Fusion%20%28USA%29.png"))
 
+  def test_progress_events(self):
+    # What the window shows: one "rom" event per ROM, with its result.
+    events = []
+    def report(event, **kw):
+      events.append((event, kw))
+    parser, args = mc.make_args([self.sd, "--cache", self.cache])
+    mc.make_covers(args, report)
+    self.assertEqual(events[0], ("start", {"total": 2}))
+    roms = {kw["romname"]: kw for e, kw in events if e == "rom"}
+    self.assertEqual(roms["renamed rom.gba"]["status"], "made")
+    self.assertTrue(roms["renamed rom.gba"]["outfn"].endswith("AMTE.cov"))
+    self.assertEqual(roms["Pokemon Ruby.gba"]["status"], "made")
+    self.assertEqual(events[-1][0], "done")
+    # Second run: both present, with the cover file to preview.
+    events.clear()
+    mc.make_covers(args, report)
+    for e, kw in events:
+      if e == "rom":
+        self.assertEqual(kw["status"], "present")
+        self.assertTrue(os.path.exists(kw["outfn"]))
+
+  def test_stop(self):
+    events = []
+    parser, args = mc.make_args([self.sd, "--cache", self.cache])
+    mc.make_covers(args, lambda e, **kw: events.append(e), cancelled=lambda: True)
+    self.assertNotIn("rom", events)
+    self.assertFalse(os.path.exists(os.path.join(self.sd, mc.COVERS_DIR)))
+
 class GameCode(unittest.TestCase):
   def test_codes(self):
     with tempfile.TemporaryDirectory() as d:
@@ -251,6 +279,15 @@ class CoverFormat(unittest.TestCase):
     self.assertTrue(all(p == mc.BG_INDEX for p in bigimg[:mc.BIG * 10]))
     middle = bigimg[mc.BIG * 40:mc.BIG * 41]
     self.assertTrue(all(mc.PAL_BASE <= p < mc.PAL_BASE + 216 for p in middle))
+
+  def test_preview(self):
+    # Blue tall image: the sides are the tint (blue), the middle the image.
+    data = mc.cover_bytes(Image.new("RGB", (40, 80), (0, 0, 255)))
+    img = mc.cover_preview(data)
+    self.assertEqual(img.size, (mc.BIG * 2, mc.BIG * 2))
+    r, g, b = img.getpixel((0, 80))
+    self.assertTrue(b > 200 and r < 40 and g < 40)
+    self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))
 
   def test_v1_files(self):
     data = struct.pack("<IBBBB8x", mc.COVER_MAGIC, 1, 80, 48, 0) + bytes(80 * 80 + 48 * 48)

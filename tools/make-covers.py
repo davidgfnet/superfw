@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# SPDX-License-Identifier: GPL-3.0-or-later (like the rest of SuperFW)
 
 # Generates cover art files for the SuperFW carousel tab.
 #
@@ -29,6 +30,12 @@
 # Usage:
 #   python make-covers.py E:\
 #   python make-covers.py E:\ --images C:\my-covers --force
+#   python make-covers.py --gui
+#
+# --gui opens a window to pick the SD card and see the progress, the box art
+# picked for each game and a preview of each cover as the cart shows it. The
+# packaged .exe (and the macOS / Linux builds) open it when started without
+# arguments, ie. double-clicked.
 #
 # Requires Pillow (pip install pillow).
 
@@ -39,6 +46,8 @@ try:
   from PIL import Image
 except ImportError:
   sys.exit("Pillow is required: pip install pillow")
+
+VERSION = "1.1.0"            # Of the tool (shown in the window and --version)
 
 COVER_MAGIC = 0x56434653
 COVER_VERSION = 2
@@ -429,10 +438,32 @@ def default_sdroot():
   # Packaged as an .exe (PyInstaller): use the folder the .exe sits in, so it
   # can be copied to the SD card root and double-clicked.
   if getattr(sys, "frozen", False):
-    return os.path.dirname(os.path.abspath(sys.executable))
+    d = os.path.dirname(os.path.abspath(sys.executable))
+    # macOS .app bundle: <folder>/make-covers.app/Contents/MacOS/make-covers
+    if d.endswith(os.path.join(".app", "Contents", "MacOS")):
+      d = os.path.dirname(os.path.dirname(os.path.dirname(d)))
+    return d
   return None
 
-def main():
+def cover_preview(data, scale=2):
+  # What the carousel shows for a .cov file: the big cover on its background
+  # (tint color, or the default carousel background), as an RGB image.
+  big, small, tint = read_cover(data)
+  bg = (40, 40, 48)
+  if tint is not None:
+    bg = tuple((((tint >> s) & 31) << 3) | (((tint >> s) & 31) >> 2) for s in (0, 5, 10))
+  pal = []
+  for i in range(256):
+    if PAL_BASE <= i < PAL_BASE + 216:
+      pal.extend(PALETTE[i - PAL_BASE])
+    else:
+      pal.extend(bg)
+  img = Image.frombytes("P", (BIG, BIG), big)
+  img.putpalette(pal)
+  img = img.convert("RGB")
+  return img.resize((BIG * scale, BIG * scale), Image.NEAREST)
+
+def make_args(argv=None):
   parser = argparse.ArgumentParser(description="Generate SuperFW carousel cover art")
   parser.add_argument("sdroot", nargs="?", default=default_sdroot(),
                       help="SD card root (ie. E:\\) or a folder with ROMs (default for the .exe: its own folder)")
@@ -445,22 +476,48 @@ def main():
                       help="Do not identify ROMs by checksum (only by file name)")
   parser.add_argument("--cache", default=os.path.join(os.path.expanduser("~"), ".superfw-covers-cache"),
                       help="Where to cache the downloaded box art index")
-  args = parser.parse_args()
+  parser.add_argument("--gui", action="store_true", help="Open the window (default when started without arguments)")
+  parser.add_argument("--version", action="version", version="make-covers " + VERSION)
+  return parser, parser.parse_args(argv)
 
-  if not args.sdroot:
-    parser.error("the SD card root is required, ie. make-covers.py E:\\")
-  if not os.path.isdir(args.sdroot):
-    sys.exit("Not a directory: %s" % args.sdroot)
+def print_report(event, **kw):
+  # Command line output of make_covers().
+  if event == "log":
+    print(kw["text"])
+  elif event == "rom":
+    if kw["status"] == "missing":
+      print("NO COVER   %s" % kw["romname"])
+    elif kw["status"] in ("made", "would make"):
+      print("%s %s  <-  %s  [%s]" % ("WOULD MAKE" if kw["status"] == "would make" else "MADE      ",
+                                      kw["romname"], kw["source"], os.path.basename(kw["outfn"])))
+  elif event == "done":
+    print()
+    print("Covers %s: %d, already present: %d, not found: %d" %
+          ("to make" if kw["dry_run"] else "made", kw["made"], kw["skipped"], len(kw["missing"])))
+    if kw["missing"]:
+      print("For games without a cover, put an image named like the ROM in a folder")
+      print("and run again with --images <folder>.")
 
+def make_covers(args, report=print_report, cancelled=lambda: False):
+  # Makes the covers for every ROM under args.sdroot. Progress goes to
+  # report(event, ...): "log" (text), "start" (total), "rom" (one per ROM, with
+  # its status: made, would make, present, missing) and "done" (summary).
   outdir = args.output or os.path.join(args.sdroot, COVERS_DIR)
   thumbs = ThumbIndex(args.cache)
   nointro = NoIntro(args.cache)
+  roms = list(find_roms(args.sdroot))
+  report("start", total=len(roms))
 
   made, skipped, missing = 0, 0, []
   done = set()
   codes_used = set()      # Game codes that got a cover file in this run
-  for path, romname, ext in find_roms(args.sdroot):
+  for n, (path, romname, ext) in enumerate(roms):
+    if cancelled():
+      report("log", text="Stopped.")
+      break
+    info = dict(index=n, total=len(roms), romname=romname, path=path)
     if romname in done:
+      report("rom", status="duplicate", source=None, outfn=None, **info)
       continue      # Same file name in another folder shares the cover
     done.add(romname)
 
@@ -471,6 +528,8 @@ def main():
 
     if not args.force and (os.path.exists(namefn) or (codefn and not local and os.path.exists(codefn))):
       skipped += 1
+      report("rom", status="present", source=None,
+             outfn=namefn if os.path.exists(namefn) else codefn, **info)
       continue
 
     # GBA covers are named after the game code (ie. BPEE.cov), so they keep
@@ -491,7 +550,7 @@ def main():
           try:
             official, how = nointro.identify(repo, path, code)
           except Exception as e:
-            print("  could not identify %s by checksum: %s" % (romname, e))
+            report("log", text="  could not identify %s by checksum: %s" % (romname, e))
             official = None
           if official:
             m = thumbs.find(repo, official + ".x")
@@ -506,16 +565,14 @@ def main():
           if not args.dry_run:
             img = thumbs.download(repo, tpath, islink)
     except Exception as e:
-      print("  error getting cover for %s: %s" % (romname, e))
+      report("log", text="  error getting cover for %s: %s" % (romname, e))
       img, source = None, None
 
     if not source:
       missing.append(romname)
-      print("NO COVER   %s" % romname)
+      report("rom", status="missing", source=None, outfn=None, **info)
       continue
 
-    print("%s %s  <-  %s  [%s]" % ("WOULD MAKE" if args.dry_run else "MADE      ", romname, source,
-                                    os.path.basename(outfn)))
     if not args.dry_run:
       os.makedirs(outdir, exist_ok=True)
       data = cover_bytes(img)
@@ -524,16 +581,267 @@ def main():
     if use_code:
       codes_used.add(code)
     made += 1
+    report("rom", status="would make" if args.dry_run else "made", source=source, outfn=outfn, **info)
 
   nointro.save()
-  print()
-  print("Covers %s: %d, already present: %d, not found: %d" %
-        ("to make" if args.dry_run else "made", made, skipped, len(missing)))
-  if missing:
-    print("For games without a cover, put an image named like the ROM in a folder")
-    print("and run again with --images <folder>.")
+  report("done", made=made, skipped=skipped, missing=missing, dry_run=args.dry_run)
+
+def main():
+  parser, args = make_args()
+  if not args.sdroot:
+    parser.error("the SD card root is required, ie. make-covers.py E:\\")
+  if not os.path.isdir(args.sdroot):
+    sys.exit("Not a directory: %s" % args.sdroot)
+  make_covers(args)
+
+# ---- Window ----------------------------------------------------------------
+
+def sd_card_candidates():
+  # Folders that look like SD cards: removable drives on Windows, mounted
+  # volumes on macOS and Linux.
+  found = []
+  if sys.platform == "win32":
+    import ctypes, string
+    mask = ctypes.windll.kernel32.GetLogicalDrives()
+    for i, letter in enumerate(string.ascii_uppercase):
+      root = letter + ":\\"
+      if mask & (1 << i) and ctypes.windll.kernel32.GetDriveTypeW(root) == 2:   # DRIVE_REMOVABLE
+        found.append(root)
+  else:
+    user = os.environ.get("USER", "")
+    for base in ("/Volumes", "/media/" + user, "/run/media/" + user, "/media"):
+      try:
+        for d in sorted(os.listdir(base)):
+          p = os.path.join(base, d)
+          if os.path.isdir(p) and p not in found and d != user and not os.path.islink(p):
+            found.append(p)
+      except OSError:
+        pass
+  return found
+
+def hide_own_console():
+  # The Windows .exe is a console program (for command line use). When it was
+  # double-clicked the console is its own: hide it while the window is open.
+  if sys.platform != "win32" or not getattr(sys, "frozen", False):
+    return
+  try:
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    procs = (ctypes.c_uint * 4)()
+    if k32.GetConsoleProcessList(procs, 4) <= 2:     # This program (and its bootloader) only
+      ctypes.windll.user32.ShowWindow(k32.GetConsoleWindow(), 0)
+  except Exception:
+    pass
+
+STATUS_TEXT = {"made": "Made", "would make": "Would make", "present": "Already there",
+               "missing": "Not found", "duplicate": "Same name as another"}
+
+def gui(args):
+  import queue, threading
+  import tkinter as tk
+  from tkinter import ttk, filedialog, messagebox
+  from PIL import ImageTk
+
+  if sys.platform == "win32":
+    try:
+      import ctypes
+      ctypes.windll.shcore.SetProcessDpiAwareness(1)   # Sharp text on scaled screens
+    except Exception:
+      pass
+  root = tk.Tk()
+  root.title("SuperFW cover maker " + VERSION)
+  import tkinter.font
+  linesp = tkinter.font.nametofont("TkDefaultFont").metrics("linespace")
+  ttk.Style(root).configure("Treeview", rowheight=int(linesp * 1.4))
+  root.minsize(720, 460)
+  events = queue.Queue()
+  stop = threading.Event()
+  state = {"worker": None, "rows": {}, "photo": None}
+
+  frm = ttk.Frame(root, padding=10)
+  frm.pack(fill="both", expand=True)
+  frm.columnconfigure(1, weight=1)
+  frm.rowconfigure(5, weight=1)
+
+  ttk.Label(frm, text="SD card:").grid(row=0, column=0, sticky="w")
+  sdvar = tk.StringVar(value=args.sdroot or "")
+  cands = sd_card_candidates()
+  if not sdvar.get() and cands:
+    sdvar.set(cands[0])
+  sdbox = ttk.Combobox(frm, textvariable=sdvar, values=cands)
+  sdbox.grid(row=0, column=1, sticky="ew", padx=6)
+  def pick_sd():
+    d = filedialog.askdirectory(title="SD card or folder with ROMs", initialdir=sdvar.get() or None)
+    if d:
+      sdvar.set(os.path.normpath(d))
+  ttk.Button(frm, text="Browse...", command=pick_sd).grid(row=0, column=2)
+
+  ttk.Label(frm, text="Own images:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+  imgvar = tk.StringVar(value=args.images or "")
+  ttk.Entry(frm, textvariable=imgvar).grid(row=1, column=1, sticky="ew", padx=6, pady=(6, 0))
+  def pick_images():
+    d = filedialog.askdirectory(title="Folder with cover images named like the ROMs")
+    if d:
+      imgvar.set(os.path.normpath(d))
+  ttk.Button(frm, text="Browse...", command=pick_images).grid(row=1, column=2, pady=(6, 0))
+
+  opts = ttk.Frame(frm)
+  opts.grid(row=2, column=0, columnspan=3, sticky="w", pady=6)
+  dlvar = tk.BooleanVar(value=not args.no_download)
+  ckvar = tk.BooleanVar(value=not args.no_checksum)
+  forcevar = tk.BooleanVar(value=args.force)
+  ttk.Checkbutton(opts, text="Download box art", variable=dlvar).pack(side="left")
+  ttk.Checkbutton(opts, text="Identify games by checksum", variable=ckvar).pack(side="left", padx=12)
+  ttk.Checkbutton(opts, text="Redo existing covers", variable=forcevar).pack(side="left")
+
+  bar = ttk.Frame(frm)
+  bar.grid(row=3, column=0, columnspan=3, sticky="ew")
+  bar.columnconfigure(1, weight=1)
+  gobtn = ttk.Button(bar, text="Make covers")
+  gobtn.grid(row=0, column=0)
+  prog = ttk.Progressbar(bar, mode="determinate")
+  prog.grid(row=0, column=1, sticky="ew", padx=8)
+  status = ttk.Label(frm, text="Pick the SD card and press Make covers.")
+  status.grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 6))
+
+  body = ttk.Frame(frm)
+  body.grid(row=5, column=0, columnspan=3, sticky="nsew")
+  body.columnconfigure(0, weight=1)
+  body.rowconfigure(0, weight=1)
+  tree = ttk.Treeview(body, columns=("result", "source"), show="tree headings", selectmode="browse")
+  tree.heading("#0", text="Game")
+  tree.heading("result", text="Result")
+  tree.heading("source", text="Box art used")
+  tree.column("#0", width=linesp * 12)
+  tree.column("result", width=linesp * 7, stretch=False)
+  tree.column("source", width=linesp * 13)
+  tree.grid(row=0, column=0, sticky="nsew")
+  sb = ttk.Scrollbar(body, orient="vertical", command=tree.yview)
+  sb.grid(row=0, column=1, sticky="ns")
+  tree.configure(yscrollcommand=sb.set)
+
+  side = ttk.Frame(body, padding=(10, 0, 0, 0))
+  side.grid(row=0, column=2, sticky="n")
+  canvas = tk.Canvas(side, width=BIG * 2, height=BIG * 2, highlightthickness=0, background="#282830")
+  canvas.pack()
+  prevlabel = ttk.Label(side, text="Select a game to see\nits cover as the cart\nshows it.", justify="center")
+  prevlabel.pack(pady=6)
+
+  def show_preview(_event=None):
+    sel = tree.selection()
+    outfn = state["rows"].get(sel[0]) if sel else None
+    canvas.delete("all")
+    state["photo"] = None
+    if not outfn or not os.path.exists(outfn):
+      prevlabel.configure(text="No cover file.")
+      return
+    try:
+      with open(outfn, "rb") as fd:
+        state["photo"] = ImageTk.PhotoImage(cover_preview(fd.read()))
+      canvas.create_image(0, 0, anchor="nw", image=state["photo"])
+      prevlabel.configure(text=os.path.basename(outfn))
+    except Exception as e:
+      prevlabel.configure(text="Cannot read the cover:\n%s" % e)
+  tree.bind("<<TreeviewSelect>>", show_preview)
+
+  def worker(wargs):
+    def report(event, **kw):
+      events.put((event, kw))
+    try:
+      make_covers(wargs, report, stop.is_set)
+    except Exception as e:
+      events.put(("error", {"text": str(e)}))
+    events.put(("finished", {}))
+
+  def start():
+    if state["worker"]:
+      stop.set()
+      gobtn.configure(state="disabled", text="Stopping...")
+      return
+    sd = sdvar.get().strip()
+    if not sd or not os.path.isdir(sd):
+      messagebox.showerror("SuperFW cover maker", "Pick the SD card (or a folder with ROMs) first.")
+      return
+    images = imgvar.get().strip() or None
+    if images and not os.path.isdir(images):
+      messagebox.showerror("SuperFW cover maker", "The images folder does not exist.")
+      return
+    wargs = argparse.Namespace(**vars(args))
+    wargs.sdroot, wargs.images = sd, images
+    wargs.no_download, wargs.no_checksum, wargs.force = not dlvar.get(), not ckvar.get(), forcevar.get()
+    wargs.dry_run = False
+    tree.delete(*tree.get_children())
+    state["rows"].clear()
+    prog.configure(value=0, maximum=1)
+    stop.clear()
+    gobtn.configure(text="Stop")
+    status.configure(text="Looking for games...")
+    state["worker"] = threading.Thread(target=worker, args=(wargs,), daemon=True)
+    state["worker"].start()
+  gobtn.configure(command=start)
+
+  def poll():
+    try:
+      while True:
+        event, kw = events.get_nowait()
+        if event == "start":
+          prog.configure(maximum=max(1, kw["total"]))
+          status.configure(text="%d games found." % kw["total"])
+        elif event == "log":
+          status.configure(text=kw["text"].strip())
+        elif event == "rom":
+          prog.configure(value=kw["index"] + 1)
+          status.configure(text="%d / %d  %s" % (kw["index"] + 1, kw["total"], kw["romname"]))
+          if kw["status"] != "duplicate":
+            iid = tree.insert("", "end", text=kw["romname"],
+                              values=(STATUS_TEXT[kw["status"]], kw["source"] or ""))
+            state["rows"][iid] = kw["outfn"]
+            if kw["status"] == "made":
+              tree.see(iid)
+        elif event == "done":
+          status.configure(text="Covers made: %d, already there: %d, not found: %d" %
+                           (kw["made"], kw["skipped"], len(kw["missing"])) +
+                           ("  (games without a cover can use your own images)" if kw["missing"] else ""))
+        elif event == "error":
+          messagebox.showerror("SuperFW cover maker", kw["text"])
+        elif event == "finished":
+          state["worker"] = None
+          gobtn.configure(state="normal", text="Make covers")
+    except queue.Empty:
+      pass
+    root.after(100, poll)
+  poll()
+
+  if os.environ.get("MAKE_COVERS_SELFTEST"):
+    # Build check: the window opens, then closes by itself.
+    def selftest_done():
+      print("window ok")
+      root.destroy()
+    root.after(1500, selftest_done)
+  else:
+    hide_own_console()
+  root.mainloop()
+
+def want_gui(argv):
+  # The window opens with --gui, or when started without arguments in a
+  # desktop session (ie. the .exe double-clicked). Plain "python make-covers.py"
+  # in a terminal without a display keeps the command line behaviour.
+  if "--gui" in argv:
+    return True
+  if len(argv) > 1 or not getattr(sys, "frozen", False):
+    return False
+  if sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+    return False
+  try:
+    import tkinter    # noqa: F401
+  except ImportError:
+    return False
+  return True
 
 if __name__ == "__main__":
+  if want_gui(sys.argv):
+    gui(make_args()[1])
+    sys.exit(0)
   # When double-clicked (.exe without arguments) keep the window open at the end.
   pause = getattr(sys, "frozen", False) and len(sys.argv) == 1
   code = 0

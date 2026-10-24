@@ -91,8 +91,11 @@ identify (hacks, homebrew, bad dumps) are matched by file name instead. Use
 `Metroid Fusion (USA).png`), `--dry-run` to see the matches first,
 `--force` to regenerate covers and `--no-checksum` to skip reading the ROMs.
 
-On Windows the tool can also be packaged as a single .exe that you copy to
-the SD card root and double-click (it then works on its own folder):
+`--gui` opens a window instead: pick the SD card, then it shows the progress,
+the box art picked for every game and a preview of each cover as the cart
+shows it. The tool can also be packaged as a program that needs no Python
+(PyInstaller, works on Windows, macOS and Linux); started without arguments
+it opens the window (the Windows .exe on the SD card root picks that card):
 
     pip install pyinstaller pillow
     pyinstaller --onefile --console --name make-covers tools/make-covers.py
@@ -240,6 +243,13 @@ master and tags.
  - Files read from the SD card (cheats, patches, settings, the pending save
    and the NOR metadata) can be damaged or edited by hand: their parsers
    check sizes and counts before using them as lengths or indexes.
+   `tests/fuzz/` fuzzes them (libFuzzer with address and undefined behaviour
+   sanitizers, needs clang): `make run` there, CI runs each for 45 seconds.
+ - Paths are built with `path_join()` / `path_join_ext()` (src/util.c),
+   which refuse results longer than `MAX_FN_LEN` instead of overflowing.
+ - `make BOARD=... stack-check` adds up the worst case stack depth from
+   GCC's call graph info (`tools/stack-check.py`) and fails if it is over the
+   16 KB stack. CI runs it, and cppcheck on `src/`.
 
 Licenses
 --------
