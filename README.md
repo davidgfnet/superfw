@@ -178,6 +178,7 @@ The following files are usually created:
  - .superfw/pending-save.txt: SRAM save information (temp file).
  - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
  - .superfw/carousel.cache: Game list of the carousel tab (rebuilt when needed).
+ - .superfw/lang.cache: Menu strings of the chosen language (rebuilt when needed).
 
 Other noteworthy paths:
 
@@ -217,9 +218,12 @@ master and tags.
    not compiled into the firmware: `res/messages.py pack` builds `lang.pack`
    (all languages, compressed together with upkr), bundled as the `LANG`
    virtual file. `lang_load()` (src/menu.c) unpacks it to the SDRAM scratch
-   area and copies only the chosen language into EWRAM, at boot and when the
-   language changes. Anything else using `sdr_state->scratch` must call
-   `lang_scratch_used()`. Missing translations fall back to English.
+   area and copies only the chosen language into EWRAM. That language is
+   also saved unpacked to `/.superfw/lang.cache` (tagged with the pack's
+   CRC32), so normal boots just read that file; it is rebuilt after a
+   language change or a firmware update. Anything else using
+   `sdr_state->scratch` must call `lang_scratch_used()`. Missing
+   translations fall back to English.
  - Carousel: drawing, the game list scanner and the list cache are in
    src/menu.c (`render_carousel()`, `cscan_*`, `carousel_cache_*`); the
    hardware independent helpers (cover header, sorting, titles, sizes,

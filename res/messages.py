@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os, sys, json, struct, subprocess, tempfile
+import os, sys, json, struct, subprocess, tempfile, zlib
 
 # Main menu/firmware string database.
 
@@ -372,12 +372,13 @@ def lang_strings(strall, mname, l):
 #   uint16 offset[MSG_COUNT]   (from the blob start)
 #   NUL terminated utf-8 strings, padded to a multiple of 4 bytes
 # Pack layout (little endian):
-#   uint32 magic "LNGP", uint16 version (1), uint16 language count,
+#   uint32 magic "LNGP", uint16 version (2), uint16 language count,
 #   uint16 message count, uint16 reserved, uint32 unpacked size,
+#   uint32 CRC32 of the upkr stream (identifies the pack, see lang.cache),
 #   per language: uint32 blob offset (in the unpacked data), uint32 blob size
 #   upkr stream of all the blobs, one after the other
 PACK_MAGIC = 0x504E474C    # "LNGP"
-PACK_VERSION = 1
+PACK_VERSION = 2
 PACK_LANGS = ["en"] + OTHER_LANGS
 
 def lang_blob(strall, l, conds):
@@ -411,7 +412,8 @@ def build_pack(conds, upkr, level):
       stream = fd.read()
 
   nmsgs = len([1 for k, (v, c) in strall["main"].items() if not c or c in conds])
-  hdr = struct.pack("<IHHHHI", PACK_MAGIC, PACK_VERSION, len(blobs), nmsgs, 0, len(raw))
+  hdr = struct.pack("<IHHHHII", PACK_MAGIC, PACK_VERSION, len(blobs), nmsgs, 0, len(raw),
+                    zlib.crc32(stream))
   index, off = b"", 0
   for blob in blobs:
     index += struct.pack("<II", off, len(blob))
