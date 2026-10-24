@@ -10,7 +10,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get install gcc g++ lcov python3-pil
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: 'true'
       - name: Get short SHA
@@ -24,7 +24,7 @@ jobs:
         run: make upkr.elf && python3 tests/messages_test.py
       - name: Upload coverage report
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-coverage-${{ steps.slug.outputs.sha8 }}
           path: tests/coverage/*

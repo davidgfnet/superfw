@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get install gcc-arm-none-eabi
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: 'true'
       - name: Get short SHA
@@ -35,13 +35,13 @@ jobs:
           mv superfw.gba superfw-${{ matrix.board }}.fw
           cp superfw.dldi.payload superfw-${{ matrix.board }}.dldi
       - name: Upload firmware release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: superfw-release-${{ matrix.board }}-${{ steps.slug.outputs.sha8 }}
           path: |
             superfw-${{ matrix.board }}.fw
       - name: Upload debug artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: superfw-debug-${{ matrix.board }}-${{ steps.slug.outputs.sha8 }}
           path: |
@@ -53,7 +53,7 @@ jobs:
             superfw.dldi.elf
       - name: Upload extra artifacts
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: superfw-dev-${{ matrix.board }}-${{ steps.slug.outputs.sha8 }}
           path: |
@@ -68,7 +68,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: 'true'
       - uses: actions/download-artifact@v4

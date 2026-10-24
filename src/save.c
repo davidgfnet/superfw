@@ -252,10 +252,10 @@ unsigned flush_pending_sram() {
   // The file contains the save filename template, plus options.
   UINT rdbytes = 0;
   char content[512];
-  if (FR_OK != f_read(&fd, content, sizeof(content) - 1, &rdbytes)) {
-    f_close(&fd);
+  res = f_read(&fd, content, sizeof(content) - 1, &rdbytes);
+  f_close(&fd);
+  if (res != FR_OK)
     return ERR_SAVE_FLUSH_NOSENTINEL;
-  }
   content[rdbytes] = 0;
 
   // Separate options using NULL.
@@ -270,16 +270,17 @@ unsigned flush_pending_sram() {
   for (unsigned i = strlen(content) + 1; i < l + 1; ) {
     if (!strncmp(&content[i], "backup_count=", 13))
       bkpn = &content[i + 13];
-    i += strlen(content) + 1;
+    i += strlen(&content[i]) + 1;
   }
 
-  // Parse options.
+  // Parse options. The file could be damaged: keep the count sane.
   unsigned backup_num = 0;
   if (bkpn)
-    backup_num = parseuint(bkpn);
+    backup_num = MIN(parseuint(bkpn), MAX_BACKUP_CNT);
 
-  // Validate the filename! Should start with "/". Let the FatFS check it too.
-  if (savefn[0] != '/')
+  // Validate the filename! Should start with "/" and leave room for the
+  // suffixes (".tmp.sav", ".N.sav"). Let the FatFS check it too.
+  if (savefn[0] != '/' || strlen(savefn) + 16 >= MAX_FN_LEN)
     return ERR_SAVE_FLUSH_NOSENTINEL;
 
   // Check if the save file exists and contains the same data.

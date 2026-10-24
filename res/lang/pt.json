@@ -230,5 +230,6 @@
     "MSG_UIS_STB0": "< Navegador >",
     "MSG_UIS_STB1": "< Carrossel >",
     "MSG_ERR_LOADRST": "Erro ao carregar. A: reiniciar",
-    "MSG_ERR_PATHLEN": "Caminho muito longo!"
+    "MSG_ERR_PATHLEN": "Caminho muito longo!",
+    "MSG_ERR_DIROPEN": "Não foi possível abrir a pasta!"
 }

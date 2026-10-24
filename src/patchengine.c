@@ -526,6 +526,10 @@ bool unserialize_patch(const uint8_t *buffer, unsigned size, t_patch *patch) {
   patch->hole_addr = (buffer[24] | (buffer[25] << 8)) << 10;
   buffer += 32;
 
+  // The file might be damaged: the ops must fit the op table.
+  if (patch->wcnt_ops + patch->save_ops + patch->irqh_ops + patch->rtc_ops > MAX_PATCH_OPS)
+    return false;
+
   memcpy(patch->prgs, buffer, sizeof(patch->prgs));
   buffer += sizeof(patch->prgs);
   memcpy(patch->op, buffer, sizeof(patch->op));
@@ -546,7 +550,9 @@ bool load_rom_patches(const char *romfn, t_patch *patches) {
 
   uint8_t buf[1024];
   UINT rdbytes;
-  if (FR_OK != f_read(&fd, buf, sizeof(buf), &rdbytes))
+  FRESULT res = f_read(&fd, buf, sizeof(buf), &rdbytes);
+  f_close(&fd);
+  if (res != FR_OK)
     return false;
 
   return unserialize_patch(buf, rdbytes, patches);
@@ -568,7 +574,9 @@ bool load_cached_patches(const char *romfn, t_patch *patches) {
 
   uint8_t buf[1024];
   UINT rdbytes;
-  if (FR_OK != f_read(&fd, buf, sizeof(buf), &rdbytes))
+  FRESULT res = f_read(&fd, buf, sizeof(buf), &rdbytes);
+  f_close(&fd);
+  if (res != FR_OK)
     return false;
 
   return unserialize_patch(buf, rdbytes, patches);
