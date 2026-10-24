@@ -553,7 +553,9 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
       uint32_t tmp[LOAD_BS/4];
       if (FR_OK != f_read(&fd, tmp, LOAD_BS, &rdbytes)) {
         f_close(&fd);
-        return ERR_LOAD_NOEMU;
+        // Part of the emulator may already be in SDRAM: not a "no emulator"
+        // error (that one means nothing was written, the menu relies on it).
+        return ERR_LOAD_BADROM;
       }
       if (!rdbytes)
         break;
