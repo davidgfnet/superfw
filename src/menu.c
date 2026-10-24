@@ -147,8 +147,9 @@ enum {
   UiSetASpd  = 3,
   UiSetHid   = 4,
   UiSetStart = 5,
-  UiSetSave  = 6,
-  UiSetMAX   = 6,
+  UiSetExt   = 6,
+  UiSetSave  = 7,
+  UiSetMAX   = 7,
 };
 
 enum {
@@ -1562,6 +1563,19 @@ static void draw_central_text_wrapped(const char *t, volatile uint8_t *frame, un
   }
 }
 
+// A file name as the lists show it: without its extension when "Show
+// extensions" is off (names starting with a dot keep theirs). out is a
+// MAX_FN_LEN buffer, used only when the name changes.
+static const char *list_name(const char *fn, char *out) {
+  const char *ext = show_ext ? NULL : find_extension(fn);
+  if (!ext || ext == fn + 1)
+    return fn;
+  unsigned l = ext - fn - 1;
+  memcpy(out, fn, l);
+  out[l] = 0;
+  return out;
+}
+
 void render_recent(volatile uint8_t *frame) {
   // Render the list from memory.
   for (unsigned i = 0; i < RECENT_ROWS; i++) {
@@ -1571,13 +1585,15 @@ void render_recent(volatile uint8_t *frame) {
     t_rentry *e = &sdr_state->rentries[smenu.recent.seloff + i];
     char *fn = &e->fpath[e->fname_offset];
     render_icon(2, (i+1)*16, guessicon(fn));
+    char nbuf[MAX_FN_LEN];
+    const char *name = list_name(fn, nbuf);
 
     // Animate the row entries if they are too long!
     if (i == smenu.recent.selector - smenu.recent.seloff)
-      draw_text_ovf_rotate(fn, frame, 20, (1 + i) * 16,
+      draw_text_ovf_rotate(name, frame, 20, (1 + i) * 16,
                            SCREEN_WIDTH - 24, &smenu.anim_state);
     else
-      draw_text_ovf(fn, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 24);
+      draw_text_ovf(name, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 24);
   }
 
   for (unsigned i = 0; i < 240; i += 16)
@@ -1606,7 +1622,8 @@ void render_flashbrowser(volatile uint8_t *frame) {
       draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
 
       // Animate the row entries if they are too long!
-      const char *romname = &e->game_name[e->bnoffset];
+      char nbuf[MAX_FN_LEN];
+      const char *romname = list_name(&e->game_name[e->bnoffset], nbuf);
       if (i == smenu.fbrowser.selector - smenu.fbrowser.seloff)
         draw_text_ovf_rotate(romname, frame, 20, (1 + i) * 16,
                              SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
@@ -1654,12 +1671,16 @@ void render_browser(volatile uint8_t *frame) {
         draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
       }
 
+      // Folders keep their whole name.
+      char nbuf[MAX_FN_LEN];
+      const char *name = (e->attr & AM_DIR) ? e->fname : list_name(e->fname, nbuf);
+
       // Animate the row entries if they are too long!
       if (i == smenu.browser.selector - smenu.browser.seloff)
-        draw_text_ovf_rotate(e->fname, frame, 20, (1 + i) * 16,
+        draw_text_ovf_rotate(name, frame, 20, (1 + i) * 16,
                              SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
       else
-        draw_text_ovf(e->fname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+        draw_text_ovf(name, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
     }
 
     for (unsigned i = 0; i < 240; i += 16)
@@ -2188,7 +2209,7 @@ void render_settings(volatile uint8_t *frame) {
 
 void render_ui_settings(volatile uint8_t *frame) {
   const unsigned colx = 170;
-  const unsigned rowh = 18;
+  const unsigned rowh = 16;
   char tmpbuf[64];
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %u >", menu_theme + 1U);
   draw_text_ovf(msgs[lang_id][MSG_UIS_THEME], frame, 8, 22, 224);
@@ -2210,6 +2231,9 @@ void render_ui_settings(volatile uint8_t *frame) {
 
   draw_text_ovf(msgs[lang_id][MSG_UIS_START], frame, 8, 22 + rowh * 5, 224);
   draw_central_text(msgs[lang_id][start_tab ? MSG_UIS_STB1 : MSG_UIS_STB0], frame, colx, 22 + rowh * 5 );
+
+  draw_text_ovf(msgs[lang_id][MSG_UIS_EXT], frame, 8, 22 + rowh * 6, 224);
+  draw_central_text(msgs[lang_id][show_ext ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + rowh * 6 );
 
   if (smenu.uiset.selector != UiSetSave)
     for (unsigned i = 0; i < 240; i += 16)
@@ -4092,6 +4116,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       recent_menu ^= 1;
     else if (smenu.uiset.selector == UiSetStart)
       start_tab = !start_tab;
+    else if (smenu.uiset.selector == UiSetExt)
+      show_ext = !show_ext;
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + LANG_COUNT - 1) % LANG_COUNT;
   }
@@ -4106,6 +4132,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       recent_menu ^= 1;
     else if (smenu.uiset.selector == UiSetStart)
       start_tab = !start_tab;
+    else if (smenu.uiset.selector == UiSetExt)
+      show_ext = !show_ext;
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + 1) % LANG_COUNT;
   }

@@ -229,6 +229,7 @@
     "MSG_CAR_LOADSD": "Carregar do cartão SD",
     "MSG_NOR_REMOVE": "Remover do flash",
     "MSG_UIS_START": "Aba inicial",
+    "MSG_UIS_EXT": "Mostrar extensões",
     "MSG_UIS_STB0": "< Navegador >",
     "MSG_UIS_STB1": "< Carrossel >",
     "MSG_ERR_LOADRST": "Erro ao carregar. A: reiniciar",

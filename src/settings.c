@@ -76,6 +76,7 @@ uint8_t recent_menu = 1;
 uint8_t hide_hidden = 0;
 uint8_t anim_speed = animspd_cnt / 2;
 uint8_t start_tab = 0;          // 0: Recent/SD browser, 1: Carousel
+uint8_t show_ext = 1;           // Show file extensions in the lists
 
 // Default settings
 t_patch_policy patcher_default = PatchAuto;
@@ -124,8 +125,9 @@ bool save_ui_settings() {
     "recent_menu=%u\n"
     "anim_speed=%u\n"
     "hide_hidden=%u\n"
-    "start_tab=%u\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden, start_tab);
+    "start_tab=%u\n"
+    "show_ext=%u\n",
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden, start_tab, show_ext);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -242,6 +244,7 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
       { "hide_hidden", &hide_hidden },
       { "anim_speed",  &anim_speed },
       { "start_tab",   &start_tab },
+      { "show_ext",    &show_ext },
     };
     unsigned valu = parseuint(value);
     for (unsigned i = 0; i < sizeof(uintset)/sizeof(uintset[0]); i++)
