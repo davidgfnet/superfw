@@ -127,6 +127,7 @@ The following files are usually created:
  - .superfw/recent.txt: Recently played ROMs, in order.
  - .superfw/pending-save.txt: SRAM save information (temp file).
  - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
+ - .superfw/lang.cache: Menu strings of the chosen language (rebuilt when needed).
 
 Other noteworthy paths:
 
@@ -144,6 +145,21 @@ constraints:
  - Maximum ROM size: 32MiB (Supercard's memory size)
  - File path and name limit: 255 utf-8 bytes (not exactly characters!)
  - Maximum number of files+dirs in a directory: 16384
+
+Development notes
+-----------------
+
+ - Menu strings: `res/messages.py` (English) and `res/lang/*.json`. They are
+   not compiled into the firmware: `res/messages.py pack` builds `lang.pack`
+   (all languages, compressed together with upkr), bundled as the `LANG`
+   virtual file. `lang_load()` (src/menu.c) unpacks it to the SDRAM scratch
+   area and copies only the chosen language into EWRAM. That language is
+   also saved unpacked to `/.superfw/lang.cache` (tagged with the pack's
+   CRC32), so normal boots just read that file; it is rebuilt after a
+   language change or a firmware update. Anything else using
+   `sdr_state->scratch` must call `lang_scratch_used()`. Missing
+   translations fall back to English. Tests:
+   `make upkr.elf && python3 tests/messages_test.py`.
 
 Licenses
 --------

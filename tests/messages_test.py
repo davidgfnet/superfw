@@ -5,7 +5,7 @@
 # Run from the repo root: python3 tests/messages_test.py
 # The full pack test needs ./upkr.elf (make upkr.elf), otherwise it is skipped.
 
-import importlib.util, os, struct, subprocess, sys, tempfile, unittest
+import importlib.util, os, struct, subprocess, sys, tempfile, unittest, zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPKR = os.path.join(ROOT, "upkr.elf")
@@ -59,10 +59,11 @@ class LanguagePack(unittest.TestCase):
   def test_pack_roundtrip(self):
     for conds in (set(), {"SUPPORT_NORGAMES"}):
       pack = m.build_pack(conds, UPKR, 4)
-      magic, ver, nlangs, nmsgs, _, rawsize = struct.unpack_from("<IHHHHI", pack)
+      magic, ver, nlangs, nmsgs, _, rawsize, crc = struct.unpack_from("<IHHHHII", pack)
       self.assertEqual((magic, ver, nlangs), (m.PACK_MAGIC, m.PACK_VERSION, len(m.PACK_LANGS)))
-      index = [struct.unpack_from("<II", pack, 16 + 8 * i) for i in range(nlangs)]
-      stream = pack[16 + 8 * nlangs:]
+      index = [struct.unpack_from("<II", pack, 20 + 8 * i) for i in range(nlangs)]
+      stream = pack[20 + 8 * nlangs:]
+      self.assertEqual(crc, zlib.crc32(stream))
       with tempfile.TemporaryDirectory() as tmp:
         cin, cout = os.path.join(tmp, "in"), os.path.join(tmp, "out")
         with open(cin, "wb") as fd:
