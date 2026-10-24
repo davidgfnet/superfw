@@ -537,10 +537,13 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
     set_supercard_mode(MAPPED_SDRAM, true, true);
   }
   else {
-    char emupath[MAX_FN_LEN];
+    // Emulator names are short: a small buffer keeps this (deepest) stack path
+    // lean. The length is checked first, so path_join() cannot overflow it.
+    char emupath[64];
 
     // Load the emulator from disk, check whether it exists tho.
-    if (!path_join(emupath, EMULATORS_PATH, ldinfo->emu_name, ".gba") ||
+    if (strlen(ldinfo->emu_name) + sizeof(EMULATORS_PATH) + sizeof(".gba") > sizeof(emupath) ||
+        !path_join(emupath, EMULATORS_PATH, ldinfo->emu_name, ".gba") ||
         FR_OK != f_open(&fd, emupath, FA_READ))
       return ERR_LOAD_NOEMU;
 
