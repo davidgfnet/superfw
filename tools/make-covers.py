@@ -47,7 +47,7 @@ try:
 except ImportError:
   sys.exit("Pillow is required: pip install pillow")
 
-VERSION = "1.1.0"            # Of the tool (shown in the window and --version)
+VERSION = "1.3.0"            # Of the tool (shown in the window and --version)
 
 COVER_MAGIC = 0x56434653
 COVER_VERSION = 2
@@ -62,6 +62,11 @@ CHEATS_DIR = os.path.join(".superfw", "cheats")
 # The SuperFW cheat database: .cht files in the firmware's format, named
 # <game code>-<version>.cht like the firmware looks for them.
 CHEATS_RELEASE = "https://api.github.com/repos/davidgfnet/superfw-cheats/releases/latest"
+# Games not in it: libretro's (RetroArch) Code Breaker cheats, converted.
+RETRO_CHEATS_LIST = ("https://api.github.com/repos/libretro/libretro-database/contents/cht/"
+                     "Nintendo%20-%20Game%20Boy%20Advance")
+RETRO_CHEATS_RAW = ("https://raw.githubusercontent.com/libretro/libretro-database/master/cht/"
+                    "Nintendo%20-%20Game%20Boy%20Advance/")
 # Firmware releases (--firmware): superfw-<board>.fw files.
 FIRMWARE_RELEASE = "https://api.github.com/repos/davidgfnet/superfw/releases/latest"
 BOARDS = ("chis", "sd", "lite")
@@ -469,30 +474,177 @@ class CheatPack:
   def get(self, code, version):
     return self.load().get(cheat_name(code, version).lower())
 
+def retro_name_key(name):
+  # (title, regions, revision, cheat device) of a No-Intro or libretro name:
+  # "Pokemon - Ruby Version (Code Breaker)(USA).cht" -> ("pokemon - ruby
+  # version", {"usa"}, "", "code breaker"). libretro writes "&" as "_".
+  name = re.sub(r"\.cht$", "", name)
+  title = name.split(" (")[0].replace("&", "_").strip().lower()
+  regions, rev, device = None, "", ""
+  for tag in re.findall(r"\(([^)]*)\)", name[len(name.split(" (")[0]):]):
+    low = tag.lower()
+    if low.replace(" ", "") in ("codebreaker", "gameshark", "actionreplay", "codebreaker,gameshark"):
+      device = low
+    elif low.startswith("rev "):
+      rev = low
+    elif re.match(r"v1\.[0-9]$", low):
+      rev = "" if low == "v1.0" else "rev " + low[3:]     # libretro's "(V1.1)"
+    elif regions is None and low not in ("virtual console",):
+      regions = set(r.strip() for r in low.split(","))
+  return title, regions or set(), rev, device
+
+class RetroCheats:
+  # libretro's GBA cheat files, named (mostly) after the No-Intro names. The
+  # list is cached for when there is no internet.
+  def __init__(self, cache_dir):
+    self.cache_dir = cache_dir
+    self.names = None
+
+  def find(self, official):
+    # The libretro file for a No-Intro name: same title and revision, and a
+    # shared region. "(World)" files are taken for USA releases only: Code
+    # Breaker codes are made for those, other regions have other addresses.
+    if self.names is None:
+      fn = os.path.join(self.cache_dir, "libretro-gba-cheats.json")
+      try:
+        names = [e["name"] for e in json.loads(http_get(RETRO_CHEATS_LIST)) if e["name"].endswith(".cht")]
+        os.makedirs(self.cache_dir, exist_ok=True)
+        with open(fn, "w", encoding="utf-8") as fd:
+          json.dump(names, fd)
+      except Exception:
+        with open(fn, encoding="utf-8") as fd:
+          names = json.load(fd)
+      self.names = sorted(names)
+    title, regions, rev, _ = retro_name_key(official)
+    best = None
+    for name in self.names:
+      t, r, v, dev = retro_name_key(name)
+      if t != title or v != rev or dev.replace(" ", "") not in ("codebreaker", ""):
+        continue
+      if not (r & regions or ("world" in r and "usa" in regions)):
+        continue
+      if best is None or (dev and not retro_name_key(best)[3]):
+        best = name           # Prefer the files marked as Code Breaker
+    return best
+
+  def get(self, official):
+    name = self.find(official)
+    if name is None:
+      return None
+    return http_get(RETRO_CHEATS_RAW + urllib.parse.quote(name)).decode("utf-8", "replace")
+
+# libretro cheats -> SuperFW, with the rules of scripts/conv-retro.py in
+# github.com/davidgfnet/superfw-cheats: only Code Breaker codes ("AAAAAAAA+VVVV"
+# or "AAAAAAAAVVVV"), opcode 9 (encrypted) rejected, addresses only in RAM and
+# I/O, and no master/hook codes (opcodes 0 and 1: SuperFW runs cheats on VBlank).
+CB_RANGES = ((0x02000000, 0x0203FFFF), (0x03000000, 0x03007FFF), (0x04000000, 0x040003FF),
+             (0x05000000, 0x050003FF), (0x06000000, 0x06017FFF), (0x07000000, 0x070003FF))
+CB_MAX_CODES = 30     # Cheats with more codes are skipped by the firmware
+# Patch codes (opcode 5) are left out too: the firmware's loader and runner
+# do not agree on their data length yet (src/cheats.c, src/cheat_exec.S).
+
+def cb_decode(s):
+  if any(ch not in "0123456789ABCDEFabcdef +:" for ch in s):
+    return None
+  toks = s.replace("+", " ").replace(":", " ").strip().split(" ")
+  lens = sorted(set(len(t) for t in toks))
+  if lens == [4, 8]:
+    if len(toks) % 2 or any(len(t) != (8, 4)[i % 2] for i, t in enumerate(toks)):
+      return None
+    return [(int(toks[i], 16), int(toks[i + 1], 16)) for i in range(0, len(toks), 2)]
+  if lens == [12]:
+    return [(int(t[:8], 16), int(t[8:], 16)) for t in toks]
+  return None
+
+def cb_valid(codes):
+  i = 0
+  while i < len(codes):
+    addr, value = codes[i]
+    i += 1
+    op = addr >> 28
+    if op == 9:
+      return False
+    if op == 4:
+      i += 1
+    elif op == 5:
+      n = (value + 5) // 6
+      if i + n >= len(codes):
+        return False
+      i += n
+    if op not in (0, 1, 13) and not any(lo <= (addr & 0x0FFFFFFF) <= hi for lo, hi in CB_RANGES):
+      return False
+  return True
+
+def cb_drop_master(codes):
+  out, i = [], 0
+  while i < len(codes):
+    op = codes[i][0] >> 28
+    n = 1
+    if op in (0, 1):
+      i += 1
+      continue
+    if op == 4:
+      n = 2
+    elif op == 5:
+      n = 1 + (codes[i][1] + 5) // 6
+    out.extend(codes[i:i + n])
+    i += n
+  return out
+
+def convert_retro_cheats(text):
+  # A libretro .cht file -> SuperFW .cht text ("title\ncodes" per cheat), or
+  # None if none of its cheats can be used.
+  out, desc = [], None
+  for line in text.splitlines():
+    line = line.strip()
+    m = re.match(r'cheat[0-9]+_desc\s*=\s*"(.*)"', line)
+    if m:
+      desc = m.group(1).strip()
+      continue
+    m = re.match(r'cheat[0-9]+_code\s*=\s*"([^"]+)"', line)
+    if m and desc:
+      codes = cb_decode(m.group(1))
+      if codes and cb_valid(codes):
+        codes = cb_drop_master(codes)
+        if codes and len(codes) <= CB_MAX_CODES and not any(a >> 28 == 5 for a, _ in codes):
+          out.append("%s\n%s\n" % (desc, " ".join("%08X+%04X" % c for c in codes)))
+      desc = None
+  return "".join(out) if out else None
+
 def cheat_name(code, version):
   return "%s-%02x.cht" % (code, version)    # Like prepare_gba_cheats() (src/menu.c)
 
-def add_cheats(args, games, report):
-  # Copies the cheats of the GBA games on the card (set of (code, version))
-  # that are not there yet. Existing files are kept: they may have been edited.
+def add_cheats(args, games, report, nointro):
+  # Copies the cheats of the GBA games on the card ({(code, version): rom
+  # path}) that are not there yet: from the SuperFW cheat database, else
+  # converted from libretro's. Existing files are kept: they may be edited.
   outdir = os.path.join(args.sdroot, CHEATS_DIR)
-  pack = CheatPack(args.cache)
-  added, present = 0, 0
-  for code, version in sorted(games):
+  pack, retro = CheatPack(args.cache), RetroCheats(args.cache)
+  added, converted, present = 0, 0, 0
+  for (code, version), path in sorted(games.items()):
     dest = os.path.join(outdir, cheat_name(code, version))
     if os.path.exists(dest):
       present += 1
       continue
     data = pack.get(code, version)
     if data is None:
-      continue
+      try:
+        official, _ = nointro.identify(SYSTEMS["gba"], path, code)
+        text = convert_retro_cheats(retro.get(official) or "") if official else None
+      except Exception as e:
+        report("log", text="  could not get libretro cheats for %s: %s" % (os.path.basename(path), e))
+        text = None
+      if not text:
+        continue
+      data = text.encode("utf-8")
+      converted += 1
     if not args.dry_run:
       os.makedirs(outdir, exist_ok=True)
       with open(dest, "wb") as fd:
         fd.write(data)
     added += 1
-  report("log", text="Cheats: %d %s, %d already there, %d games without cheats in the database" %
-         (added, "to add" if args.dry_run else "added", present, len(games) - added - present))
+  report("log", text="Cheats: %d %s (%d converted from libretro), %d already there, %d games without cheats" %
+         (added, "to add" if args.dry_run else "added", converted, present, len(games) - added - present))
 
 def copy_firmware(args, report):
   # The latest release's firmware for the board, to the card root (flash it
@@ -602,7 +754,7 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
   made, skipped, missing = 0, 0, []
   done = set()
   codes_used = set()      # Game codes that got a cover file in this run
-  cheat_games = set()     # (game code, version) of the GBA games, for the cheats
+  cheat_games = {}        # (game code, version) -> path of the GBA games, for the cheats
   for n, (path, romname, ext) in enumerate(roms):
     if cancelled():
       report("log", text="Stopped.")
@@ -617,7 +769,7 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
     namefn = os.path.join(outdir, romname + ".cov")
     code, version = gba_header(path) if ext == "gba" else (None, None)
     if code:
-      cheat_games.add((code, version))
+      cheat_games.setdefault((code, version), path)
     codefn = os.path.join(outdir, code + ".cov") if code else None
 
     if not args.force and (os.path.exists(namefn) or (codefn and not local and os.path.exists(codefn))):
@@ -681,7 +833,7 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
   if not cancelled() and not args.no_download:
     if cheat_games and not args.no_cheats:
       try:
-        add_cheats(args, cheat_games, report)
+        add_cheats(args, cheat_games, report, nointro)
       except Exception as e:
         report("log", text="Could not get the cheats: %s" % e)
     if args.firmware:

@@ -160,6 +160,72 @@ def png_bytes(color):
   Image.new("RGB", (40, 40), color).save(buf, "PNG")
   return buf.getvalue()
 
+# A libretro cheat file with usable and unusable codes (like Emerald's).
+RETRO_CHT = '''cheats = 7
+
+cheat0_desc = "Master Code"
+cheat0_code = "D8BAE4D9+4864DCE5+A86CDBA5+19BA49B3"
+cheat0_enable = false
+
+cheat1_desc = "Max Money"
+cheat1_code = "82000568+423F+8200056A+000F"
+cheat1_enable = false
+
+cheat2_desc = "No Random Battle"
+cheat2_code = "320375D4+0000"
+cheat2_enable = false
+
+cheat3_desc = "Action Replay code"
+cheat3_code = "00000000+18059EB6+0000E038+00000000"
+cheat3_enable = false
+
+cheat4_desc = "Encrypted"
+cheat4_code = "A745569AA9B6+FD228345FE5F"
+cheat4_enable = false
+
+cheat5_desc = "With hook"
+cheat5_code = "1000ABCD+0007+3203A000+0001"
+cheat5_enable = false
+
+cheat6_desc = "Patch code"
+cheat6_code = "520330CC+0002+04DDF608+0000"
+cheat6_enable = false
+'''
+
+class RetroConversion(unittest.TestCase):
+  def test_convert(self):
+    out = mc.convert_retro_cheats(RETRO_CHT)
+    self.assertEqual(out, "Max Money\n82000568+423F 8200056A+000F\n"
+                          "No Random Battle\n320375D4+0000\n"
+                          "With hook\n3203A000+0001\n")
+
+  def test_find(self):
+    retro = mc.RetroCheats(tempfile.mkdtemp())
+    retro.names = sorted([
+      "Pokemon - Emerald Version (USA, Europe) (Code Breaker).cht",
+      "Pokemon - Ruby Version (Code Breaker)(USA).cht",
+      "Pokemon Pinball - Ruby _ Sapphire (World) (Code Breaker).cht",
+      "Metroid Fusion (World) (Code Breaker).cht",
+      "Golden Sun (USA, Europe).cht",
+      "Pokemon - Leaf Green Version (V1.1)(USA)(Code Breaker).cht",
+      "Mario _ Luigi - Superstar Saga (USA, Europe) (Gameshark).cht"])
+    for official, want in (
+        ("Pokemon - Emerald Version (USA, Europe)", "Pokemon - Emerald Version (USA, Europe) (Code Breaker).cht"),
+        ("Pokemon - Ruby Version (USA, Europe)", "Pokemon - Ruby Version (Code Breaker)(USA).cht"),
+        ("Pokemon - Ruby Version (USA, Europe) (Rev 1)", None),
+        ("Pokemon Pinball - Ruby & Sapphire (USA)", "Pokemon Pinball - Ruby _ Sapphire (World) (Code Breaker).cht"),
+        ("Metroid Fusion (USA)", "Metroid Fusion (World) (Code Breaker).cht"),
+        ("Metroid Fusion (Japan)", None),
+        ("Golden Sun (USA, Europe)", "Golden Sun (USA, Europe).cht"),
+        ("Golden Sun (Germany)", None),
+        ("Pokemon - LeafGreen Version (USA, Europe) (Rev 1)", None),
+        ("Pokemon - Leaf Green Version (USA) (Rev 1)", "Pokemon - Leaf Green Version (V1.1)(USA)(Code Breaker).cht"),
+        ("Mario & Luigi - Superstar Saga (USA, Australia)", None)):
+      self.assertEqual(retro.find(official), want, official)
+
+  def test_nothing_usable(self):
+    self.assertIsNone(mc.convert_retro_cheats('cheat0_desc = "x"\ncheat0_code = "9000ABCD+0001"\n'))
+
 class EndToEnd(unittest.TestCase):
   # Runs the whole tool on a fake SD card with the network replaced.
   def setUp(self):
@@ -190,6 +256,10 @@ class EndToEnd(unittest.TestCase):
           {"name": "superfw-cheats.zip", "browser_download_url": "https://x/superfw-cheats.zip"}]}).encode()
       if url.endswith("superfw-cheats.zip"):
         return cheats.getvalue()
+      if url == mc.RETRO_CHEATS_LIST:
+        return json.dumps([{"name": "Metroid Fusion (Japan) (Code Breaker).cht"}]).encode()
+      if url.startswith(mc.RETRO_CHEATS_RAW):
+        return RETRO_CHT.encode()
       if url == mc.FIRMWARE_RELEASE:
         return json.dumps({"tag_name": "v9", "assets": [
           {"name": "superfw-%s.fw" % b, "browser_download_url": "https://x/superfw-%s.fw" % b}
@@ -253,6 +323,13 @@ class EndToEnd(unittest.TestCase):
     finally:
       mc.http_get = real
     self.assertTrue(os.path.exists(os.path.join(self.sd, mc.CHEATS_DIR, "AMTE-00.cht")))
+
+  def test_cheats_from_libretro(self):
+    # Not in the SuperFW database: converted from libretro's (No-Intro name).
+    gba_rom(os.path.join(self.sd, "GBA", "jp.gba"), "AMTJ")
+    self.run_tool()
+    with open(os.path.join(self.sd, mc.CHEATS_DIR, "AMTJ-00.cht"), encoding="utf-8") as fd:
+      self.assertEqual(fd.read(), mc.convert_retro_cheats(RETRO_CHT))
 
   def test_no_cheats(self):
     self.run_tool("--no-cheats")
