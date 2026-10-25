@@ -27,6 +27,7 @@ GAMES = [
   ("Deep Blue Dive.gba",   ((40, 160, 220), (5, 30, 90)),   "waves"),
   ("Ember Knight.gba",     ((60, 10, 10), (220, 90, 20)),   "sword"),
   ("Frost Peak.gbc",       ((200, 230, 255), (90, 140, 210)), "mountain"),
+  ("Moon Garden.gbc",      ((20, 30, 70), (70, 40, 110)),   "moon"),
   ("Pixel Racer.nes",      ((250, 220, 60), (230, 120, 20)), "stripes"),
 ]
 
@@ -72,6 +73,12 @@ def cover(colors, kind, w=240, h=320):
     d.polygon([(0, 320), (120, 90), (240, 320)], fill=(70, 90, 140))
     d.polygon([(120, 90), (90, 150), (110, 140), (130, 155), (150, 145)], fill=(250, 250, 255))
     d.ellipse((170, 30, 215, 75), fill=(255, 250, 220))
+  elif kind == "moon":
+    d.ellipse((60, 50, 180, 170), fill=(250, 240, 190))
+    d.ellipse((95, 40, 205, 150), fill=(20, 30, 70))
+    for x in range(0, 240, 30):
+      d.ellipse((x, 250, x + 40, 290), fill=(60, 140, 80))
+      d.rectangle((x + 18, 270, x + 22, 320), fill=(40, 100, 50))
   elif kind == "stripes":
     for i in range(6):
       d.polygon([(i * 60 - 80, 320), (i * 60 - 20, 320), (i * 60 + 100, 0), (i * 60 + 40, 0)],
@@ -92,14 +99,20 @@ def main():
         fd.truncate((4 << 20) * (1 + i % 4))        # Only the size is used
       with open(os.path.join(covers, fn + ".cov"), "wb") as fd:
         fd.write(mc.cover_bytes(cover(colors, kind)))
-    # A save for one of them (shown in the info line).
+    # A save for one of them (shown in the info line), and two favourites.
     open(os.path.join(gba, "Castle Run.sav"), "wb").close()
+    os.makedirs(os.path.join(sd, ".superfw"), exist_ok=True)
+    with open(os.path.join(sd, ".superfw", "favorites.txt"), "w", encoding="utf-8") as fd:
+      fd.write("/GBA/Castle Run.gba\n/GBA/Frost Peak.gbc\n")
 
     preview = [sys.executable, os.path.join(TOOLS, "carousel-preview.py"), sd, "/GBA/"]
     run = lambda *args: subprocess.run(preview + list(args), check=True)
     run(os.path.join(HERE, "carousel.png"), "--select", "2", "--scale", "3")
     run(os.path.join(HERE, "carousel-letter.png"), "--select", "4", "--scale", "3", "--letter")
     run(os.path.join(HERE, "carousel-theme.png"), "--select", "5", "--scale", "3", "--theme", "3")
+    # Start: the view pop up, and the favourites view.
+    run(os.path.join(HERE, "carousel-view.png"), "--scale", "3", "--view", "GB/GBC", "--popup", "0")
+    run(os.path.join(HERE, "carousel-gbc.png"), "--scale", "3", "--view", "GB/GBC")
     run(os.path.join(HERE, "carousel-scroll.png"), "--scale", "2",
         "--gif", os.path.join(HERE, "carousel.gif"))
     os.remove(os.path.join(HERE, "carousel-scroll.png"))

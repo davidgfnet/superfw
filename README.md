@@ -65,10 +65,7 @@ of box art covers sorted by name:
    flash). For games already in flash it offers "Remove from flash" (same as
    the flash tab) and "Load from SD card" instead, and shows the flash usage.
    "Add to favourites" / "Remove from favourites" is there too.
- - Start: the view. "Show" picks the games: all of them, the favourites, or
-   one system (GBA, GB/GBC, NES, SMS...: only the ones on the card). "Sort by"
-   picks the order: name, system (games grouped by emulator) or recently
-   played. The top bar shows the view (ie. "NES 3/12"); it is remembered.
+ - Start: the view, which games are shown and in which order (see below).
  - L/R switch tabs.
 
 ![The carousel tab](docs/images/carousel.png)
@@ -83,6 +80,38 @@ The games and covers in these pictures are made up (drawn by
 `docs/images/make-examples.py`, so no real box art is in the repository); the
 screens are rendered by `tools/carousel-preview.py` with the firmware's layout
 and assets.
+
+### View: which games, in which order (Start)
+
+Start opens the view. Up/Down picks the row, Left/Right changes it, A or Start
+closes it. It is remembered (in `ui-settings.txt`).
+
+ - Show: all games, the favourites, or one system. The systems come from the
+   file types, not the folder names, and only the ones there are games for
+   are offered: GBA (`.gba`), GB/GBC (`.gb`, `.gbc`: one emulator), NES
+   (`.nes`), SMS (`.sms`), GG (`.gg`), SG (`.sg`), SV (`.sv`), NGC (`.ngc`)
+   and PCE (`.pce`).
+ - Sort by: name, system (the games grouped by emulator; Up/Down then jump
+   from one system to the next) or recently played (Up/Down move 5 games).
+
+When not all games are shown, the top bar shows the view next to the position
+(ie. "GB/GBC 1/2"), if it fits.
+
+| The view (Start) | Only the GB/GBC games |
+|---|---|
+| ![The view pop up](docs/images/carousel-view.png) | ![GB/GBC view](docs/images/carousel-gbc.png) |
+
+The carousel lists the folder open in the SD browser and its subfolders. To
+have every game on the card in it (and filter them with Show), open the root
+of the card (`/`) in the SD browser before switching to the carousel.
+
+### Favourites
+
+Select > "Add to favourites" (or "Remove from favourites") in the carousel.
+Favourites show "Favourite" in the info line and have their own view (Show >
+Favourites). They are kept in `/.superfw/favorites.txt`, one full path per
+line, so they can also be edited on a PC. A game that is renamed or moved is
+no longer a favourite (the recent list works the same way).
 
 The background takes the color of the selected cover. Below the title it shows
 the system, the size, whether there is a save file, whether it is the last

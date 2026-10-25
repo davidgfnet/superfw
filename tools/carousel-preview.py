@@ -99,6 +99,7 @@ class Screen:
   def __init__(self, theme):
     self.px = bytearray([BG]) * (W * H)
     self.objs = []
+    self.bands = []       # Selection highlight rows (icon 63: the highlight color, 50% blended)
     self.theme = theme
 
   def fill(self, left, top, w, h, color):
@@ -151,6 +152,9 @@ class Screen:
       pal[mc.PAL_BASE + i] = c
     img = Image.new("RGB", (W, H))
     img.putdata([pal.get(p, (255, 255, 255)) for p in self.px])
+    for y in self.bands:
+      box = (0, y, W, min(y + 16, H))
+      img.paste(Image.blend(img.crop(box), Image.new("RGB", (W, box[3] - y), pal[HI]), 0.5), box)
     for x, y, n, trans in self.objs:
       ic = icons.crop((n * 16, 0, n * 16 + 16, 16))
       if trans:   # 50% alpha blending (REG_BLDALPHA = 0x0808)
@@ -158,6 +162,19 @@ class Screen:
         ic.putalpha(a)
       img.paste(ic, (x, y), ic)
     return img
+
+# Carousel systems (car_view / "Sort by system"): GBA, then the emulator
+# groups in src/emu.c order.
+SYSTEMS = [("GBA", ("gba",)), ("GB/GBC", ("gb", "gbc")), ("NES", ("nes",)), ("SMS", ("sms",)),
+           ("GG", ("gg",)), ("SG", ("sg",)), ("SV", ("sv",)), ("NGC", ("ngc",)), ("PCE", ("pce",))]
+SORTS = ["Name", "System", "Recently played"]
+
+def system_of(fn):
+  ext = os.path.splitext(fn)[1][1:].lower()
+  for i, (_, exts) in enumerate(SYSTEMS):
+    if ext in exts:
+      return i
+  return 0
 
 def guessicon(fn):
   ext = os.path.splitext(fn)[1][1:].lower()
@@ -185,12 +202,30 @@ def fade(c, target):
     out |= cc << sh
   return out
 
-def render(games, covers, sel, offset, cpath, theme, icons, tint=None, info=None, letter=False):
+def render_view_popup(s, view, sort, row):
+  # Like render_carousel_view(): the Start pop up over the plain background.
+  s.fill(0, 16, W, H - 16, BG)
+  for y in (18, 19, 156, 157):
+    s.fill(2, y, W - 4, 1, FG)
+  s.fill(2, 18, 2, 140, FG)
+  s.fill(W - 4, 18, 2, 140, FG)
+  for i, (label, value) in enumerate((("Show", view), ("Sort by", sort))):
+    y = 34 + i * 54
+    s.central(label, W // 2, y)
+    s.central("< %s >" % value, W // 2, y + 20)
+    if i == row:
+      s.bands.append(y + 20)
+
+def render(games, covers, sel, offset, cpath, theme, icons, tint=None, info=None, letter=False,
+           view=None, popup=None):
   s = Screen(theme)
   # Tab bar
   s.fill(0, 0, W, 16, FG)
   for i, ic in enumerate(TAB_ICONS):
     s.icon(i * 16, 0, ic, i != CAROUSEL_TAB)
+  if popup:
+    render_view_popup(s, *popup)
+    return s.image(icons, tint)
   s.fill(0, 16, W, 128, CAR_BG)
   # Bottom bar: folder of the selected game
   s.fill(0, 144, W, 16, FG)
@@ -234,6 +269,8 @@ def render(games, covers, sel, offset, cpath, theme, icons, tint=None, info=None
     s.text(title, 8, 105, maxw=W - 8)
   parts = [os.path.splitext(fn)[1][1:].upper(), human_size(fs)]
   if info and offset == 0:
+    if info.get("fav"):
+      parts.append("Favourite")
     if info.get("save"):
       parts.append("Save")
     if info.get("last"):
@@ -246,7 +283,10 @@ def render(games, covers, sel, offset, cpath, theme, icons, tint=None, info=None
     x = 8 + (((track - w) * sel // (len(games) - 1)) & ~1)
     s.fill(8, 140, track, 2, FG)
     s.fill(x, 139, w, 4, FT)
-  s.rightj("%d/%d" % (sel + 1, len(games)), W - 1, 1)
+  pos = "%d/%d" % (sel + 1, len(games))
+  if view and text_width("%s %s" % (view, pos)) <= 92:    # Next to the tab icons
+    pos = "%s %s" % (view, pos)
+  s.rightj(pos, W - 1, 1)
 
   if letter:
     ch = title[:1].upper()
@@ -278,7 +318,14 @@ def game_info(sdroot, games, n):
           break
   except OSError:
     pass
-  return {"save": save, "last": last}
+  return {"save": save, "last": last, "fav": folder + fn in favourites(sdroot)}
+
+def favourites(sdroot):
+  try:
+    with open(os.path.join(sdroot, ".superfw", "favorites.txt"), encoding="utf-8") as fd:
+      return {line.rstrip("\r\n") for line in fd}
+  except OSError:
+    return set()
 
 def main():
   p = argparse.ArgumentParser()
@@ -290,6 +337,10 @@ def main():
   p.add_argument("--theme", type=int, default=0)
   p.add_argument("--scale", type=int, default=3)
   p.add_argument("--letter", action="store_true", help="Show the big letter (as after an Up/Down jump)")
+  p.add_argument("--view", default=None, help="Show only: Favourites or a system (GBA, GB/GBC, NES...)")
+  p.add_argument("--sort", default="Name", choices=SORTS, help="Order of the games")
+  p.add_argument("--popup", type=int, default=None, metavar="ROW",
+                 help="Show the Start pop up (view and sort) with this row selected (0 or 1)")
   a = p.parse_args()
 
   romdir = os.path.join(a.sdroot, a.romdir.strip("/\\"))
@@ -307,6 +358,15 @@ def main():
       if not fn.startswith(".") and ext in mc.SYSTEMS:
         games.append((fn, os.path.getsize(full), folder, full))
   games.sort(key=lambda g: g[0].lower())
+
+  # View (Start): filter and order, like carousel_build_view().
+  if a.view == "Favourites":
+    favs = favourites(a.sdroot)
+    games = [g for g in games if g[2] + g[0] in favs]
+  elif a.view:
+    games = [g for g in games if SYSTEMS[system_of(g[0])][0] == a.view]
+  if a.sort == "System":
+    games.sort(key=lambda g: system_of(g[0]))     # Stable: by name within a system
 
   # Same lookup as carousel_open_cover(): <file name>.cov, then <game code>.cov
   covers = {}
@@ -328,7 +388,9 @@ def main():
   sel = min(a.select, max(0, len(games) - 1))
   tint = target_tint(a.theme, covers.get(games[sel][3])) if games else None
   info = game_info(a.sdroot, games, sel) if games else None
-  up(render(games, covers, sel, 0, cpath, a.theme, icons, tint, info, a.letter)).save(a.out)
+  popup = (a.view or "All games", a.sort, a.popup) if a.popup is not None else None
+  up(render(games, covers, sel, 0, cpath, a.theme, icons, tint, info, a.letter,
+            a.view, popup)).save(a.out)
   print("Wrote", a.out)
 
   if a.gif and games:
