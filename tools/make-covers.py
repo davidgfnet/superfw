@@ -47,7 +47,7 @@ try:
 except ImportError:
   sys.exit("Pillow is required: pip install pillow")
 
-VERSION = "1.3.1"            # Of the tool (shown in the window and --version)
+VERSION = "1.4.0"            # Of the tool (shown in the window and --version)
 
 COVER_MAGIC = 0x56434653
 COVER_VERSION = 2
@@ -335,6 +335,16 @@ def parse_dat(text):
       byserial.setdefault(s.group(1), []).append(name)
   return bycrc, byserial
 
+def dat_sizes(text):
+  # clrmamepro DAT -> {game name: size of its first ROM}
+  sizes = {}
+  for block in re.findall(r'^game \((.*?)^\)', text, re.M | re.S):
+    m = re.search(r'^\s*name "((?:[^"\\]|\\.)*)"', block, re.M)
+    z = re.search(r'\brom \(.*?\bsize ([0-9]+)', block)
+    if m and z:
+      sizes[m.group(1)] = int(z.group(1))
+  return sizes
+
 def rom_crcs(path):
   # CRC32 of the whole file, plus the CRC32 without the header if it has an
   # iNES (16 bytes) or copier (512 bytes) header: No-Intro DATs list ROMs
@@ -359,6 +369,8 @@ class NoIntro:
   def __init__(self, cache_dir):
     self.cache_dir = cache_dir
     self.dats = {}
+    self.sizes = {}
+    self.singles = {}
     self.crcfn = os.path.join(cache_dir, "rom-crcs.json")
     try:
       with open(self.crcfn, "r", encoding="utf-8") as fd:
@@ -377,8 +389,26 @@ class NoIntro:
         with open(cachefn, "wb") as fd:
           fd.write(data)
       with open(cachefn, "r", encoding="utf-8", errors="replace") as fd:
-        self.dats[repo] = parse_dat(fd.read())
+        text = fd.read()
+      self.dats[repo] = parse_dat(text)
+      self.sizes[repo] = dat_sizes(text)
     return self.dats[repo]
+
+  def size(self, repo, name):
+    self.dat(repo)
+    return self.sizes[repo].get(name)
+
+  def single_titles(self, repo):
+    # Titles (as retro_name_key() makes them) with a single release (region
+    # and revision) in the list: for cheat files that name no region.
+    if repo not in self.singles:
+      bycrc, byserial = self.dat(repo)
+      releases = {}
+      for name in set(bycrc.values()) | {n for ns in byserial.values() for n in ns}:
+        t, r, v, _ = retro_name_key(name)
+        releases.setdefault(t, set()).add((frozenset(r), v))
+      self.singles[repo] = {t for t, rel in releases.items() if len(rel) == 1}
+    return self.singles[repo]
 
   def crcs_of(self, path):
     # Reading big ROMs from an SD card is slow: remember them by size and date.
@@ -474,37 +504,65 @@ class CheatPack:
   def get(self, code, version):
     return self.load().get(cheat_name(code, version).lower())
 
+  def others(self, code, version):
+    # Other versions of the game it has cheats for (ie. "BPRE-00")
+    want = cheat_name(code, version).lower()
+    return ["SuperFW database " + n[:-4].upper() for n in sorted(self.load())
+            if n.startswith(code.lower() + "-") and n != want]
+
+# GoodTools region letters, used by some libretro cheat file names ("(U)").
+GOODTOOLS_REGIONS = {"u": "usa", "e": "europe", "j": "japan", "g": "germany", "f": "france",
+                     "s": "spain", "i": "italy", "a": "australia", "w": "world"}
+
 def retro_name_key(name):
-  # (title, regions, revision, cheat device) of a No-Intro or libretro name:
-  # "Pokemon - Ruby Version (Code Breaker)(USA).cht" -> ("pokemon - ruby
-  # version", {"usa"}, "", "code breaker"). libretro writes "&" as "_".
-  name = re.sub(r"\.cht$", "", name)
-  title = name.split(" (")[0].replace("&", "_").strip().lower()
+  # (title, regions, revision, cheat device) of a No-Intro, libretro or cheat
+  # file name: "Pokemon - Ruby Version (Code Breaker)(USA).cht" -> ("pokemon
+  # rubyversion", {"usa"}, "", "code breaker"). Titles are compared like cover
+  # names (norm(): case, punctuation, "The", "&" and libretro's "_" ignored).
+  name = re.sub(r"\.cht$", "", name, flags=re.I)
+  title = norm(name.split(" (")[0])
   regions, rev, device = None, "", ""
   for tag in re.findall(r"\(([^)]*)\)", name[len(name.split(" (")[0]):]):
-    low = tag.lower()
+    low = tag.lower().strip()
     if low.replace(" ", "") in ("codebreaker", "gameshark", "actionreplay", "codebreaker,gameshark"):
       device = low
     elif low.startswith("rev "):
       rev = low
     elif re.match(r"v1\.[0-9]$", low):
       rev = "" if low == "v1.0" else "rev " + low[3:]     # libretro's "(V1.1)"
-    elif regions is None and low not in ("virtual console",):
-      regions = set(r.strip() for r in low.split(","))
+    elif regions is None and low not in ("virtual console", "unknown"):
+      if re.fullmatch(r"[uejgfsiaw]{1,2}", low):
+        regions = set(GOODTOOLS_REGIONS[c] for c in low)
+      else:
+        regions = set(r.strip() for r in low.split(","))
   return title, regions or set(), rev, device
+
+def match_cheat_name(official, keyed, single=()):
+  # The cheat file (keyed: [(name, retro_name_key(name))]) for a No-Intro
+  # name: same title and revision, and a shared region. "(World)" files are
+  # taken for USA releases only (Code Breaker codes are made for those, other
+  # regions have other addresses), files without a region only for games with
+  # a single release (single: titles from NoIntro.single_titles()).
+  title, regions, rev, _ = retro_name_key(official)
+  best = None
+  for name, (t, r, v, dev) in keyed:
+    if t != title or v != rev or dev.replace(" ", "") not in ("codebreaker", ""):
+      continue
+    if not (r & regions or ("world" in r and "usa" in regions) or (not r and title in single)):
+      continue
+    if best is None or (dev and not best[1]):
+      best = (name, dev)          # Prefer the files marked as Code Breaker
+  return best[0] if best else None
 
 class RetroCheats:
   # libretro's GBA cheat files, named (mostly) after the No-Intro names. The
   # list is cached for when there is no internet.
   def __init__(self, cache_dir):
     self.cache_dir = cache_dir
-    self.names = None
+    self.keyed = None
 
-  def find(self, official):
-    # The libretro file for a No-Intro name: same title and revision, and a
-    # shared region. "(World)" files are taken for USA releases only: Code
-    # Breaker codes are made for those, other regions have other addresses.
-    if self.names is None:
+  def load(self):
+    if self.keyed is None:
       fn = os.path.join(self.cache_dir, "libretro-gba-cheats.json")
       try:
         names = [e["name"] for e in json.loads(http_get(RETRO_CHEATS_LIST)) if e["name"].endswith(".cht")]
@@ -514,24 +572,45 @@ class RetroCheats:
       except Exception:
         with open(fn, encoding="utf-8") as fd:
           names = json.load(fd)
-      self.names = sorted(names)
-    title, regions, rev, _ = retro_name_key(official)
-    best = None
-    for name in self.names:
-      t, r, v, dev = retro_name_key(name)
-      if t != title or v != rev or dev.replace(" ", "") not in ("codebreaker", ""):
-        continue
-      if not (r & regions or ("world" in r and "usa" in regions)):
-        continue
-      if best is None or (dev and not retro_name_key(best)[3]):
-        best = name           # Prefer the files marked as Code Breaker
-    return best
+      self.keyed = [(n, retro_name_key(n)) for n in sorted(names)]
+    return self.keyed
 
-  def get(self, official):
-    name = self.find(official)
-    if name is None:
-      return None
+  def find(self, official, single=()):
+    return match_cheat_name(official, self.load(), single)
+
+  def others(self, official):
+    # Its files for the same title (other regions or revisions)
+    title = retro_name_key(official)[0]
+    return ["libretro " + n + ("" if k[1] else " (names no region, and the game has several)")
+            for n, k in self.load() if k[0] == title]
+
+  def download(self, name):
     return http_get(RETRO_CHEATS_RAW + urllib.parse.quote(name)).decode("utf-8", "replace")
+
+  def get(self, official, single=()):
+    name = self.find(official, single)
+    return self.download(name) if name else None
+
+class OwnCheats:
+  # --cheats DIR: your own cheat files (RetroArch or SuperFW .cht), named like
+  # the ROM, like the game (its No-Intro name, as libretro does) or
+  # <game code>-<version>.cht.
+  def __init__(self, folder):
+    self.files = {}
+    for dirpath, _, filenames in os.walk(folder):
+      for fn in sorted(filenames):
+        if fn.lower().endswith(".cht"):
+          self.files.setdefault(fn[:-4].casefold(), os.path.join(dirpath, fn))
+    self.keyed = [(stem, retro_name_key(stem)) for stem in sorted(self.files)]
+
+  def find(self, paths, code, version, official, single=()):
+    stems = [os.path.splitext(os.path.basename(p))[0].casefold() for p in paths]
+    stems.append(cheat_name(code, version)[:-4].casefold())
+    for stem in stems:
+      if stem in self.files:
+        return self.files[stem]
+    stem = match_cheat_name(official, self.keyed, single) if official else None
+    return self.files[stem] if stem else None
 
 # libretro cheats -> SuperFW, with the rules of scripts/conv-retro.py in
 # github.com/davidgfnet/superfw-cheats: only Code Breaker codes ("AAAAAAAA+VVVV"
@@ -549,7 +628,7 @@ def cb_patch_codes(value):
 def cb_decode(s):
   if any(ch not in "0123456789ABCDEFabcdef +:" for ch in s):
     return None
-  toks = s.replace("+", " ").replace(":", " ").strip().split(" ")
+  toks = s.replace("+", " ").replace(":", " ").split()
   lens = sorted(set(len(t) for t in toks))
   if lens == [4, 8]:
     if len(toks) % 2 or any(len(t) != (8, 4)[i % 2] for i, t in enumerate(toks)):
@@ -596,6 +675,18 @@ def cb_drop_master(codes):
     i += n
   return out
 
+def cheat_entry(desc, codestr):
+  # One cheat in SuperFW's format ("title\ncodes\n"), or None if its codes
+  # cannot be used.
+  desc = desc.strip()
+  codes = cb_decode(codestr.strip())
+  if not desc or not codes or not cb_valid(codes):
+    return None
+  codes = cb_drop_master(codes)
+  if not codes or len(codes) > CB_MAX_CODES:
+    return None
+  return "%s\n%s\n" % (desc, " ".join("%08X+%04X" % c for c in codes))
+
 def convert_retro_cheats(text):
   # A libretro .cht file -> SuperFW .cht text ("title\ncodes" per cheat), or
   # None if none of its cheats can be used.
@@ -604,52 +695,164 @@ def convert_retro_cheats(text):
     line = line.strip()
     m = re.match(r'cheat[0-9]+_desc\s*=\s*"(.*)"', line)
     if m:
-      desc = m.group(1).strip()
+      desc = m.group(1)
       continue
     m = re.match(r'cheat[0-9]+_code\s*=\s*"([^"]+)"', line)
     if m and desc:
-      codes = cb_decode(m.group(1))
-      if codes and cb_valid(codes):
-        codes = cb_drop_master(codes)
-        if codes and len(codes) <= CB_MAX_CODES:
-          out.append("%s\n%s\n" % (desc, " ".join("%08X+%04X" % c for c in codes)))
+      entry = cheat_entry(desc, m.group(1))
+      if entry:
+        out.append(entry)
       desc = None
   return "".join(out) if out else None
+
+def convert_superfw_cheats(text):
+  # A .cht in SuperFW's own format (a title line, then its codes line) -> the
+  # cheats SuperFW can use, or None.
+  lines = [l.strip() for l in text.splitlines() if l.strip()]
+  out = [cheat_entry(t, c) for t, c in zip(lines[0::2], lines[1::2])]
+  return "".join(e for e in out if e) or None
+
+def convert_cheat_file(text):
+  # Your own .cht file, in RetroArch's or SuperFW's format.
+  text = text.lstrip("\ufeff")
+  if re.search(r"^\s*cheat[0-9]+_code\s*=", text, re.M):
+    return convert_retro_cheats(text)
+  return convert_superfw_cheats(text)
+
+def name_fits(official, romname):
+  # Whether a ROM file name looks like the game's name.
+  a, b = norm(official), norm(os.path.splitext(romname)[0])
+  return bool(a and b) and (a in b or b in a or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8)
+
+def looks_like_hack(nointro, repo, path, official, how):
+  # Matched only by its game code, bigger than that game and named otherwise:
+  # most likely a hack (ie. Pokemon Unbound, a 32 MiB FireRed), whose memory
+  # addresses differ, so the game's cheats would write to the wrong places.
+  if how != "game code" or not official:
+    return False
+  size = nointro.size(repo, official)
+  try:
+    bigger = bool(size) and os.path.getsize(path) > size
+  except OSError:
+    return False
+  return bigger and not name_fits(official, os.path.basename(path))
 
 def cheat_name(code, version):
   return "%s-%02x.cht" % (code, version)    # Like prepare_gba_cheats() (src/menu.c)
 
 def add_cheats(args, games, report, nointro):
-  # Copies the cheats of the GBA games on the card ({(code, version): rom
-  # path}) that are not there yet: from the SuperFW cheat database, else
-  # converted from libretro's. Existing files are kept: they may be edited.
+  # Writes the cheats of the GBA games on the card ({(code, version): [ROM
+  # paths]}) that are not there yet, from (in this order) your --cheats
+  # folder, the SuperFW cheat database or libretro's, converted. Existing files
+  # are kept: they may have been edited. One "cheats" event per ROM says where
+  # its cheats came from, or why it has none.
   outdir = os.path.join(args.sdroot, CHEATS_DIR)
+  repo = SYSTEMS["gba"]
+  own = OwnCheats(args.cheats) if args.cheats else None
   pack, retro = CheatPack(args.cache), RetroCheats(args.cache)
-  added, converted, present = 0, 0, 0
-  for (code, version), path in sorted(games.items()):
+  lists = {}              # Downloaded (or cached) cheat lists: only once, when needed
+  def online():
+    if not lists and not args.no_download:
+      lists["ok"] = True
+      for src, what in ((pack, "the SuperFW cheat database"), (retro, "libretro's cheat list")):
+        try:
+          src.load()
+        except Exception as e:
+          report("log", text="Could not get %s: %s" % (what, e))
+          lists["ok"] = False
+    return lists.get("ok", False)
+  counts = dict.fromkeys(("own", "pack", "retro", "present", "none"), 0)
+  for (code, version), paths in sorted(games.items()):
     dest = os.path.join(outdir, cheat_name(code, version))
     if os.path.exists(dest):
-      present += 1
+      counts["present"] += 1
+      for p in paths:
+        report("cheats", romname=os.path.basename(p), source="already on the card", reason=None, short=None)
       continue
-    data = pack.get(code, version)
-    if data is None:
+    # The ROM to go by: a known dump first, else one that is not a hack.
+    found = []
+    for p in paths:
       try:
-        official, _ = nointro.identify(SYSTEMS["gba"], path, code)
-        text = convert_retro_cheats(retro.get(official) or "") if official else None
+        official, how = nointro.identify(repo, p, code)
+      except Exception:
+        official, how = None, None
+      found.append((p, official, how))
+    pick = (next((f for f in found if f[2] == "checksum"), None) or
+            next((f for f in found if f[1] and not looks_like_hack(nointro, repo, *f)), None))
+    hack = pick is None and any(f[1] for f in found)
+    official = pick[1] if pick else None
+    try:
+      if not pick:
+        names = set(nointro.dat(repo)[0].values())
+        named = next((os.path.splitext(os.path.basename(p))[0] for p in paths
+                      if os.path.splitext(os.path.basename(p))[0] in names), None)
+        if named:                   # Named exactly like a game of the list
+          official, hack = named, False
+      single = nointro.single_titles(repo) if official else ()
+    except Exception:               # No game list (no internet, nothing cached)
+      single = ()
+
+    data, source, reason = None, None, None
+    if own:
+      fn = own.find(paths, code, version, official, single)
+      if fn:
+        with open(fn, encoding="utf-8", errors="replace") as fd:
+          text = convert_cheat_file(fd.read())
+        if text:
+          data, source = text.encode("utf-8"), "your folder (%s)" % os.path.basename(fn)
+          counts["own"] += 1
+        else:
+          reason = ("%s has no cheats SuperFW can use" % os.path.basename(fn), "no usable codes")
+    if data is None and hack:
+      reason = ("only its game code matches %s, but it is bigger and named otherwise: it looks like a "
+                "hack, whose memory addresses differ" % next(f[1] for f in found if f[1]), "looks like a hack")
+    elif data is None and online():
+      try:
+        data = pack.get(code, version)
+        if data is not None:
+          source = "SuperFW database"
+          counts["pack"] += 1
+        elif not official:
+          reason = ("not recognised (not in the No-Intro game list: a hack, a translation or a bad dump?)",
+                    "not recognised")
+        else:
+          name = retro.find(official, single)
+          text = convert_retro_cheats(retro.download(name)) if name else None
+          if text:
+            data, source = text.encode("utf-8"), "libretro (%s)" % name
+            counts["retro"] += 1
+          elif name:
+            reason = ("libretro's %s only has codes SuperFW cannot use (encrypted or master codes)" % name,
+                      "no usable codes")
+          else:
+            others = pack.others(code, version) + retro.others(official)
+            if others:
+              reason = ("cheats only exist for other versions (another region or revision has other memory "
+                        "addresses) or an unknown one: %s" % "; ".join(others), "only for other versions")
+            else:
+              reason = ("not in the SuperFW database nor in libretro's cheats", "none in the databases")
       except Exception as e:
-        report("log", text="  could not get libretro cheats for %s: %s" % (os.path.basename(path), e))
-        text = None
-      if not text:
-        continue
-      data = text.encode("utf-8")
-      converted += 1
+        reason = ("could not download its cheats: %s" % e, "download failed")
+    elif data is None and reason is None:
+      reason = ("; ".join(([] if not own else ["not in your cheats folder"]) +
+                          ([] if args.no_download else ["the cheat lists could not be downloaded"])),
+                "not found")
+
+    if data is None:
+      counts["none"] += 1
+      for p in paths:
+        report("cheats", romname=os.path.basename(p), source=None, reason=reason[0], short=reason[1])
+      continue
     if not args.dry_run:
       os.makedirs(outdir, exist_ok=True)
       with open(dest, "wb") as fd:
         fd.write(data)
-    added += 1
-  report("log", text="Cheats: %d %s (%d converted from libretro), %d already there, %d games without cheats" %
-         (added, "to add" if args.dry_run else "added", converted, present, len(games) - added - present))
+    for p in paths:
+      report("cheats", romname=os.path.basename(p), source=source, reason=None, short=None)
+  report("log", text="Cheats: %d %s (%d from your folder, %d from the SuperFW database, %d converted from "
+         "libretro), %d already there, %d games without cheats" %
+         (counts["own"] + counts["pack"] + counts["retro"], "to add" if args.dry_run else "added",
+          counts["own"], counts["pack"], counts["retro"], counts["present"], counts["none"]))
 
 def copy_firmware(args, report):
   # The latest release's firmware for the board, to the card root (flash it
@@ -722,6 +925,9 @@ def make_args(argv=None):
                       help="Where to cache the downloaded box art index")
   parser.add_argument("--no-cheats", action="store_true",
                       help="Do not add the cheats of the GBA games (SuperFW cheat database)")
+  parser.add_argument("--cheats", default=None, metavar="DIR",
+                      help="Folder with your own cheat files (RetroArch or SuperFW .cht), named like the "
+                           "ROMs or the games; used before the downloaded ones")
   parser.add_argument("--firmware", choices=BOARDS, default=None,
                       help="Also copy the latest SuperFW firmware for this board to the card")
   parser.add_argument("--gui", action="store_true", help="Open the window (default when started without arguments)")
@@ -738,6 +944,11 @@ def print_report(event, **kw):
     elif kw["status"] in ("made", "would make"):
       print("%s %s  <-  %s  [%s]" % ("WOULD MAKE" if kw["status"] == "would make" else "MADE      ",
                                       kw["romname"], kw["source"], os.path.basename(kw["outfn"])))
+  elif event == "cheats":
+    if kw["reason"]:
+      print("NO CHEATS  %s: %s" % (kw["romname"], kw["reason"]))
+    elif kw["source"] != "already on the card":
+      print("CHEATS     %s  <-  %s" % (kw["romname"], kw["source"]))
   elif event == "done":
     print()
     print("Covers %s: %d, already present: %d, not found: %d" %
@@ -759,7 +970,7 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
   made, skipped, missing = 0, 0, []
   done = set()
   codes_used = set()      # Game codes that got a cover file in this run
-  cheat_games = {}        # (game code, version) -> path of the GBA games, for the cheats
+  cheat_games = {}        # (game code, version) -> paths of the GBA games, for the cheats
   for n, (path, romname, ext) in enumerate(roms):
     if cancelled():
       report("log", text="Stopped.")
@@ -774,7 +985,7 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
     namefn = os.path.join(outdir, romname + ".cov")
     code, version = gba_header(path) if ext == "gba" else (None, None)
     if code:
-      cheat_games.setdefault((code, version), path)
+      cheat_games.setdefault((code, version), []).append(path)
     codefn = os.path.join(outdir, code + ".cov") if code else None
 
     if not args.force and (os.path.exists(namefn) or (codefn and not local and os.path.exists(codefn))):
@@ -835,12 +1046,12 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
     report("rom", status="would make" if args.dry_run else "made", source=source, outfn=outfn, **info)
 
   nointro.save()
+  if not cancelled() and cheat_games and not args.no_cheats and (args.cheats or not args.no_download):
+    try:
+      add_cheats(args, cheat_games, report, nointro)
+    except Exception as e:
+      report("log", text="Could not add the cheats: %s" % e)
   if not cancelled() and not args.no_download:
-    if cheat_games and not args.no_cheats:
-      try:
-        add_cheats(args, cheat_games, report, nointro)
-      except Exception as e:
-        report("log", text="Could not get the cheats: %s" % e)
     if args.firmware:
       try:
         copy_firmware(args, report)
@@ -918,12 +1129,12 @@ def gui(args):
   root.minsize(720, 460)
   events = queue.Queue()
   stop = threading.Event()
-  state = {"worker": None, "rows": {}, "photo": None}
+  state = {"worker": None, "rows": {}, "photo": None, "names": {}, "why": {}}
 
   frm = ttk.Frame(root, padding=10)
   frm.pack(fill="both", expand=True)
   frm.columnconfigure(1, weight=1)
-  frm.rowconfigure(6, weight=1)
+  frm.rowconfigure(7, weight=1)
 
   ttk.Label(frm, text="SD card:").grid(row=0, column=0, sticky="w")
   sdvar = tk.StringVar(value=args.sdroot or "")
@@ -947,8 +1158,17 @@ def gui(args):
       imgvar.set(os.path.normpath(d))
   ttk.Button(frm, text="Browse...", command=pick_images).grid(row=1, column=2, pady=(6, 0))
 
+  ttk.Label(frm, text="Own cheats:").grid(row=2, column=0, sticky="w", pady=(6, 0))
+  chtvar = tk.StringVar(value=args.cheats or "")
+  ttk.Entry(frm, textvariable=chtvar).grid(row=2, column=1, sticky="ew", padx=6, pady=(6, 0))
+  def pick_cheats():
+    d = filedialog.askdirectory(title="Folder with your own cheat files (.cht)")
+    if d:
+      chtvar.set(os.path.normpath(d))
+  ttk.Button(frm, text="Browse...", command=pick_cheats).grid(row=2, column=2, pady=(6, 0))
+
   opts = ttk.Frame(frm)
-  opts.grid(row=2, column=0, columnspan=3, sticky="w", pady=6)
+  opts.grid(row=3, column=0, columnspan=3, sticky="w", pady=6)
   dlvar = tk.BooleanVar(value=not args.no_download)
   ckvar = tk.BooleanVar(value=not args.no_checksum)
   forcevar = tk.BooleanVar(value=args.force)
@@ -957,7 +1177,7 @@ def gui(args):
   ttk.Checkbutton(opts, text="Redo existing covers", variable=forcevar).pack(side="left")
 
   opts2 = ttk.Frame(frm)
-  opts2.grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 6))
+  opts2.grid(row=4, column=0, columnspan=3, sticky="w", pady=(0, 6))
   cheatvar = tk.BooleanVar(value=not args.no_cheats)
   ttk.Checkbutton(opts2, text="Add cheats (GBA games)", variable=cheatvar).pack(side="left")
   fwnames = ["Don't copy firmware", "SuperChis", "SuperCard SD", "SuperCard Lite"]
@@ -966,26 +1186,28 @@ def gui(args):
   ttk.Combobox(opts2, textvariable=fwvar, values=fwnames, state="readonly", width=20).pack(side="left")
 
   bar = ttk.Frame(frm)
-  bar.grid(row=4, column=0, columnspan=3, sticky="ew")
+  bar.grid(row=5, column=0, columnspan=3, sticky="ew")
   bar.columnconfigure(1, weight=1)
   gobtn = ttk.Button(bar, text="Make covers")
   gobtn.grid(row=0, column=0)
   prog = ttk.Progressbar(bar, mode="determinate")
   prog.grid(row=0, column=1, sticky="ew", padx=8)
   status = ttk.Label(frm, text="Pick the SD card and press Make covers.")
-  status.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 6))
+  status.grid(row=6, column=0, columnspan=3, sticky="w", pady=(4, 6))
 
   body = ttk.Frame(frm)
-  body.grid(row=6, column=0, columnspan=3, sticky="nsew")
+  body.grid(row=7, column=0, columnspan=3, sticky="nsew")
   body.columnconfigure(0, weight=1)
   body.rowconfigure(0, weight=1)
-  tree = ttk.Treeview(body, columns=("result", "source"), show="tree headings", selectmode="browse")
+  tree = ttk.Treeview(body, columns=("result", "source", "cheats"), show="tree headings", selectmode="browse")
   tree.heading("#0", text="Game")
   tree.heading("result", text="Result")
   tree.heading("source", text="Box art used")
+  tree.heading("cheats", text="Cheats")
   tree.column("#0", width=linesp * 12)
   tree.column("result", width=linesp * 7, stretch=False)
   tree.column("source", width=linesp * 13)
+  tree.column("cheats", width=linesp * 10)
   tree.grid(row=0, column=0, sticky="nsew")
   sb = ttk.Scrollbar(body, orient="vertical", command=tree.yview)
   sb.grid(row=0, column=1, sticky="ns")
@@ -1001,6 +1223,8 @@ def gui(args):
   def show_preview(_event=None):
     sel = tree.selection()
     outfn = state["rows"].get(sel[0]) if sel else None
+    if sel and sel[0] in state["why"]:
+      status.configure(text="No cheats: " + state["why"][sel[0]])
     canvas.delete("all")
     state["photo"] = None
     if not outfn or not os.path.exists(outfn):
@@ -1038,13 +1262,19 @@ def gui(args):
       messagebox.showerror("SuperFW cover maker", "The images folder does not exist.")
       return
     wargs = argparse.Namespace(**vars(args))
-    wargs.sdroot, wargs.images = sd, images
+    cheats = chtvar.get().strip() or None
+    if cheats and not os.path.isdir(cheats):
+      messagebox.showerror("SuperFW cover maker", "The cheats folder does not exist.")
+      return
+    wargs.sdroot, wargs.images, wargs.cheats = sd, images, cheats
     wargs.no_download, wargs.no_checksum, wargs.force = not dlvar.get(), not ckvar.get(), forcevar.get()
     wargs.dry_run = False
     wargs.no_cheats = not cheatvar.get()
     wargs.firmware = BOARDS[fwnames.index(fwvar.get()) - 1] if fwvar.get() != fwnames[0] else None
     tree.delete(*tree.get_children())
     state["rows"].clear()
+    state["names"].clear()
+    state["why"].clear()
     prog.configure(value=0, maximum=1)
     stop.clear()
     gobtn.configure(text="Stop")
@@ -1067,10 +1297,17 @@ def gui(args):
           status.configure(text="%d / %d  %s" % (kw["index"] + 1, kw["total"], kw["romname"]))
           if kw["status"] != "duplicate":
             iid = tree.insert("", "end", text=kw["romname"],
-                              values=(STATUS_TEXT[kw["status"]], kw["source"] or ""))
+                              values=(STATUS_TEXT[kw["status"]], kw["source"] or "", ""))
             state["rows"][iid] = kw["outfn"]
+            state["names"][kw["romname"]] = iid
             if kw["status"] == "made":
               tree.see(iid)
+        elif event == "cheats":
+          iid = state["names"].get(kw["romname"])
+          if iid:
+            tree.set(iid, "cheats", kw["source"] or "none: " + kw["short"])
+            if kw["reason"]:
+              state["why"][iid] = kw["reason"]
         elif event == "done":
           status.configure(text="Covers made: %d, already there: %d, not found: %d" %
                            (kw["made"], kw["skipped"], len(kw["missing"])) +

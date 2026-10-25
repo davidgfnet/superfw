@@ -152,10 +152,27 @@ them). Games that database does not have (Pokemon Emerald, for one) get
 libretro's Code Breaker cheats instead
 (https://github.com/libretro/libretro-database), converted with the database's
 own rules: only plain Code Breaker codes that write to RAM and no master
-codes. Only cheats for the same game, region and revision are used. Cheat files already on the card are never overwritten,
-so edited ones are kept; `--no-cheats` skips this. With `--firmware chis` (or `sd`, `lite`)
-it also copies the latest SuperFW firmware for that board to the card root,
-ready to be flashed from the SD browser. The window has both options too.
+codes. Only cheats for the same game, region and revision are used: other
+versions have their data at other addresses. File names are compared without
+case, punctuation or "The", and a libretro file that names no region is only
+used for games with a single release. A ROM that only matches a game by its
+game code, but is bigger and named otherwise, is taken for a hack (ie. Pokemon
+Unbound, a FireRed hack) and gets no cheats.
+
+`--cheats <folder>` (the window's "Own cheats") adds your own cheat files,
+before the downloaded ones: RetroArch `.cht` files or SuperFW ones, named like
+the ROM (`Metroid Fusion.cht`), like the game (`Metroid Fusion (USA).cht`) or
+`<game code>-<version>.cht`. They go through the same checks.
+
+For every GBA game the tool says where its cheats came from or why it has none
+(not recognised, only for other versions, looks like a hack, not in any
+database): in the window's Cheats column (select a game to see the reason),
+or on the command line. Cheat files already on the card are never
+overwritten, so edited ones are kept; `--no-cheats` skips all this.
+
+With `--firmware chis` (or `sd`, `lite`) it also copies the latest SuperFW
+firmware for that board to the card root, ready to be flashed from the SD
+browser. The window has these options too.
 
 The tool can also be packaged as a program that needs no Python
 (PyInstaller, works on Windows, macOS and Linux); started without arguments

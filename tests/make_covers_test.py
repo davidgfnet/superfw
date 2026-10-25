@@ -97,12 +97,12 @@ game (
 \tname "Metroid Fusion (USA)"
 \tregion "USA"
 \tserial "AMTE"
-\trom ( name "Metroid Fusion (USA).gba" size 16 crc %08X md5 0 sha1 0 serial "AMTE" )
+\trom ( name "Metroid Fusion (USA).gba" size 1024 crc %08X md5 0 sha1 0 serial "AMTE" )
 )
 game (
 \tname "Metroid Fusion (Japan)"
 \tserial "AMTJ"
-\trom ( name "Metroid Fusion (Japan).gba" size 16 crc 00000001 serial "AMTJ" )
+\trom ( name "Metroid Fusion (Japan).gba" size 1024 crc 00000001 serial "AMTJ" )
 )
 game (
 \tname "Some NES Game (USA)"
@@ -129,6 +129,12 @@ class Identify(unittest.TestCase):
 
   def tearDown(self):
     self.tmp.cleanup()
+
+  def test_single_titles(self):
+    single = self.ni.single_titles("GBA")
+    self.assertIn(mc.norm("Some NES Game"), single)
+    self.assertNotIn(mc.norm("Metroid Fusion"), single)    # USA and Japan
+    self.assertEqual(self.ni.size("GBA", "Metroid Fusion (USA)"), 1024)
 
   def test_parse(self):
     bycrc, byserial = mc.parse_dat(DAT % (5, 6))
@@ -206,14 +212,14 @@ class RetroConversion(unittest.TestCase):
 
   def test_find(self):
     retro = mc.RetroCheats(tempfile.mkdtemp())
-    retro.names = sorted([
+    retro.keyed = [(n, mc.retro_name_key(n)) for n in sorted([
       "Pokemon - Emerald Version (USA, Europe) (Code Breaker).cht",
       "Pokemon - Ruby Version (Code Breaker)(USA).cht",
       "Pokemon Pinball - Ruby _ Sapphire (World) (Code Breaker).cht",
       "Metroid Fusion (World) (Code Breaker).cht",
       "Golden Sun (USA, Europe).cht",
       "Pokemon - Leaf Green Version (V1.1)(USA)(Code Breaker).cht",
-      "Mario _ Luigi - Superstar Saga (USA, Europe) (Gameshark).cht"])
+      "Mario _ Luigi - Superstar Saga (USA, Europe) (Gameshark).cht"])]
     for official, want in (
         ("Pokemon - Emerald Version (USA, Europe)", "Pokemon - Emerald Version (USA, Europe) (Code Breaker).cht"),
         ("Pokemon - Ruby Version (USA, Europe)", "Pokemon - Ruby Version (Code Breaker)(USA).cht"),
@@ -223,10 +229,34 @@ class RetroConversion(unittest.TestCase):
         ("Metroid Fusion (Japan)", None),
         ("Golden Sun (USA, Europe)", "Golden Sun (USA, Europe).cht"),
         ("Golden Sun (Germany)", None),
-        ("Pokemon - LeafGreen Version (USA, Europe) (Rev 1)", None),
+        ("Pokemon - LeafGreen Version (USA, Europe) (Rev 1)", "Pokemon - Leaf Green Version (V1.1)(USA)(Code Breaker).cht"),
         ("Pokemon - Leaf Green Version (USA) (Rev 1)", "Pokemon - Leaf Green Version (V1.1)(USA)(Code Breaker).cht"),
         ("Mario & Luigi - Superstar Saga (USA, Australia)", None)):
       self.assertEqual(retro.find(official), want, official)
+
+  def test_names(self):
+    self.assertEqual(mc.retro_name_key("Pokemon - Feuerrote Edition (G).cht")[1], {"germany"})
+    self.assertEqual(mc.retro_name_key("Some Game (UE) (Code Breaker).cht")[1], {"usa", "europe"})
+    self.assertEqual(mc.retro_name_key("Some Game (Unknown) (Code Breaker).cht")[1], set())
+    self.assertEqual(mc.retro_name_key("Some Game (USA) (Code Breaker).cht")[1], {"usa"})
+    keyed = [(n, mc.retro_name_key(n)) for n in (
+      "Kuru Kuru Kururin (Europe) (Code Breaker).cht",
+      "Mega Man Battle Network 4 - Blue Moon (USA).cht",
+      "Mega Man Battle Network (Code Breaker).cht")]
+    # Spaces, punctuation and "Mega Man -" vs "Mega Man" do not matter
+    self.assertEqual(mc.match_cheat_name("Kurukuru Kururin (Europe)", keyed), keyed[0][0])
+    self.assertEqual(mc.match_cheat_name("Mega Man - Battle Network 4 - Blue Moon (USA)", keyed), keyed[1][0])
+    # No region in the file name: only for games with a single release
+    mmbn = "Mega Man - Battle Network (USA)"
+    self.assertIsNone(mc.match_cheat_name(mmbn, keyed))
+    self.assertEqual(mc.match_cheat_name(mmbn, keyed, {mc.norm("Mega Man - Battle Network")}), keyed[2][0])
+
+  def test_superfw_format(self):
+    # Your own files in SuperFW's format go through the same checks.
+    text = "\ufeffMine\n00000000+0001 82000000+0002\n\nEncrypted\n9000ABCD+0001\nOk\n32000000+0001\n"
+    self.assertEqual(mc.convert_cheat_file(text), "Mine\n82000000+0002\nOk\n32000000+0001\n")
+    self.assertEqual(mc.convert_cheat_file(RETRO_CHT), mc.convert_retro_cheats(RETRO_CHT))
+    self.assertIsNone(mc.convert_cheat_file("Bad\n9000ABCD+0001\n"))
 
   def test_nothing_usable(self):
     self.assertIsNone(mc.convert_retro_cheats('cheat0_desc = "x"\ncheat0_code = "9000ABCD+0001"\n'))
@@ -336,6 +366,42 @@ class EndToEnd(unittest.TestCase):
     self.run_tool()
     with open(os.path.join(self.sd, mc.CHEATS_DIR, "AMTJ-00.cht"), encoding="utf-8") as fd:
       self.assertEqual(fd.read(), mc.convert_retro_cheats(RETRO_CHT))
+
+  def run_events(self, *extra):
+    _, args = mc.make_args([self.sd, "--cache", self.cache] + list(extra))
+    events = []
+    mc.make_covers(args, lambda ev, **kw: events.append((ev, kw)))
+    return {kw["romname"]: kw for ev, kw in events if ev == "cheats"}
+
+  def test_cheats_hack(self):
+    # Only the game code matches, and it is bigger and named otherwise: a hack,
+    # the game's cheats are not used. The report says why.
+    gba_rom(os.path.join(self.sd, "GBA", "Metroid Hack Deluxe.gba"), "AMTJ")
+    with open(os.path.join(self.sd, "GBA", "Metroid Hack Deluxe.gba"), "ab") as fd:
+      fd.write(bytes(2048))
+    ev = self.run_events()
+    self.assertFalse(os.path.exists(os.path.join(self.sd, mc.CHEATS_DIR, "AMTJ-00.cht")))
+    self.assertEqual(ev["Metroid Hack Deluxe.gba"]["short"], "looks like a hack")
+    self.assertEqual(ev["renamed rom.gba"]["source"], "SuperFW database")
+
+  def test_cheats_own_folder(self):
+    own = os.path.join(self.tmp.name, "mine")
+    os.makedirs(own)
+    gba_rom(os.path.join(self.sd, "GBA", "jp.gba"), "AMTJ")
+    with open(os.path.join(own, "jp.cht"), "w", encoding="utf-8") as fd:
+      fd.write(RETRO_CHT)                          # RetroArch format, named like the ROM
+    with open(os.path.join(own, "AMTE-00.cht"), "w", encoding="utf-8") as fd:
+      fd.write("Mine\n00000000+0001 82000000+0002\n")   # SuperFW format, by game code
+    ev = self.run_events("--cheats", own)
+    with open(os.path.join(self.sd, mc.CHEATS_DIR, "AMTJ-00.cht"), encoding="utf-8") as fd:
+      self.assertEqual(fd.read(), mc.convert_retro_cheats(RETRO_CHT))
+    with open(os.path.join(self.sd, mc.CHEATS_DIR, "AMTE-00.cht"), encoding="utf-8") as fd:
+      self.assertEqual(fd.read(), "Mine\n82000000+0002\n")    # Before the SuperFW database
+    self.assertEqual(ev["jp.gba"]["source"], "your folder (jp.cht)")
+    # Your folder works without downloads too
+    os.remove(os.path.join(self.sd, mc.CHEATS_DIR, "AMTJ-00.cht"))
+    self.run_events("--cheats", own, "--no-download")
+    self.assertTrue(os.path.exists(os.path.join(self.sd, mc.CHEATS_DIR, "AMTJ-00.cht")))
 
   def test_no_cheats(self):
     self.run_tool("--no-cheats")
