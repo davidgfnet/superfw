@@ -4,7 +4,7 @@
 # Tests for tools/make-covers.py and tools/carousel-preview.py (no network).
 # Run: python3 tests/make_covers_test.py
 
-import importlib.util, io, json, os, struct, sys, tempfile, unittest, zlib
+import importlib.util, io, json, os, struct, sys, tempfile, unittest, zipfile, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(os.path.dirname(HERE), "tools")
@@ -179,8 +179,23 @@ class EndToEnd(unittest.TestCase):
     with open(os.path.join(self.cache, "nointro-%s.dat" % repo), "w", encoding="utf-8") as fd:
       fd.write(DAT % (1, 2))
     self.requests = []
+    cheats = io.BytesIO()
+    with zipfile.ZipFile(cheats, "w") as z:
+      z.writestr("AMTE-00.cht", "Infinite missiles\n82000000+0063\n")
+      z.writestr("BPEE-00.cht", "Other game\n82000000+0001\n")
     def fake_get(url, retries=3):
       self.requests.append(url)
+      if url == mc.CHEATS_RELEASE:
+        return json.dumps({"tag_name": "v1", "assets": [
+          {"name": "superfw-cheats.zip", "browser_download_url": "https://x/superfw-cheats.zip"}]}).encode()
+      if url.endswith("superfw-cheats.zip"):
+        return cheats.getvalue()
+      if url == mc.FIRMWARE_RELEASE:
+        return json.dumps({"tag_name": "v9", "assets": [
+          {"name": "superfw-%s.fw" % b, "browser_download_url": "https://x/superfw-%s.fw" % b}
+          for b in mc.BOARDS]}).encode()
+      if url.endswith(".fw"):
+        return url.rsplit("/", 1)[1].encode()
       if "Linked" in url:
         return b"Metroid Fusion (USA).png"      # Symlinks are served as text
       return png_bytes((200, 40, 40))
@@ -211,6 +226,43 @@ class EndToEnd(unittest.TestCase):
     n = len(self.requests)
     self.run_tool()
     self.assertEqual(len(self.requests), n)
+
+  def test_cheats(self):
+    self.run_tool()
+    fn = os.path.join(self.sd, mc.CHEATS_DIR, "AMTE-00.cht")
+    with open(fn, encoding="utf-8") as fd:
+      self.assertIn("Infinite missiles", fd.read())
+    # Only the games on the card get cheats.
+    self.assertEqual(os.listdir(os.path.join(self.sd, mc.CHEATS_DIR)), ["AMTE-00.cht"])
+    # Edited cheat files are kept.
+    with open(fn, "w", encoding="utf-8") as fd:
+      fd.write("Mine\n82000000+0001\n")
+    self.run_tool()
+    with open(fn, encoding="utf-8") as fd:
+      self.assertEqual(fd.read(), "Mine\n82000000+0001\n")
+
+  def test_cheats_offline(self):
+    self.run_tool()                       # Downloads and caches the pack
+    os.remove(os.path.join(self.sd, mc.CHEATS_DIR, "AMTE-00.cht"))
+    real = mc.http_get
+    def offline(url, retries=3):
+      raise OSError("no network")
+    mc.http_get = offline
+    try:
+      self.run_tool()
+    finally:
+      mc.http_get = real
+    self.assertTrue(os.path.exists(os.path.join(self.sd, mc.CHEATS_DIR, "AMTE-00.cht")))
+
+  def test_no_cheats(self):
+    self.run_tool("--no-cheats")
+    self.assertFalse(os.path.exists(os.path.join(self.sd, mc.CHEATS_DIR)))
+
+  def test_firmware(self):
+    self.run_tool("--firmware", "chis")
+    with open(os.path.join(self.sd, "superfw-chis.fw"), "rb") as fd:
+      self.assertEqual(fd.read(), b"superfw-chis.fw")
+    self.assertFalse(os.path.exists(os.path.join(self.sd, "superfw-sd.fw")))
 
   def test_symlink(self):
     img = mc.ThumbIndex(self.cache).download(mc.SYSTEMS["gba"], "Named_Boxarts/Linked (USA).png", True)

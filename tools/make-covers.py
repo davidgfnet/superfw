@@ -39,7 +39,7 @@
 #
 # Requires Pillow (pip install pillow).
 
-import argparse, difflib, io, json, os, re, struct, sys, time, zlib
+import argparse, difflib, glob, io, json, os, re, struct, sys, time, zipfile, zlib
 import urllib.parse, urllib.request
 
 try:
@@ -57,6 +57,14 @@ BG_INDEX = 236
 TINT_VALID = 0x8000
 
 COVERS_DIR = os.path.join(".superfw", "covers")
+CHEATS_DIR = os.path.join(".superfw", "cheats")
+
+# The SuperFW cheat database: .cht files in the firmware's format, named
+# <game code>-<version>.cht like the firmware looks for them.
+CHEATS_RELEASE = "https://api.github.com/repos/davidgfnet/superfw-cheats/releases/latest"
+# Firmware releases (--firmware): superfw-<board>.fw files.
+FIRMWARE_RELEASE = "https://api.github.com/repos/davidgfnet/superfw/releases/latest"
+BOARDS = ("chis", "sd", "lite")
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
 
 # ROM extension -> libretro-thumbnails repository. Keep in sync with the
@@ -408,20 +416,99 @@ def find_roms(root):
       if ext in SYSTEMS and not fn.startswith("."):
         yield os.path.join(dirpath, fn), fn, ext
 
-def gba_gamecode(path):
-  # 4 character game code from a valid GBA ROM header (ie. "BPEE"), or None.
-  # Must match the checks in carousel_open_cover() (src/menu.c).
+def gba_header(path):
+  # Game code (ie. "BPEE") and version of a valid GBA ROM header, or
+  # (None, None). Must match the checks in carousel_open_cover() (src/menu.c).
   try:
     with open(path, "rb") as fd:
       h = fd.read(0xC0)
   except OSError:
-    return None
+    return None, None
   if len(h) < 0xC0 or h[0xB2] != 0x96:
-    return None
+    return None, None
   if (-(sum(h[0xA0:0xBD]) + 0x19)) & 0xFF != h[0xBD]:
-    return None        # Bad header checksum
+    return None, None  # Bad header checksum
   code = h[0xAC:0xB0].decode("ascii", "replace")
-  return code if re.fullmatch(r"[A-Z0-9]{4}", code) else None
+  return (code, h[0xBC]) if re.fullmatch(r"[A-Z0-9]{4}", code) else (None, None)
+
+def gba_gamecode(path):
+  return gba_header(path)[0]
+
+# ---- Cheats and firmware ---------------------------------------------------
+
+class CheatPack:
+  # The SuperFW cheat database (github.com/davidgfnet/superfw-cheats), cached.
+  # Without internet the last downloaded version is used.
+  def __init__(self, cache_dir):
+    self.cache_dir = cache_dir
+    self.files = None
+
+  def load(self):
+    if self.files is not None:
+      return self.files
+    try:
+      rel = json.loads(http_get(CHEATS_RELEASE))
+      asset = next(a for a in rel["assets"] if a["name"].endswith(".zip"))
+      fn = os.path.join(self.cache_dir, "superfw-cheats-%s.zip" % re.sub(r"[^\w.-]", "_", rel["tag_name"]))
+      if not os.path.exists(fn):
+        data = http_get(asset["browser_download_url"])
+        os.makedirs(self.cache_dir, exist_ok=True)
+        with open(fn + ".tmp", "wb") as fd:
+          fd.write(data)
+        os.replace(fn + ".tmp", fn)
+    except Exception:
+      cached = sorted(glob.glob(os.path.join(self.cache_dir, "superfw-cheats-*.zip")), key=os.path.getmtime)
+      if not cached:
+        raise
+      fn = cached[-1]
+    with zipfile.ZipFile(fn) as z:
+      self.files = {os.path.basename(n).lower(): z.read(n) for n in z.namelist()
+                    if n.lower().endswith(".cht")}
+    return self.files
+
+  def get(self, code, version):
+    return self.load().get(cheat_name(code, version).lower())
+
+def cheat_name(code, version):
+  return "%s-%02x.cht" % (code, version)    # Like prepare_gba_cheats() (src/menu.c)
+
+def add_cheats(args, games, report):
+  # Copies the cheats of the GBA games on the card (set of (code, version))
+  # that are not there yet. Existing files are kept: they may have been edited.
+  outdir = os.path.join(args.sdroot, CHEATS_DIR)
+  pack = CheatPack(args.cache)
+  added, present = 0, 0
+  for code, version in sorted(games):
+    dest = os.path.join(outdir, cheat_name(code, version))
+    if os.path.exists(dest):
+      present += 1
+      continue
+    data = pack.get(code, version)
+    if data is None:
+      continue
+    if not args.dry_run:
+      os.makedirs(outdir, exist_ok=True)
+      with open(dest, "wb") as fd:
+        fd.write(data)
+    added += 1
+  report("log", text="Cheats: %d %s, %d already there, %d games without cheats in the database" %
+         (added, "to add" if args.dry_run else "added", present, len(games) - added - present))
+
+def copy_firmware(args, report):
+  # The latest release's firmware for the board, to the card root (flash it
+  # from SuperFW's SD browser).
+  rel = json.loads(http_get(FIRMWARE_RELEASE))
+  name = "superfw-%s.fw" % args.firmware
+  asset = next((a for a in rel["assets"] if a["name"] == name), None)
+  if not asset:
+    report("log", text="The latest release (%s) has no %s" % (rel.get("tag_name"), name))
+    return
+  if not args.dry_run:
+    data = http_get(asset["browser_download_url"])
+    with open(os.path.join(args.sdroot, name), "wb") as fd:
+      fd.write(data)
+  report("log", text="Firmware %s (%s) %s the card: flash it from SuperFW's SD browser." %
+         (name, rel["tag_name"], "would be copied to" if args.dry_run else "copied to"))
 
 def find_local_image(images_dir, romname):
   if not images_dir:
@@ -476,6 +563,10 @@ def make_args(argv=None):
                       help="Do not identify ROMs by checksum (only by file name)")
   parser.add_argument("--cache", default=os.path.join(os.path.expanduser("~"), ".superfw-covers-cache"),
                       help="Where to cache the downloaded box art index")
+  parser.add_argument("--no-cheats", action="store_true",
+                      help="Do not add the cheats of the GBA games (SuperFW cheat database)")
+  parser.add_argument("--firmware", choices=BOARDS, default=None,
+                      help="Also copy the latest SuperFW firmware for this board to the card")
   parser.add_argument("--gui", action="store_true", help="Open the window (default when started without arguments)")
   parser.add_argument("--version", action="version", version="make-covers " + VERSION)
   return parser, parser.parse_args(argv)
@@ -511,6 +602,7 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
   made, skipped, missing = 0, 0, []
   done = set()
   codes_used = set()      # Game codes that got a cover file in this run
+  cheat_games = set()     # (game code, version) of the GBA games, for the cheats
   for n, (path, romname, ext) in enumerate(roms):
     if cancelled():
       report("log", text="Stopped.")
@@ -523,7 +615,9 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
 
     local = find_local_image(args.images, romname)
     namefn = os.path.join(outdir, romname + ".cov")
-    code = gba_gamecode(path) if ext == "gba" else None
+    code, version = gba_header(path) if ext == "gba" else (None, None)
+    if code:
+      cheat_games.add((code, version))
     codefn = os.path.join(outdir, code + ".cov") if code else None
 
     if not args.force and (os.path.exists(namefn) or (codefn and not local and os.path.exists(codefn))):
@@ -584,6 +678,17 @@ def make_covers(args, report=print_report, cancelled=lambda: False):
     report("rom", status="would make" if args.dry_run else "made", source=source, outfn=outfn, **info)
 
   nointro.save()
+  if not cancelled() and not args.no_download:
+    if cheat_games and not args.no_cheats:
+      try:
+        add_cheats(args, cheat_games, report)
+      except Exception as e:
+        report("log", text="Could not get the cheats: %s" % e)
+    if args.firmware:
+      try:
+        copy_firmware(args, report)
+      except Exception as e:
+        report("log", text="Could not get the firmware: %s" % e)
   report("done", made=made, skipped=skipped, missing=missing, dry_run=args.dry_run)
 
 def main():
@@ -661,7 +766,7 @@ def gui(args):
   frm = ttk.Frame(root, padding=10)
   frm.pack(fill="both", expand=True)
   frm.columnconfigure(1, weight=1)
-  frm.rowconfigure(5, weight=1)
+  frm.rowconfigure(6, weight=1)
 
   ttk.Label(frm, text="SD card:").grid(row=0, column=0, sticky="w")
   sdvar = tk.StringVar(value=args.sdroot or "")
@@ -694,18 +799,27 @@ def gui(args):
   ttk.Checkbutton(opts, text="Identify games by checksum", variable=ckvar).pack(side="left", padx=12)
   ttk.Checkbutton(opts, text="Redo existing covers", variable=forcevar).pack(side="left")
 
+  opts2 = ttk.Frame(frm)
+  opts2.grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 6))
+  cheatvar = tk.BooleanVar(value=not args.no_cheats)
+  ttk.Checkbutton(opts2, text="Add cheats (GBA games)", variable=cheatvar).pack(side="left")
+  fwnames = ["Don't copy firmware", "SuperChis", "SuperCard SD", "SuperCard Lite"]
+  fwvar = tk.StringVar(value=fwnames[BOARDS.index(args.firmware) + 1] if args.firmware else fwnames[0])
+  ttk.Label(opts2, text="Firmware:").pack(side="left", padx=(16, 4))
+  ttk.Combobox(opts2, textvariable=fwvar, values=fwnames, state="readonly", width=20).pack(side="left")
+
   bar = ttk.Frame(frm)
-  bar.grid(row=3, column=0, columnspan=3, sticky="ew")
+  bar.grid(row=4, column=0, columnspan=3, sticky="ew")
   bar.columnconfigure(1, weight=1)
   gobtn = ttk.Button(bar, text="Make covers")
   gobtn.grid(row=0, column=0)
   prog = ttk.Progressbar(bar, mode="determinate")
   prog.grid(row=0, column=1, sticky="ew", padx=8)
   status = ttk.Label(frm, text="Pick the SD card and press Make covers.")
-  status.grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 6))
+  status.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 6))
 
   body = ttk.Frame(frm)
-  body.grid(row=5, column=0, columnspan=3, sticky="nsew")
+  body.grid(row=6, column=0, columnspan=3, sticky="nsew")
   body.columnconfigure(0, weight=1)
   body.rowconfigure(0, weight=1)
   tree = ttk.Treeview(body, columns=("result", "source"), show="tree headings", selectmode="browse")
@@ -770,6 +884,8 @@ def gui(args):
     wargs.sdroot, wargs.images = sd, images
     wargs.no_download, wargs.no_checksum, wargs.force = not dlvar.get(), not ckvar.get(), forcevar.get()
     wargs.dry_run = False
+    wargs.no_cheats = not cheatvar.get()
+    wargs.firmware = BOARDS[fwnames.index(fwvar.get()) - 1] if fwvar.get() != fwnames[0] else None
     tree.delete(*tree.get_children())
     state["rows"].clear()
     prog.configure(value=0, maximum=1)
