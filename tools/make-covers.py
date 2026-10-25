@@ -47,7 +47,7 @@ try:
 except ImportError:
   sys.exit("Pillow is required: pip install pillow")
 
-VERSION = "1.3.0"            # Of the tool (shown in the window and --version)
+VERSION = "1.3.1"            # Of the tool (shown in the window and --version)
 
 COVER_MAGIC = 0x56434653
 COVER_VERSION = 2
@@ -537,11 +537,14 @@ class RetroCheats:
 # github.com/davidgfnet/superfw-cheats: only Code Breaker codes ("AAAAAAAA+VVVV"
 # or "AAAAAAAAVVVV"), opcode 9 (encrypted) rejected, addresses only in RAM and
 # I/O, and no master/hook codes (opcodes 0 and 1: SuperFW runs cheats on VBlank).
+# Patch codes (opcode 5) count halfwords, 3 per data code, as the firmware,
+# mGBA and VBA-M read them (conv-retro.py counts bytes).
 CB_RANGES = ((0x02000000, 0x0203FFFF), (0x03000000, 0x03007FFF), (0x04000000, 0x040003FF),
              (0x05000000, 0x050003FF), (0x06000000, 0x06017FFF), (0x07000000, 0x070003FF))
 CB_MAX_CODES = 30     # Cheats with more codes are skipped by the firmware
-# Patch codes (opcode 5) are left out too: the firmware's loader and runner
-# do not agree on their data length yet (src/cheats.c, src/cheat_exec.S).
+
+def cb_patch_codes(value):
+  return (value + 2) // 3
 
 def cb_decode(s):
   if any(ch not in "0123456789ABCDEFabcdef +:" for ch in s):
@@ -565,10 +568,12 @@ def cb_valid(codes):
     if op == 9:
       return False
     if op == 4:
+      if i + 1 > len(codes):
+        return False       # The firmware would reject the whole file
       i += 1
     elif op == 5:
-      n = (value + 5) // 6
-      if i + n >= len(codes):
+      n = cb_patch_codes(value)
+      if not value or i + n > len(codes):
         return False
       i += n
     if op not in (0, 1, 13) and not any(lo <= (addr & 0x0FFFFFFF) <= hi for lo, hi in CB_RANGES):
@@ -586,7 +591,7 @@ def cb_drop_master(codes):
     if op == 4:
       n = 2
     elif op == 5:
-      n = 1 + (codes[i][1] + 5) // 6
+      n = 1 + cb_patch_codes(codes[i][1])
     out.extend(codes[i:i + n])
     i += n
   return out
@@ -606,7 +611,7 @@ def convert_retro_cheats(text):
       codes = cb_decode(m.group(1))
       if codes and cb_valid(codes):
         codes = cb_drop_master(codes)
-        if codes and len(codes) <= CB_MAX_CODES and not any(a >> 28 == 5 for a, _ in codes):
+        if codes and len(codes) <= CB_MAX_CODES:
           out.append("%s\n%s\n" % (desc, " ".join("%08X+%04X" % c for c in codes)))
       desc = None
   return "".join(out) if out else None

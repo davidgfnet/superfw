@@ -34,32 +34,34 @@ bool predecode_cheats(uint32_t *codes, unsigned cnt) {
       .value = codes[2*i+1],
       .address = codes[2*i] & 0xFFFFFFF,
     };
-    h.blen = (h.opcode == 4 * 2) ? 16 :
-             (h.opcode == 5 * 2) ? (h.value + 1) * 8 :
-             8;
+    // Extra codes: one for opc4 (slide parameters). Opc5 (patch) writes
+    // `value` halfwords, three per extra code (address word, then value),
+    // as Code Breaker, mGBA and VBA-M do.
+    unsigned extra = (h.opcode == 4 * 2) ? 1 :
+                     (h.opcode == 5 * 2) ? (h.value + 2) / 3 :
+                     0;
+    h.blen = 8 * (extra + 1);
 
     // Overwrite buffer with the new format
     memcpy(&codes[2*i], &h, sizeof(h));
 
-    // The extra codes these opcodes consume must be there (the count comes
-    // from the cheat file, it could point past the parsed codes).
-    if (h.opcode == 4 * 2) {
-      if (i + 1 >= cnt)
-        return false;
-      i++;                    // Extra addr + value for opc4
-    }
-    else if (h.opcode == 5 * 2) {
-      if (i + h.value >= cnt)
+    // The extra codes must be there (the count comes from the cheat file, it
+    // could point past the parsed codes). A zero length patch code would make
+    // cheat_cc_opc5 count down from zero: reject it too.
+    if (i + extra >= cnt)
+      return false;
+    if (h.opcode == 5 * 2) {
+      if (!h.value)
         return false;
       // Extra buffer. We perform some endianess conversion here.
-      for (unsigned j = 0; j < h.value; j++) {
-        i++;
-        uint32_t addr = codes[2*i];
-        uint16_t valu = codes[2*i+1];
-        codes[2*i] = __builtin_bswap32(addr);
-        codes[2*i+1] = __builtin_bswap16(valu);
+      for (unsigned j = 1; j <= extra; j++) {
+        uint32_t addr = codes[2*(i+j)];
+        uint16_t valu = codes[2*(i+j)+1];
+        codes[2*(i+j)] = __builtin_bswap32(addr);
+        codes[2*(i+j)+1] = __builtin_bswap16(valu);
       }
     }
+    i += extra;
   }
   return true;
 }

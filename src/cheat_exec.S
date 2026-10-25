@@ -166,7 +166,7 @@ cheat_cc_opc4:               // Slide code, fills a buffer with some data patter
 
 cheat_cc_opc5:               // Super code
   push {r4-r6}
-1:                           // Assuming itertion count is not zero
+1:                           // Count is not zero (predecode_cheats rejects it)
   ldr  r5, [r0]
   ldrh r6, [r0, #4]
   add r0, #8                 // Skip the next code (it's a payload) already
@@ -177,7 +177,7 @@ cheat_cc_opc5:               // Super code
   beq 2f
 
   lsr r5, #16
-  strh r3, [r1]
+  strh r5, [r1]
   add r1, $2
   sub r2, $1                 // Decrement count
   beq 2f

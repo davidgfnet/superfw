@@ -161,7 +161,7 @@ def png_bytes(color):
   return buf.getvalue()
 
 # A libretro cheat file with usable and unusable codes (like Emerald's).
-RETRO_CHT = '''cheats = 7
+RETRO_CHT = '''cheats = 8
 
 cheat0_desc = "Master Code"
 cheat0_code = "D8BAE4D9+4864DCE5+A86CDBA5+19BA49B3"
@@ -188,8 +188,12 @@ cheat5_code = "1000ABCD+0007+3203A000+0001"
 cheat5_enable = false
 
 cheat6_desc = "Patch code"
-cheat6_code = "520330CC+0002+04DDF608+0000"
+cheat6_code = "520330CC+0004+04DDF608+0000+12345678+0000+83001000+00FF"
 cheat6_enable = false
+
+cheat7_desc = "Patch code, data missing"
+cheat7_code = "520330CC+0004+04DDF608+0000"
+cheat7_enable = false
 '''
 
 class RetroConversion(unittest.TestCase):
@@ -197,7 +201,8 @@ class RetroConversion(unittest.TestCase):
     out = mc.convert_retro_cheats(RETRO_CHT)
     self.assertEqual(out, "Max Money\n82000568+423F 8200056A+000F\n"
                           "No Random Battle\n320375D4+0000\n"
-                          "With hook\n3203A000+0001\n")
+                          "With hook\n3203A000+0001\n"
+                          "Patch code\n520330CC+0004 04DDF608+0000 12345678+0000 83001000+00FF\n")
 
   def test_find(self):
     retro = mc.RetroCheats(tempfile.mkdtemp())
@@ -225,6 +230,7 @@ class RetroConversion(unittest.TestCase):
 
   def test_nothing_usable(self):
     self.assertIsNone(mc.convert_retro_cheats('cheat0_desc = "x"\ncheat0_code = "9000ABCD+0001"\n'))
+    self.assertIsNone(mc.convert_retro_cheats('cheat0_desc = "x"\ncheat0_code = "4300ABCD+0001"\n'))
 
 class EndToEnd(unittest.TestCase):
   # Runs the whole tool on a fake SD card with the network replaced.

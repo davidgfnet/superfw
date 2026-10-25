@@ -151,9 +151,8 @@ to `/.superfw/cheats/` (named `<game code>-<version>.cht`, as SuperFW looks for
 them). Games that database does not have (Pokemon Emerald, for one) get
 libretro's Code Breaker cheats instead
 (https://github.com/libretro/libretro-database), converted with the database's
-own rules: only plain Code Breaker codes that write to RAM, no master codes
-and, for now, no patch codes (opcode 5). Only cheats for the same game, region
-and revision are used. Cheat files already on the card are never overwritten,
+own rules: only plain Code Breaker codes that write to RAM and no master
+codes. Only cheats for the same game, region and revision are used. Cheat files already on the card are never overwritten,
 so edited ones are kept; `--no-cheats` skips this. With `--firmware chis` (or `sd`, `lite`)
 it also copies the latest SuperFW firmware for that board to the card root,
 ready to be flashed from the SD browser. The window has both options too.
@@ -272,7 +271,9 @@ constraints:
    save, savestate, config and patch file names made from them always fit.
  - Maximum number of files+dirs in a directory: 16384
  - Cheats: titles are cut at 251 bytes, cheats with more than 30 codes are
-   skipped (the other cheats in the file still load).
+   skipped (the other cheats in the file still load). Patch codes
+   (`5aaaaaaa cccc`) write `cccc` halfwords, three per following code, as in
+   mGBA and VBA-M.
  - Carousel: up to 4096 games, in the browsed folder and up to 7 levels of
    subfolders below it.
 
