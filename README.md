@@ -142,11 +142,6 @@ identify (hacks, homebrew, bad dumps) are matched by file name instead. Use
 
 `--gui` opens a window instead: pick the SD card, then it shows the progress,
 the box art picked for every game and a preview of each cover as the cart
-<<<<<<< HEAD
-shows it. The tool can also be packaged as a program that needs no Python
-(PyInstaller, works on Windows, macOS and Linux); started without arguments
-it opens the window (the Windows .exe on the SD card root picks that card):
-=======
 shows it.
 
 It also adds the cheats of the GBA games on the card: it downloads the
@@ -158,20 +153,9 @@ are kept; `--no-cheats` skips this. With `--firmware chis` (or `sd`, `lite`)
 it also copies the latest SuperFW firmware for that board to the card root,
 ready to be flashed from the SD browser. The window has both options too.
 
-Ready to use programs (no Python needed, always the latest version, built by
-GitHub Actions, checksums in
-[SHA256SUMS.txt](https://github.com/Crivons1/superfw/releases/download/make-covers-latest/SHA256SUMS.txt)):
-
- - Windows: [make-covers.exe](https://github.com/Crivons1/superfw/releases/download/make-covers-latest/make-covers.exe)
- - macOS: [make-covers-macos.zip](https://github.com/Crivons1/superfw/releases/download/make-covers-latest/make-covers-macos.zip)
-   (the first time, right-click the app and choose Open)
- - Linux: [make-covers-linux](https://github.com/Crivons1/superfw/releases/download/make-covers-latest/make-covers-linux)
-   (`chmod +x` it first)
-
-Double-clicked they open the window (on Windows, if the .exe sits on the SD
-card it picks that card); with arguments they work like the Python script.
-To build one yourself:
->>>>>>> 3354e1a (Cover maker: add the cheats of the GBA games, optionally copy the firmware)
+The tool can also be packaged as a program that needs no Python
+(PyInstaller, works on Windows, macOS and Linux); started without arguments
+it opens the window (the Windows .exe on the SD card root picks that card):
 
     pip install pyinstaller pillow
     pyinstaller --onefile --console --name make-covers tools/make-covers.py
