@@ -177,7 +177,7 @@ cheat_cc_opc5:               // Super code
   beq 2f
 
   lsr r5, #16
-  strh r3, [r1]
+  strh r5, [r1]
   add r1, $2
   sub r2, $1                 // Decrement count
   beq 2f
