@@ -270,7 +270,7 @@ unsigned flush_pending_sram() {
   for (unsigned i = strlen(content) + 1; i < l + 1; ) {
     if (!strncmp(&content[i], "backup_count=", 13))
       bkpn = &content[i + 13];
-    i += strlen(content) + 1;
+    i += strlen(&content[i]) + 1;
   }
 
   // Parse options.
