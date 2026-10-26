@@ -29,30 +29,42 @@
 // Preprocessing cheats, includes a proper header and pre-formats some payloads.
 bool predecode_cheats(uint32_t *codes, unsigned cnt) {
   for (unsigned i = 0; i < cnt; i++) {
-    t_cheat_predec h = {
-      .opcode = ((codes[2*i] >> 28) & 0xF) * 2,    // Opcode scaled by 2
-      .value = codes[2*i+1],
-      .address = codes[2*i] & 0xFFFFFFF,
+    const uint8_t op2 = ((codes[2*i] >> 28) & 0xF) * 2;    // Opcode scaled by 2
+    const uint32_t addr28 = codes[2*i] & 0xFFFFFFF;
+    const uint16_t val16 = codes[2*i+1];
+
+    // Some opcodes carry extra payload chunks.
+    const uint16_t pllen = (op2 == 4 * 2) ? 1 :
+                           (op2 == 5 * 2) ? (val16 + 2) / 3 :
+                            0;
+    if (pllen >= 255 / 8 || i + pllen >= cnt)
+      return false;
+
+    const t_cheat_predec h = {
+      .opcode = op2,
+      .blen = (1 + pllen) * 8,
+      .value = val16,
+      .address = addr28,
     };
-    h.blen = (h.opcode == 4 * 2) ? 16 :
-             (h.opcode == 5 * 2) ? (h.value + 1) * 8 :
-             8;
 
     // Overwrite buffer with the new format
     memcpy(&codes[2*i], &h, sizeof(h));
 
-    if (h.opcode == 4 * 2)
-      i++;                    // Extra addr + value for opc4
-    else if (h.opcode == 5 * 2) {
+    if (h.opcode == 5 * 2) {
+      // This is an invalid cheat code
+      if (!val16)
+        return false;
+
       // Extra buffer. We perform some endianess conversion here.
-      for (unsigned j = 0; j < h.value; j++) {
-        i++;
-        uint32_t addr = codes[2*i];
-        uint16_t valu = codes[2*i+1];
-        codes[2*i] = __builtin_bswap32(addr);
-        codes[2*i+1] = __builtin_bswap16(valu);
+      for (unsigned j = 1; j <= pllen; j++) {
+        uint32_t addr = codes[2*(i+j)];
+        uint16_t valu = codes[2*(i+j)+1];
+        codes[2*(i+j)] = __builtin_bswap32(addr);
+        codes[2*(i+j)+1] = __builtin_bswap16(valu);
       }
     }
+
+    i += pllen;
   }
   return true;
 }

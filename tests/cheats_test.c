@@ -35,6 +35,7 @@ FRESULT f_close (FIL* fp) {
 
 const uint32_t cheat4_extra[] = { 0x0101000F, 0x00000002 };  // Code 4 (slide code)
 const uint32_t cheat5_extra[] = { 0x78563412, 0x0000CDAB, 0x21436587, 0x00003412 };  // Code 5, copy buffer
+const uint32_t cheat6_extra[] = { 0x44332211, 0x0000BBAA };  // Another code 5 (only 2 half words in use)
 
 const t_cheat_predec cheat1[] = {{ .opcode = 3, .blen = 8, .value = 0x0123, .address = 0x0300ABCD}};
 const t_cheat_predec cheat2[] = {{ .opcode = 8, .blen = 8, .value = 0xABCD, .address = 0x03123456}};
@@ -45,7 +46,12 @@ const t_cheat_predec cheat3[] = {
   { .opcode = 3, .blen = 8, .value = 0x0040, .address = 0x0300AB04},
 };
 const t_cheat_predec cheat4[] = {{ .opcode = 4, .blen = 16, .value = 0x0101, .address = 0x03002C2E}};
-const t_cheat_predec cheat5[] = {{ .opcode = 5, .blen = 24, .value = 0x0002, .address = 0x03002C2E }};
+const t_cheat_predec cheat5[] = {{ .opcode = 5, .blen = 24, .value = 0x0006, .address = 0x03002C2E }};
+const t_cheat_predec cheat6[] = {
+  { .opcode = 5, .blen = 16, .value = 0x0002, .address = 0x03002C2A },
+  { 0 },
+  { .opcode = 8, .blen = 8, .value = 0x00FF, .address = 0x03001000 },
+};
 
 const struct {
   const char *title;
@@ -59,6 +65,7 @@ const struct {
   { "Third cheat", 4, cheat3 },
   { "Some real char using a slide code", 2, cheat4, cheat4_extra, 2 },
   { "Buffer write cheat", 3, cheat5, cheat5_extra, 4 },
+  { "Write 2", 3, cheat6, cheat6_extra, 2 },
 };
 
 int main() {
@@ -69,6 +76,9 @@ int main() {
   assert(open_read_cheats(tmp, sizeof(tmp), "data/bad2.cht") < 0);
   assert(open_read_cheats(tmp, sizeof(tmp), "data/bad3.cht") < 0);
   assert(open_read_cheats(tmp, sizeof(tmp), "data/bad4.cht") < 0);
+  assert(open_read_cheats(tmp, sizeof(tmp), "data/bad5.cht") < 0);
+  assert(open_read_cheats(tmp, sizeof(tmp), "data/bad6.cht") < 0);
+  assert(open_read_cheats(tmp, sizeof(tmp), "data/bad7.cht") < 0);
 
   int ret = open_read_cheats(tmp, sizeof(tmp), "data/test.cht");
   assert(ret >= 0);
