@@ -1151,7 +1151,7 @@ void setup_video_frame() {
   REG_BG2Y = 0;
 
   // Setup palettes
-  memory_copy16((uint16_t*)&MEM_PALETTE[1], logo_pal, sizeof(logo_pal) >> 1);
+  init_logo_palette(&MEM_PALETTE[1]);
   MEM_PALETTE[FG_COLOR] = ingame_menu_palette[0];
   MEM_PALETTE[BG_COLOR] = ingame_menu_palette[1];
   MEM_PALETTE[HI_COLOR] = ingame_menu_palette[2];

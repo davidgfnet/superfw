@@ -60,7 +60,7 @@ typedef struct {
 // Looks up block info for a character code.
 static bool lookup_chptr(uint32_t code, t_char_render_info *chinfo) {
   // Add here any font database pointers as you wish, they are looked up in order.
-  void *font_dblist[] = {
+  const void *font_dblist[] = {
     font_ascii_embedded,
     font_base_addr,
   };

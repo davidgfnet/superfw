@@ -1136,6 +1136,8 @@ static void browser_reload() {
     dma_memcpy16(e->fname, info.fname, MAX_FN_LEN/2);
     sortable_utf8_u16(info.fname, e->sortname);
   }
+  f_closedir(&d);
+
   smenu.browser.maxentries = fcount;
 
   // Filter and sort list of files/dirs
