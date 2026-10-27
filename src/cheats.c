@@ -26,12 +26,20 @@
 
 #pragma GCC optimize ("Os")
 
+typedef struct {
+  uint32_t addr;
+  uint16_t value;
+  uint16_t _pad;
+} t_cheat_raw;
+
+_Static_assert(sizeof(t_cheat_raw) == sizeof(t_cheat_predec), "in-place predecode");
+
 // Preprocessing cheats, includes a proper header and pre-formats some payloads.
-bool predecode_cheats(uint32_t *codes, unsigned cnt) {
+bool predecode_cheats(t_cheat_raw *codes, unsigned cnt) {
   for (unsigned i = 0; i < cnt; i++) {
-    const uint8_t op2 = ((codes[2*i] >> 28) & 0xF) * 2;    // Opcode scaled by 2
-    const uint32_t addr28 = codes[2*i] & 0xFFFFFFF;
-    const uint16_t val16 = codes[2*i+1];
+    const uint8_t op2 = ((codes[i].addr >> 28) & 0xF) * 2;    // Opcode scaled by 2
+    const uint32_t addr28 = codes[i].addr & 0xFFFFFFF;
+    const uint16_t val16 = codes[i].value;
 
     // Some opcodes carry extra payload chunks.
     const uint16_t pllen = (op2 == 4 * 2) ? 1 :
@@ -48,7 +56,7 @@ bool predecode_cheats(uint32_t *codes, unsigned cnt) {
     };
 
     // Overwrite buffer with the new format
-    memcpy(&codes[2*i], &h, sizeof(h));
+    memcpy(&codes[i], &h, sizeof(h));
 
     if (h.opcode == 5 * 2) {
       // This is an invalid cheat code
@@ -57,10 +65,8 @@ bool predecode_cheats(uint32_t *codes, unsigned cnt) {
 
       // Extra buffer. We perform some endianess conversion here.
       for (unsigned j = 1; j <= pllen; j++) {
-        uint32_t addr = codes[2*(i+j)];
-        uint16_t valu = codes[2*(i+j)+1];
-        codes[2*(i+j)] = __builtin_bswap32(addr);
-        codes[2*(i+j)+1] = __builtin_bswap16(valu);
+        codes[i+j].addr  = __builtin_bswap32(codes[i+j].addr);
+        codes[i+j].value = __builtin_bswap16(codes[i+j].value);
       }
     }
 
@@ -88,8 +94,8 @@ static bool parse_hex(const char *s, uint32_t *val, unsigned nibcnt) {
   return true;
 }
 
-// Parses RAW codes into a uint32 buffer
-int parse_cheat_codes(const char *s, uint32_t *codes) {
+// Parses RAW codes into a raw cheat buffer
+int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
   // Codes are in the format:
   // 0123ABCD+67EF 125634AB+78CD ....
   // We parse them assuming that the separators are space or plus. We admit multiple separators.
@@ -112,8 +118,9 @@ int parse_cheat_codes(const char *s, uint32_t *codes) {
     s += 4;  // Consume the hex16
 
     // A full code (addr+val) has been parsed, just write it raw into the buffer.
-    *codes++ = addr;
-    *codes++ = val;
+    codes->addr = addr;
+    codes->value = val;
+    codes++;
     cnt++;
 
     while (*s == ' ' || *s == '+') s++;      // Skip trailing separators
@@ -177,7 +184,7 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
         chdr.h.codelen = 0;
       } else {
         // Parse the cheat codes (in hex), and generate the respective code.
-        uint32_t codes[74];  // Enough codes for a 1024 byte cheat line.
+        t_cheat_raw codes[86];  // Enough codes for a 1024 byte cheat line.
         memset(codes, 0, sizeof(codes));
         int numcodes = parse_cheat_codes(tmp, codes);
         if (numcodes < 0)
