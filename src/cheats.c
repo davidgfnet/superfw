@@ -140,12 +140,14 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
   unsigned bufsz = 4;
 
   // Parse the file line by line, using a temp buffer.
-  do {
+  while (1) {
     if (bcount <= 512) {
       UINT rdbytes;
       if (FR_OK != f_read(&fd, &tmp[bcount], 512, &rdbytes))
         return -1;
       bcount += rdbytes;
+      if (!bcount)
+        break;
       tmp[bcount] = 0;
     }
 
@@ -153,8 +155,6 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
     char *p = strchr(tmp, '\n');
     if (!p) 
       p = strchr(tmp, '\0');
-    if (!p)
-      break;       // Some path is way too long!
 
     *p = 0;        // Add the string end char.
 
@@ -203,9 +203,13 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
 
     // Consume bytes
     unsigned cnt = strlen(tmp) + 1;
-    memmove(&tmp[0], &tmp[cnt], bcount - cnt);
-    bcount -= cnt;
-  } while (bcount);
+    if (bcount < cnt)
+      bcount = 0;
+    else {
+      memmove(&tmp[0], &tmp[cnt], bcount - cnt + 1);
+      bcount -= cnt;
+    }
+  }
 
   f_close(&fd);
   return bufsz;
