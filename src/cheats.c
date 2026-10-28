@@ -131,7 +131,7 @@ int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
 
 // Reads a cheat file into a temp buffer (usually in SDRAM) and returns the size in bytes
 // Returns -1 if the file is not found or the cheats cannot be loaded.
-// Cheats are limited to 512 byte lines (~63 codes per line, or 42 depending how packed they are).
+// Cheats are limited to 512 byte lines (~42 codes per line, or 36 depending how packed they are).
 int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_READ);
@@ -189,7 +189,7 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
         chdr.h.codelen = 0;
       } else {
         // Parse the cheat codes (in hex), and generate the respective code.
-        t_cheat_raw codes[42];  // Enough codes for a 512 byte cheat line.
+        t_cheat_raw codes[42+1];  // Enough codes for a 512 byte cheat line.
         memset(codes, 0, sizeof(codes));
         int numcodes = parse_cheat_codes(tmp, codes);
         if (numcodes < 0)
