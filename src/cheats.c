@@ -178,7 +178,7 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
       // Fill entry, string or cheat codes.
       if (parse_name) {
         // Fill title and header.
-        strcpy(chdr.title, s);
+        strbcpy(chdr.title, s, sizeof(chdr.title));
         chdr.h.slen = (strlen(chdr.title) + 1 + 3) & ~3U;  // Word aligned!
         chdr.h.enabled = 0;
         chdr.h.codelen = 0;

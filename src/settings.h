@@ -29,6 +29,18 @@ typedef struct {
   uint16_t mask;
 } t_combo_key;
 
+typedef struct {
+  uint16_t fg_color;     // Foreground elements color
+  uint16_t bg_color;     // Background color
+  uint16_t ft_color;     // Font color
+  uint16_t hi_color;     // Item/Buttom highlight
+  uint16_t hi_blend;     // Menu highlight color (browser)
+  uint16_t sh_color;     // Menu shadow/disabled color
+} t_theme_colors;
+
+#define THEME_COUNT 6
+extern const t_theme_colors themes[THEME_COUNT];
+
 extern const t_combo_key hotkey_list[13];
 #define hotkey_listcnt (sizeof(hotkey_list)/sizeof(hotkey_list[0]))
 

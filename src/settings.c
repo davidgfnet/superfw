@@ -30,6 +30,15 @@
 unsigned lang_lookup(uint16_t code);
 uint16_t lang_getcode();
 
+const t_theme_colors themes[THEME_COUNT] = {
+  { RGB2GBA(0xaaaaaa), RGB2GBA(0xffffff), RGB2GBA(0x000000), RGB2GBA(0xcccccc), RGB2GBA(0x9999bb), RGB2GBA(0xc08888) }, // White
+  { RGB2GBA(0xeca551), RGB2GBA(0xe7c092), RGB2GBA(0x000000), RGB2GBA(0xbda27b), RGB2GBA(0x90816e), RGB2GBA(0x615d58) }, // Orange
+  { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) }, // Blue
+  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) }, // Green
+  { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) }, // Purple
+  { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) }, // Dark
+};
+
 const t_combo_key hotkey_list[] = {
   {"L+R+Start",     0x00F7},
   {"L+R+Select",    0x00FB},
@@ -232,16 +241,17 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
     static const struct {
       const char *s;
       uint8_t * const var;
+      unsigned maxval;
     } uintset[] = {
-      { "theme",       &menu_theme },
-      { "recent_menu", &recent_menu },
-      { "hide_hidden", &hide_hidden },
-      { "anim_speed",  &anim_speed },
+      { "theme",       &menu_theme,  THEME_COUNT },
+      { "recent_menu", &recent_menu, 1 },
+      { "hide_hidden", &hide_hidden, 1 },
+      { "anim_speed",  &anim_speed,  animspd_cnt },
     };
     unsigned valu = parseuint(value);
     for (unsigned i = 0; i < sizeof(uintset)/sizeof(uintset[0]); i++)
       if (!strcmp(var, uintset[i].s)) {
-        *uintset[i].var = valu;
+        *uintset[i].var = valu < uintset[i].maxval ? valu : 0;
         break;
       }
   }

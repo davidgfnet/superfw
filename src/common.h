@@ -35,6 +35,12 @@
 #define ROUND_UP2(x, a)     ( (((x) + (a) - 1) & (~(a - 1))) )
 #define DIV_ROUND_UP(x, a)  ( (((x) + (a) - 1) / (a)) )
 
+#define RGB2GBA(color)   (            \
+  (((color) & 0xF80000) >> 19) |      \
+  (((color) & 0x00F800) >>  6) |      \
+  (((color) & 0x0000F8) <<  7)        \
+)
+
 // Bitmap stuff
 #define BMSIZE(nbits, type)    (((nbits) + (sizeof(type) * 8 - 1)) / (sizeof(type) * 8))
 #define BM_IDX(bm, n)          ((n) / (sizeof((bm)[0]) * 8))
