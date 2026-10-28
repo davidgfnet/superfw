@@ -26,33 +26,51 @@
 
 #pragma GCC optimize ("Os")
 
+typedef struct {
+  uint32_t addr;
+  uint16_t value;
+  uint16_t _pad;
+} t_cheat_raw;
+
+_Static_assert(sizeof(t_cheat_raw) == sizeof(t_cheat_predec), "in-place predecode");
+
 // Preprocessing cheats, includes a proper header and pre-formats some payloads.
-bool predecode_cheats(uint32_t *codes, unsigned cnt) {
+bool predecode_cheats(t_cheat_raw *codes, unsigned cnt) {
   for (unsigned i = 0; i < cnt; i++) {
-    t_cheat_predec h = {
-      .opcode = ((codes[2*i] >> 28) & 0xF) * 2,    // Opcode scaled by 2
-      .value = codes[2*i+1],
-      .address = codes[2*i] & 0xFFFFFFF,
+    const uint8_t op2 = ((codes[i].addr >> 28) & 0xF) * 2;    // Opcode scaled by 2
+    const uint32_t addr28 = codes[i].addr & 0xFFFFFFF;
+    const uint16_t val16 = codes[i].value;
+
+    // Some opcodes carry extra payload chunks.
+    const uint16_t pllen = (op2 == 4 * 2) ? 1 :
+                           (op2 == 5 * 2) ? (val16 + 2) / 3 :
+                            0;
+    if (pllen >= 255 / 8 || i + pllen >= cnt)
+      return false;
+
+    const t_cheat_predec h = {
+      .opcode = op2,
+      .blen = (1 + pllen) * 8,
+      .value = val16,
+      .address = addr28,
     };
-    h.blen = (h.opcode == 4 * 2) ? 16 :
-             (h.opcode == 5 * 2) ? (h.value + 1) * 8 :
-             8;
 
     // Overwrite buffer with the new format
-    memcpy(&codes[2*i], &h, sizeof(h));
+    memcpy(&codes[i], &h, sizeof(h));
 
-    if (h.opcode == 4 * 2)
-      i++;                    // Extra addr + value for opc4
-    else if (h.opcode == 5 * 2) {
+    if (h.opcode == 5 * 2) {
+      // This is an invalid cheat code
+      if (!val16)
+        return false;
+
       // Extra buffer. We perform some endianess conversion here.
-      for (unsigned j = 0; j < h.value; j++) {
-        i++;
-        uint32_t addr = codes[2*i];
-        uint16_t valu = codes[2*i+1];
-        codes[2*i] = __builtin_bswap32(addr);
-        codes[2*i+1] = __builtin_bswap16(valu);
+      for (unsigned j = 1; j <= pllen; j++) {
+        codes[i+j].addr  = __builtin_bswap32(codes[i+j].addr);
+        codes[i+j].value = __builtin_bswap16(codes[i+j].value);
       }
     }
+
+    i += pllen;
   }
   return true;
 }
@@ -76,8 +94,8 @@ static bool parse_hex(const char *s, uint32_t *val, unsigned nibcnt) {
   return true;
 }
 
-// Parses RAW codes into a uint32 buffer
-int parse_cheat_codes(const char *s, uint32_t *codes) {
+// Parses RAW codes into a raw cheat buffer
+int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
   // Codes are in the format:
   // 0123ABCD+67EF 125634AB+78CD ....
   // We parse them assuming that the separators are space or plus. We admit multiple separators.
@@ -100,8 +118,9 @@ int parse_cheat_codes(const char *s, uint32_t *codes) {
     s += 4;  // Consume the hex16
 
     // A full code (addr+val) has been parsed, just write it raw into the buffer.
-    *codes++ = addr;
-    *codes++ = val;
+    codes->addr = addr;
+    codes->value = val;
+    codes++;
     cnt++;
 
     while (*s == ' ' || *s == '+') s++;      // Skip trailing separators
@@ -112,6 +131,7 @@ int parse_cheat_codes(const char *s, uint32_t *codes) {
 
 // Reads a cheat file into a temp buffer (usually in SDRAM) and returns the size in bytes
 // Returns -1 if the file is not found or the cheats cannot be loaded.
+// Cheats are limited to 512 byte lines (~42 codes per line, or 36 depending how packed they are).
 int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_READ);
@@ -128,12 +148,14 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
   unsigned bufsz = 4;
 
   // Parse the file line by line, using a temp buffer.
-  do {
+  while (1) {
     if (bcount <= 512) {
       UINT rdbytes;
       if (FR_OK != f_read(&fd, &tmp[bcount], 512, &rdbytes))
         return -1;
       bcount += rdbytes;
+      if (!bcount)
+        break;
       tmp[bcount] = 0;
     }
 
@@ -141,8 +163,10 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
     char *p = strchr(tmp, '\n');
     if (!p) 
       p = strchr(tmp, '\0');
-    if (!p)
-      break;       // Some path is way too long!
+
+    // Reject any cheats with lines over 512 bytes!
+    if (p - tmp > 512)
+      return -1;
 
     *p = 0;        // Add the string end char.
 
@@ -159,13 +183,13 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
       // Fill entry, string or cheat codes.
       if (parse_name) {
         // Fill title and header.
-        strcpy(chdr.title, s);
-        chdr.h.slen = (strlen(chdr.title) + 1 + 3) & ~3U;  // Word aligned!
+        strbcpy(chdr.title, s, sizeof(chdr.title));
+        chdr.h.slen = (strlen(chdr.title) + 1 + 3) / 4;  // Word count
         chdr.h.enabled = 0;
         chdr.h.codelen = 0;
       } else {
         // Parse the cheat codes (in hex), and generate the respective code.
-        uint32_t codes[74];  // Enough codes for a 1024 byte cheat line.
+        t_cheat_raw codes[42+1];  // Enough codes for a 512 byte cheat line.
         memset(codes, 0, sizeof(codes));
         int numcodes = parse_cheat_codes(tmp, codes);
         if (numcodes < 0)
@@ -174,14 +198,14 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
         if (!predecode_cheats(codes, numcodes))
           return -1;
         // Each code takes 8 bytes
-        chdr.h.codelen = 8 * (numcodes + 1);
+        chdr.h.codelen = numcodes + 1;
 
         { // Copy the data to the actual buffer.
-          unsigned pheadl = sizeof(t_cheathdr) + chdr.h.slen;
+          unsigned pheadl = sizeof(t_cheathdr) + chdr.h.slen * 4;
           memcpy32(&buffer[bufsz], &chdr, pheadl);
-          memcpy32(&buffer[bufsz + pheadl], codes, chdr.h.codelen);
+          memcpy32(&buffer[bufsz + pheadl], codes, chdr.h.codelen * 8);
 
-          bufsz += pheadl + chdr.h.codelen;
+          bufsz += pheadl + chdr.h.codelen * 8;
           (*bufhd)++;
         }
       }
@@ -191,9 +215,13 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
 
     // Consume bytes
     unsigned cnt = strlen(tmp) + 1;
-    memmove(&tmp[0], &tmp[cnt], bcount - cnt);
-    bcount -= cnt;
-  } while (bcount);
+    if (bcount < cnt)
+      bcount = 0;
+    else {
+      memmove(&tmp[0], &tmp[cnt], bcount - cnt + 1);
+      bcount -= cnt;
+    }
+  }
 
   f_close(&fd);
   return bufsz;

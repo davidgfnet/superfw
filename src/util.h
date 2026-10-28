@@ -22,6 +22,9 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
+// Bounded strcpy (like strlcpy or similar, but size must be 1+)
+void strbcpy(char *dst, const char *src, unsigned size);
+
 // Performs a heap sort of a word-aligned array, with elements being exactly
 // `size` words in size.
 void heapsort4(

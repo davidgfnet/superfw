@@ -26,14 +26,20 @@
 #include "config.h"
 #include "emu.h"
 
-#define MAX(a, b) ((a > b) ? (a) : (b))
-#define MIN(a, b) ((a < b) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #define ARRAY_SIZE(arr)  (sizeof((arr)) / sizeof(((arr))[0]))
 
 #define ROUND_UP(x, a)      ( (((x) + (a) - 1) / (a)) * (a) )
 #define ROUND_UP2(x, a)     ( (((x) + (a) - 1) & (~(a - 1))) )
 #define DIV_ROUND_UP(x, a)  ( (((x) + (a) - 1) / (a)) )
+
+#define RGB2GBA(color)   (            \
+  (((color) & 0xF80000) >> 19) |      \
+  (((color) & 0x00F800) >>  6) |      \
+  (((color) & 0x0000F8) <<  7)        \
+)
 
 // Bitmap stuff
 #define BMSIZE(nbits, type)    (((nbits) + (sizeof(type) * 8 - 1)) / (sizeof(type) * 8))
