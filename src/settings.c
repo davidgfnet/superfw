@@ -30,6 +30,15 @@
 unsigned lang_lookup(uint16_t code);
 uint16_t lang_getcode();
 
+const t_theme_colors themes[THEME_COUNT] = {
+  { RGB2GBA(0xaaaaaa), RGB2GBA(0xffffff), RGB2GBA(0x000000), RGB2GBA(0xcccccc), RGB2GBA(0x9999bb), RGB2GBA(0xc08888) }, // White
+  { RGB2GBA(0xeca551), RGB2GBA(0xe7c092), RGB2GBA(0x000000), RGB2GBA(0xbda27b), RGB2GBA(0x90816e), RGB2GBA(0x615d58) }, // Orange
+  { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) }, // Blue
+  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) }, // Green
+  { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) }, // Purple
+  { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) }, // Dark
+};
+
 const t_combo_key hotkey_list[] = {
   {"L+R+Start",     0x00F7},
   {"L+R+Select",    0x00FB},
@@ -108,10 +117,8 @@ uint32_t rtcvalue_default = 45568800U;
 
 // Setting loading/saving routines
 bool save_ui_settings() {
-  // Create the directory (just in case it doesn't exist
+  // Create the directory (just in case it doesn't exist)
   f_mkdir(SUPERFW_DIR);
-  // Make it hidden
-  f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
   // Proceed to create the file
   FIL fd;
@@ -142,10 +149,8 @@ bool save_ui_settings() {
 }
 
 bool save_settings() {
-  // Create the directory (just in case it doesn't exist
+  // Create the directory (just in case it doesn't exist)
   f_mkdir(SUPERFW_DIR);
-  // Make it hidden
-  f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
   // Proceed to create the file
   FIL fd;
@@ -243,20 +248,22 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
     static const struct {
       const char *s;
       uint8_t * const var;
+      unsigned maxval;
     } uintset[] = {
-      { "theme",       &menu_theme },
-      { "recent_menu", &recent_menu },
-      { "hide_hidden", &hide_hidden },
-      { "anim_speed",  &anim_speed },
-      { "start_tab",   &start_tab },
-      { "show_ext",    &show_ext },
-      { "car_view",    &car_view },
-      { "car_sort",    &car_sort },
+      // Bounds (exclusive): out of range values read as 0. Booleans are 2.
+      { "theme",       &menu_theme,  THEME_COUNT },
+      { "recent_menu", &recent_menu, 2 },
+      { "hide_hidden", &hide_hidden, 2 },
+      { "anim_speed",  &anim_speed,  animspd_cnt },
+      { "start_tab",   &start_tab,   2 },
+      { "show_ext",    &show_ext,    2 },
+      { "car_view",    &car_view,    2 + 16 },    // All, favourites, or one of 16 systems (menu.c)
+      { "car_sort",    &car_sort,    3 },         // CarSortCNT (menu.c)
     };
     unsigned valu = parseuint(value);
     for (unsigned i = 0; i < sizeof(uintset)/sizeof(uintset[0]); i++)
       if (!strcmp(var, uintset[i].s)) {
-        *uintset[i].var = valu;
+        *uintset[i].var = valu < uintset[i].maxval ? valu : 0;
         break;
       }
   }
@@ -374,11 +381,9 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
 }
 
 bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_rom_launch_settings *rlh) {
-  // Create the directory (just in case it doesn't exist
+  // Create the directory (just in case it doesn't exist)
   f_mkdir(SUPERFW_DIR);
   f_mkdir(ROMCONFIG_PATH);
-  // Make it hidden
-  f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
   // Proceed to create the file
   FIL fd;

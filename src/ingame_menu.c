@@ -677,7 +677,7 @@ void draw_cheats_menu(uint8_t *fb, unsigned framen) {
   unsigned off = 4, numdisp = 0;
   for (unsigned i = 0; i < num_cheats && numdisp < 5; i++) {
     t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
-    off += sizeof(t_cheathdr) + e->slen + e->codelen;
+    off += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
 
     if (i >= soff) {
       draw_text(e->enabled ? "☑" : "☐", fb, 9, 40 + 20 * numdisp, HI_COLOR);
@@ -701,9 +701,9 @@ bool update_cheat_table() {
 
   for (unsigned i = 0; i < num_cheats && numenabled < 63; i++) {
     t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
-    off += sizeof(t_cheathdr) + e->slen + e->codelen;
+    off += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
     if (e->enabled) {
-      *tptr++ = (uintptr_t)&e->data[e->slen];
+      *tptr++ = (uintptr_t)&e->data[e->slen * 4];
       numenabled++;
     }
   }
@@ -903,7 +903,7 @@ bool cheat_active_action() {
   unsigned off = 4;
   for (unsigned i = 0; i < copt; i++) {
     t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
-    off += sizeof(t_cheathdr) + e->slen + e->codelen;
+    off += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
   }
 
   t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
@@ -1157,7 +1157,7 @@ void setup_video_frame() {
   REG_BG2Y = 0;
 
   // Setup palettes
-  memory_copy16((uint16_t*)&MEM_PALETTE[1], logo_pal, sizeof(logo_pal) >> 1);
+  init_logo_palette(&MEM_PALETTE[1]);
   MEM_PALETTE[FG_COLOR] = ingame_menu_palette[0];
   MEM_PALETTE[BG_COLOR] = ingame_menu_palette[1];
   MEM_PALETTE[HI_COLOR] = ingame_menu_palette[2];

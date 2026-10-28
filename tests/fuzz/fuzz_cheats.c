@@ -20,9 +20,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   for (unsigned i = 0; i < n; i++) {
     const t_cheathdr *h = (const t_cheathdr*)&p[off];
     assert(off + sizeof(t_cheathdr) <= (unsigned)ret);
-    assert(h->slen && !(h->slen & 3) && h->codelen);
-    assert(memchr(h->data, 0, h->slen));               // Title is terminated
-    off += sizeof(t_cheathdr) + h->slen + h->codelen;
+    // slen counts words (title), codelen 8 byte codes (plus the terminator)
+    assert(h->slen && h->codelen);
+    assert(off + sizeof(t_cheathdr) + h->slen * 4 <= (unsigned)ret);
+    assert(memchr(h->data, 0, h->slen * 4));           // Title is terminated
+    off += sizeof(t_cheathdr) + h->slen * 4 + h->codelen * 8;
     assert(off <= (unsigned)ret);
   }
   assert(off == (unsigned)ret);

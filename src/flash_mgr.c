@@ -110,7 +110,7 @@ bool flashmgr_load(uint32_t baseaddr, unsigned maxsize, t_reg_entry *ndata) {
       uint8_t n = ndata->games[i].blkmap[j];
       if (n) {
         if (n >= NOR_BLOCK_COUNT)
-          return false;      // Not a valid block (and out of the bitmap)
+          return false;      // Invalid block ID!
         if (BM_TEST(blkm, n))
           return false;      // Block is used twice!
         BM_SET(blkm, n);

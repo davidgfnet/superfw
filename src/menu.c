@@ -95,8 +95,8 @@ enum {
 #define CAROUSEL_BG_COLOR  COVER_BG_INDEX_V2   // Tinted background (palette entry)
 
 // Carousel game list: all games under the browser's current dir (recursive).
-#define CAROUSEL_MAX_GAMES  4096
-#define CAROUSEL_POOL_SIZE  (128*1024)     // Relative paths, NUL terminated, word aligned
+#define CAROUSEL_MAX_GAMES  3072           // With the pool, fits t_sdram_state next to the browser lists
+#define CAROUSEL_POOL_SIZE  (96*1024)      // Relative paths, NUL terminated, word aligned
 #define CAROUSEL_MAX_DEPTH     8           // Subdirectory levels scanned
 #define CAROUSEL_CACHE_PATH SUPERFW_DIR "/carousel.cache"
 #define CAROUSEL_CACHE_MAGIC 0x43434653    // "SFCC"
@@ -273,23 +273,6 @@ enum {
   FiMgrCNT
 };
 
-const struct {
-  uint16_t fg_color;     // Foreground elements color
-  uint16_t bg_color;     // Background color
-  uint16_t ft_color;     // Font color
-  uint16_t hi_color;     // Item/Buttom highlight
-  uint16_t hi_blend;     // Menu highlight color (browser)
-  uint16_t sh_color;     // Menu shadow/disabled color
-} themes[] = {
-  { RGB2GBA(0xaaaaaa), RGB2GBA(0xffffff), RGB2GBA(0x000000), RGB2GBA(0xcccccc), RGB2GBA(0x9999bb), RGB2GBA(0xc08888) }, // White
-  { RGB2GBA(0xeca551), RGB2GBA(0xe7c092), RGB2GBA(0x000000), RGB2GBA(0xbda27b), RGB2GBA(0x90816e), RGB2GBA(0x615d58) }, // Orange
-  { RGB2GBA(0x26879c), RGB2GBA(0x8fb1b8), RGB2GBA(0x000000), RGB2GBA(0x5296a5), RGB2GBA(0x1d7f95), RGB2GBA(0x6f8185) }, // Blue
-  { RGB2GBA(0x308855), RGB2GBA(0x88aa99), RGB2GBA(0x000000), RGB2GBA(0x778888), RGB2GBA(0x777777), RGB2GBA(0x606060) }, // Green
-  { RGB2GBA(0xad11c8), RGB2GBA(0xe47af6), RGB2GBA(0x000000), RGB2GBA(0xad5dc6), RGB2GBA(0x724095), RGB2GBA(0x72667a) }, // Purple
-  { RGB2GBA(0x222222), RGB2GBA(0x444444), RGB2GBA(0xeeeeee), RGB2GBA(0x737573), RGB2GBA(0xaaaaaa), RGB2GBA(0x606060) }, // Dark
-};
-#define THEME_COUNT (sizeof(themes) / sizeof(themes[0]))
-
 typedef struct {
   // ROM information
   char romfn[MAX_FN_LEN];             // File to load/write
@@ -344,7 +327,7 @@ static struct {
     char cpath[MAX_FN_LEN];       // Current path
     int selector;                 // Pointed file offset
     int seloff;                   // Entry at the top of the list
-    int maxentries;               // Total file/dir count in current dir
+    int filecount;                // Total file/dir count in current dir (unfiltered)
     int dispentries;              // Maximum number of visible entries (filtered)
     uint16_t selhist[16];         // History of directory offsets
   } browser;
@@ -496,6 +479,7 @@ _Static_assert (sizeof(t_centry) % 4 == 0, "t_centry must be word-friendly");
 // Pointer to SDRAM, where we place some data:
 //  - Scratch area 2MiB (for FW updates)
 //  - File list order (~64KiB)
+//  - File list filtered (~64KiB)
 //  - Browser file information (~13MB)
 //  - Recently played ROMs table (~64KiB)
 //  - Font data (placed by the bootloader at the 15..16MB range)
@@ -504,6 +488,7 @@ _Static_assert (sizeof(t_centry) % 4 == 0, "t_centry must be word-friendly");
 typedef struct {
   uint8_t scratch[scratch_mem_size];
   t_centry *fileorder[BROWSER_MAXFN_CNT];
+  t_centry *filefilter[BROWSER_MAXFN_CNT];
   t_centry fentries[BROWSER_MAXFN_CNT];
   t_rentry rentries[RECENT_MAXFN_CNT];
   t_reg_entry_max nordata;
@@ -670,6 +655,11 @@ uint16_t lang_getcode() {
 inline bool isascii(char code) {
   // Abuse signed :D
   return code >= 32;
+}
+
+// Uses the FAT attribute and also the unix filename convention.
+inline bool ishidden(const t_centry *e) {
+  return (e->attr & AM_HID) || e->fname[0] == '.';
 }
 
 bool is_superfw(const t_rom_header *h) {
@@ -1259,7 +1249,7 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
   else if (ext && !strcasecmp(ext, "sav")) {
     spop.pop_num = POPUP_SAVFILE;
     spop.selector = SavMAX;
-    strcpy(spop.p.savopt.savfn, fn);
+    strbcpy(spop.p.savopt.savfn, fn, sizeof(spop.p.savopt.savfn));
   }
   else if (ext && !strcasecmp(ext, "fw")) {
     // A SuperFW firmware update is selected!
@@ -1285,7 +1275,7 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
           spop.p.update.fw_size = fs;
           spop.p.update.curr_state = FlashingReady;
           spop.pop_num = POPUP_FWFLASH;
-          strcpy(spop.p.update.fn, fn);
+          strbcpy(spop.p.update.fn, fn, sizeof(spop.p.update.fn));
           f_close(&fd);
         }
       }
@@ -1316,7 +1306,7 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
             start_emu_game(get_emu_info("gbc"), fn, fs);
             break;
           case FileTypePatchDB:
-            strcpy(spop.p.pdb_ld.fn, fn);
+            strbcpy(spop.p.pdb_ld.fn, fn, sizeof(spop.p.pdb_ld.fn));
             spop.p.pdb_ld.fs = fs;
             spop.qpop.message = msgs[lang_id][MSG_Q3_LOADPDB];
             spop.qpop.default_button = msgs[lang_id][MSG_Q_NO];
@@ -1336,18 +1326,27 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
   }
 }
 
+static void browser_reload_sort() {
+  // We take the list of files and sort them using a list of pointers instead of
+  // actually copying entries. Faster, less memory and allows us to play with it later.
+
+  // Init pointer table, then sort them.
+  for (unsigned i = 0; i < smenu.browser.filecount; i++)
+    sdr_state->fileorder[i] = &sdr_state->fentries[i];
+
+  heapsort4(sdr_state->fileorder, smenu.browser.filecount, sizeof(t_centry*) / sizeof(uint32_t), filesort);
+}
+
 static void browser_reload_filter() {
-  // Instead of sorting the actual list of files, which requires moving lots
-  // of memory, we use a list of pointers.
+  // Process the sorted pointer table and filter out files that we don't want to display.
+
   unsigned fcount = 0;
-  for (unsigned i = 0; i < smenu.browser.maxentries; i++) {
-    if ((sdr_state->fentries[i].attr & AM_HID) && hide_hidden)
+  for (unsigned i = 0; i < smenu.browser.filecount; i++) {
+    if (hide_hidden && ishidden(sdr_state->fileorder[i]))
       continue;
 
-    sdr_state->fileorder[fcount++] = &sdr_state->fentries[i];
+    sdr_state->filefilter[fcount++] = sdr_state->fileorder[i];
   }
-
-  heapsort4(sdr_state->fileorder, fcount, sizeof(t_centry*) / sizeof(uint32_t), filesort);
 
   if (smenu.browser.selector >= fcount)
     smenu.browser.selector = fcount - 1;
@@ -1366,7 +1365,7 @@ static void browser_reload() {
   if (FR_OK != f_opendir(&d, smenu.browser.cpath)) {
     // Show an empty list (not the previous dir's files, which would be opened
     // with this dir's path) and tell the user. B still goes up.
-    smenu.browser.maxentries = 0;
+    smenu.browser.filecount = 0;
     browser_reload_filter();
     spop.alert_msg = msgs[lang_id][MSG_ERR_DIROPEN];
     return;
@@ -1388,9 +1387,11 @@ static void browser_reload() {
     sortable_utf8_u16(info.fname, e->sortname);
   }
   f_closedir(&d);
-  smenu.browser.maxentries = fcount;
 
-  // Filter and sort list of files/dirs
+  smenu.browser.filecount = fcount;
+
+  // Sort and filter the new list of files/dirs
+  browser_reload_sort();
   browser_reload_filter();
 }
 
@@ -1676,9 +1677,9 @@ void render_browser(volatile uint8_t *frame) {
         break;
 
       char szstr[16] = {0};
-      t_centry *e = sdr_state->fileorder[smenu.browser.seloff + i];
+      t_centry *e = sdr_state->filefilter[smenu.browser.seloff + i];
 
-      unsigned iconidx = (e->attr & AM_HID) ? ((e->attr & AM_DIR) ? ICON_HFOLDER : ICON_HFILE) :
+      unsigned iconidx = ishidden(e)        ? ((e->attr & AM_DIR) ? ICON_HFOLDER : ICON_HFILE) :
                          (e->attr & AM_DIR) ? ICON_FOLDER :
                          guessicon(e->fname);
 
@@ -2712,7 +2713,7 @@ static void carousel_pick_start(const char *prevpath) {
   int sel = prevpath[0] ? carousel_find(prevpath) : -1;
 
   if (sel < 0 && smenu.browser.selector >= 0 && smenu.browser.selector < smenu.browser.dispentries) {
-    const t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+    const t_centry *e = sdr_state->filefilter[smenu.browser.selector];
     char fname[MAX_FN_LEN], path[MAX_FN_LEN];
     carousel_copy(e->fname, fname);
     if (!e->isdir && path_join(path, smenu.browser.cpath, fname, ""))
@@ -3728,7 +3729,7 @@ static void keypress_popup_norwrite(unsigned newkeys) {
           .entry_addr = ROM_ENTRYPOINT(info->romh)
         };
         memset(&ne.blkmap, 0, sizeof(ne.blkmap));
-        strcpy(ne.game_name, info->romfn);
+        strbcpy(ne.game_name, info->romfn, sizeof(ne.game_name));
 
         flashmgr_allocate_blocks(ne.blkmap, blkcnt, (t_reg_entry*)&sdr_state->nordata);
 
@@ -3989,7 +3990,7 @@ static void keypress_popup_filemgr(unsigned newkeys) {
           smenu.carousel.stale = true;
         }
         else
-          sdr_state->fileorder[smenu.browser.selector]->attr ^= AM_HID;
+          sdr_state->filefilter[smenu.browser.selector]->attr ^= AM_HID;
       }
       else
         spop.alert_msg = msgs[lang_id][MSG_ERR_GENERIC];
@@ -4141,7 +4142,7 @@ static void keypress_menu_browse(unsigned newkeys) {
     }
     // Move into a new dir and/or open a file
     if (newkeys & KEY_BUTTA) {
-      t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+      t_centry *e = sdr_state->filefilter[smenu.browser.selector];
       char path[MAX_FN_LEN];
       if (e->isdir) {
         if (!path_join(path, smenu.browser.cpath, e->fname, "/")) {
@@ -4164,7 +4165,7 @@ static void keypress_menu_browse(unsigned newkeys) {
     }
     else if (newkeys & KEY_BUTTSEL) {
       // Shows a file management menu.
-      t_centry *e = sdr_state->fileorder[smenu.browser.selector];
+      t_centry *e = sdr_state->filefilter[smenu.browser.selector];
       char path[MAX_FN_LEN];
       if (path_join(path, smenu.browser.cpath, e->fname, ""))
         filemgr_open(path, e->filesize, e->attr, false, -1);
@@ -4365,7 +4366,12 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       spop.alert_msg = msgs[lang_id][MSG_ERR_SETSAVE];
   }
 
+  // Apply settings immediately
   reload_theme(menu_theme);
+
+  // This is relatively cheap, we can trigger it here already (no sorting)
+  if ((newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) && smenu.uiset.selector == UiSetHid)
+    browser_reload_filter();
 }
 
 static void keypress_menu_tools(unsigned newkeys) {

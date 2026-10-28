@@ -620,7 +620,11 @@ class OwnCheats:
 # mGBA and VBA-M read them (conv-retro.py counts bytes).
 CB_RANGES = ((0x02000000, 0x0203FFFF), (0x03000000, 0x03007FFF), (0x04000000, 0x040003FF),
              (0x05000000, 0x050003FF), (0x06000000, 0x06017FFF), (0x07000000, 0x070003FF))
-CB_MAX_CODES = 30     # Cheats with more codes are skipped by the firmware
+# The firmware rejects the whole file for a line over 512 bytes, or a patch
+# code with 31+ data codes (open_read_cheats(), predecode_cheats()).
+CB_MAX_LINE = 512
+CB_MAX_TITLE = 250    # Bytes (it keeps 255), cut at a utf-8 character boundary
+CB_MAX_PATCH = 30
 
 def cb_patch_codes(value):
   return (value + 2) // 3
@@ -652,7 +656,7 @@ def cb_valid(codes):
       i += 1
     elif op == 5:
       n = cb_patch_codes(value)
-      if not value or i + n > len(codes):
+      if not value or n > CB_MAX_PATCH or i + n > len(codes):
         return False
       i += n
     if op not in (0, 1, 13) and not any(lo <= (addr & 0x0FFFFFFF) <= hi for lo, hi in CB_RANGES):
@@ -678,14 +682,15 @@ def cb_drop_master(codes):
 def cheat_entry(desc, codestr):
   # One cheat in SuperFW's format ("title\ncodes\n"), or None if its codes
   # cannot be used.
-  desc = desc.strip()
+  desc = desc.strip().encode("utf-8")[:CB_MAX_TITLE].decode("utf-8", "ignore").strip()
   codes = cb_decode(codestr.strip())
   if not desc or not codes or not cb_valid(codes):
     return None
   codes = cb_drop_master(codes)
-  if not codes or len(codes) > CB_MAX_CODES:
+  line = " ".join("%08X+%04X" % c for c in codes)
+  if not codes or len(line) > CB_MAX_LINE:
     return None
-  return "%s\n%s\n" % (desc, " ".join("%08X+%04X" % c for c in codes))
+  return "%s\n%s\n" % (desc, line)
 
 def convert_retro_cheats(text):
   # A libretro .cht file -> SuperFW .cht text ("title\ncodes" per cheat), or

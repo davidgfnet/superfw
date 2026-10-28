@@ -287,12 +287,12 @@ constraints:
    ROMs are limited to 240 bytes of path and 224 bytes of file name, so the
    save, savestate, config and patch file names made from them always fit.
  - Maximum number of files+dirs in a directory: 16384
- - Cheats: titles are cut at 251 bytes, cheats with more than 30 codes are
-   skipped (the other cheats in the file still load). Patch codes
+ - Cheats: a line (title or codes) longer than 512 bytes makes the whole
+   file fail to load; titles are cut at 255 bytes. Patch codes
    (`5aaaaaaa cccc`) write `cccc` halfwords, three per following code, as in
    mGBA and VBA-M.
- - Carousel: up to 4096 games, in the browsed folder and up to 7 levels of
-   subfolders below it.
+ - Carousel: up to 3072 games and 96 KiB of paths (about 2000 games with long
+   names), in the browsed folder and up to 7 levels of subfolders below it.
 
 Development notes
 -----------------

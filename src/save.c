@@ -333,10 +333,8 @@ bool program_sram_dump(const char *save_filename, unsigned backup_cnt, unsigned 
         return false;
     }
   } else {
-    // Create the directory (just in case it doesn't exist
+    // Create the directory (just in case it doesn't exist)
     f_mkdir(SUPERFW_DIR);
-    // Make it hidden
-    f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
     // Write filename along with backup count.
     char content[512];

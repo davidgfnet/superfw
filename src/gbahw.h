@@ -100,12 +100,6 @@
 // Not really a reg, but handle it like one
 #define REG_IRQ_HANDLER_ADDR      (*((volatile uint32_t *) 0x03007FFC))
 
-#define RGB2GBA(color)   (            \
-  (((color) & 0xF80000) >> 19) |      \
-  (((color) & 0x00F800) >>  6) |      \
-  (((color) & 0x0000F8) <<  7)        \
-)
-
 #define dup8(v)  ( (v) | ((v) << 8) )
 #define dup16(v) ( (v) | ((v) << 16) )
 

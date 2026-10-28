@@ -24,6 +24,12 @@
 #include "utf_util.h"
 #include "nanoprintf.h"
 
+void strbcpy(char *dst, const char *src, unsigned size) {
+  for (unsigned i = 0; i < size - 1 && src[i]; ++i)
+    *dst++ = src[i];
+  *dst = 0;
+}
+
 const char *file_basename(const char *fullpath) {
   const char * ret = strrchr(fullpath, '/');
   if (!ret)

@@ -258,6 +258,17 @@ class RetroConversion(unittest.TestCase):
     self.assertEqual(mc.convert_cheat_file(RETRO_CHT), mc.convert_retro_cheats(RETRO_CHT))
     self.assertIsNone(mc.convert_cheat_file("Bad\n9000ABCD+0001\n"))
 
+  def test_firmware_limits(self):
+    # 36 codes fit a 512 byte line, 37 do not (the firmware would reject the file)
+    code = "82000000+0001"
+    self.assertIsNotNone(mc.cheat_entry("x", "+".join([code] * 36)))
+    self.assertIsNone(mc.cheat_entry("x", "+".join([code] * 37)))
+    # Patch codes with 31+ data codes are rejected by the firmware too
+    self.assertIsNone(mc.cheat_entry("x", "52000000+005D " + " ".join(["12345678+1234"] * 31)))
+    # Long titles are cut (on a character boundary)
+    title = mc.cheat_entry("\u00e9" * 300, code).split("\n")[0]
+    self.assertEqual(len(title.encode("utf-8")), 250)
+
   def test_nothing_usable(self):
     self.assertIsNone(mc.convert_retro_cheats('cheat0_desc = "x"\ncheat0_code = "9000ABCD+0001"\n'))
     self.assertIsNone(mc.convert_retro_cheats('cheat0_desc = "x"\ncheat0_code = "4300ABCD+0001"\n'))
