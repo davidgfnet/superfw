@@ -131,6 +131,7 @@ int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
 
 // Reads a cheat file into a temp buffer (usually in SDRAM) and returns the size in bytes
 // Returns -1 if the file is not found or the cheats cannot be loaded.
+// Cheats are limited to 512 byte lines (~63 codes per line, or 42 depending how packed they are).
 int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
   FIL fd;
   FRESULT res = f_open(&fd, fn, FA_READ);
@@ -163,6 +164,10 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
     if (!p) 
       p = strchr(tmp, '\0');
 
+    // Reject any cheats with lines over 512 bytes!
+    if (p - tmp > 512)
+      return -1;
+
     *p = 0;        // Add the string end char.
 
     // Skip leading characters.
@@ -179,12 +184,12 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
       if (parse_name) {
         // Fill title and header.
         strbcpy(chdr.title, s, sizeof(chdr.title));
-        chdr.h.slen = (strlen(chdr.title) + 1 + 3) & ~3U;  // Word aligned!
+        chdr.h.slen = (strlen(chdr.title) + 1 + 3) / 4;  // Word count
         chdr.h.enabled = 0;
         chdr.h.codelen = 0;
       } else {
         // Parse the cheat codes (in hex), and generate the respective code.
-        t_cheat_raw codes[86];  // Enough codes for a 1024 byte cheat line.
+        t_cheat_raw codes[42];  // Enough codes for a 512 byte cheat line.
         memset(codes, 0, sizeof(codes));
         int numcodes = parse_cheat_codes(tmp, codes);
         if (numcodes < 0)
@@ -193,14 +198,14 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
         if (!predecode_cheats(codes, numcodes))
           return -1;
         // Each code takes 8 bytes
-        chdr.h.codelen = 8 * (numcodes + 1);
+        chdr.h.codelen = numcodes + 1;
 
         { // Copy the data to the actual buffer.
-          unsigned pheadl = sizeof(t_cheathdr) + chdr.h.slen;
+          unsigned pheadl = sizeof(t_cheathdr) + chdr.h.slen * 4;
           memcpy32(&buffer[bufsz], &chdr, pheadl);
-          memcpy32(&buffer[bufsz + pheadl], codes, chdr.h.codelen);
+          memcpy32(&buffer[bufsz + pheadl], codes, chdr.h.codelen * 8);
 
-          bufsz += pheadl + chdr.h.codelen;
+          bufsz += pheadl + chdr.h.codelen * 8;
           (*bufhd)++;
         }
       }

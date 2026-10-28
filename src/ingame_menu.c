@@ -671,7 +671,7 @@ void draw_cheats_menu(uint8_t *fb, unsigned framen) {
   unsigned off = 4, numdisp = 0;
   for (unsigned i = 0; i < num_cheats && numdisp < 5; i++) {
     t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
-    off += sizeof(t_cheathdr) + e->slen + e->codelen;
+    off += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
 
     if (i >= soff) {
       draw_text(e->enabled ? "☑" : "☐", fb, 9, 40 + 20 * numdisp, HI_COLOR);
@@ -695,9 +695,9 @@ bool update_cheat_table() {
 
   for (unsigned i = 0; i < num_cheats && numenabled < 63; i++) {
     t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
-    off += sizeof(t_cheathdr) + e->slen + e->codelen;
+    off += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
     if (e->enabled) {
-      *tptr++ = (uintptr_t)&e->data[e->slen];
+      *tptr++ = (uintptr_t)&e->data[e->slen * 4];
       numenabled++;
     }
   }
@@ -897,7 +897,7 @@ bool cheat_active_action() {
   unsigned off = 4;
   for (unsigned i = 0; i < copt; i++) {
     t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);
-    off += sizeof(t_cheathdr) + e->slen + e->codelen;
+    off += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
   }
 
   t_cheathdr *e = (t_cheathdr*)(((uint8_t*)cheat_base_addr) + off);

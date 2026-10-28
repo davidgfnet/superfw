@@ -90,13 +90,13 @@ int main() {
     t_cheathdr *e = (t_cheathdr*)&tmp[i];
     assert(e->enabled == 0);
     assert(!strcmp(expected[n].title, (char*)e->data));
-    assert(e->slen == ((strlen(expected[n].title) + 1 + 3) & ~3U));
-    assert(e->codelen == (expected[n].num_codes + 1) * 8);
+    assert(e->slen == ((strlen(expected[n].title) + 1 + 3) / 4));
+    assert(e->codelen == (expected[n].num_codes + 1));
 
     // Validate the opcodes
     unsigned off = 0, xoff = 0;
     for (unsigned j = 0; j < expected[n].num_codes; j++) {
-      t_cheat_predec *pc = (t_cheat_predec*)&e->data[e->slen + off];
+      t_cheat_predec *pc = (t_cheat_predec*)&e->data[e->slen * 4 + off];
       assert(pc->opcode == expected[n].codes[j].opcode * 2);
       assert(pc->blen == expected[n].codes[j].blen);
       assert(pc->value == expected[n].codes[j].value);
@@ -104,7 +104,7 @@ int main() {
 
       // Validate the trailing payload words (byteswapped for opcode 5)
       unsigned nwords = (pc->blen - 8) / 4;
-      const uint32_t *pw = (const uint32_t*)&e->data[e->slen + off + 8];
+      const uint32_t *pw = (const uint32_t*)&e->data[e->slen * 4 + off + 8];
       assert(xoff + nwords <= expected[n].num_extra);
       for (unsigned k = 0; k < nwords; k++)
         assert(pw[k] == expected[n].extra[xoff + k]);
@@ -116,11 +116,11 @@ int main() {
     assert(xoff == expected[n].num_extra);   // no payload left unchecked
 
     // Code block ends with a single zero terminator entry
-    assert(off + 8 == e->codelen);
+    assert(off + 8 == e->codelen * 8);
     for (unsigned k = 0; k < 8; k++)
-      assert(e->data[e->slen + off + k] == 0);
+      assert(e->data[e->slen * 4 + off + k] == 0);
     n++;
-    i += sizeof(t_cheathdr) + e->slen + e->codelen;
+    i += sizeof(t_cheathdr) + e->slen * 4 + e->codelen * 8;
   }
   assert (n == sizeof(expected)/sizeof(expected[0]));
 }
