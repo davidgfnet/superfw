@@ -426,6 +426,11 @@ inline bool isascii(char code) {
   return code >= 32;
 }
 
+// Uses the FAT attribute and also the unix filename convention.
+inline bool ishidden(const t_centry *e) {
+  return (e->attr & AM_HID) || e->fname[0] == '.';
+}
+
 bool is_superfw(const t_rom_header *h) {
   return !memcmp(&h->data[SUPERFW_COMMENT_DOFFSET], "SUPERFW~DAVIDGF", 16);
 }
@@ -1093,7 +1098,7 @@ static void browser_reload_filter() {
 
   unsigned fcount = 0;
   for (unsigned i = 0; i < smenu.browser.filecount; i++) {
-    if ((sdr_state->fileorder[i]->attr & AM_HID) && hide_hidden)
+    if (hide_hidden && ishidden(sdr_state->fileorder[i]))
       continue;
 
     sdr_state->filefilter[fcount++] = sdr_state->fileorder[i];
@@ -1400,7 +1405,7 @@ void render_browser(volatile uint8_t *frame) {
       char szstr[16] = {0};
       t_centry *e = sdr_state->filefilter[smenu.browser.seloff + i];
 
-      unsigned iconidx = (e->attr & AM_HID) ? ((e->attr & AM_DIR) ? ICON_HFOLDER : ICON_HFILE) :
+      unsigned iconidx = ishidden(e)        ? ((e->attr & AM_DIR) ? ICON_HFOLDER : ICON_HFILE) :
                          (e->attr & AM_DIR) ? ICON_FOLDER :
                          guessicon(e->fname);
 

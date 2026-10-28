@@ -113,10 +113,8 @@ uint32_t rtcvalue_default = 45568800U;
 
 // Setting loading/saving routines
 bool save_ui_settings() {
-  // Create the directory (just in case it doesn't exist
+  // Create the directory (just in case it doesn't exist)
   f_mkdir(SUPERFW_DIR);
-  // Make it hidden
-  f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
   // Proceed to create the file
   FIL fd;
@@ -142,10 +140,8 @@ bool save_ui_settings() {
 }
 
 bool save_settings() {
-  // Create the directory (just in case it doesn't exist
+  // Create the directory (just in case it doesn't exist)
   f_mkdir(SUPERFW_DIR);
-  // Make it hidden
-  f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
   // Proceed to create the file
   FIL fd;
@@ -375,11 +371,9 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
 }
 
 bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_rom_launch_settings *rlh) {
-  // Create the directory (just in case it doesn't exist
+  // Create the directory (just in case it doesn't exist)
   f_mkdir(SUPERFW_DIR);
   f_mkdir(ROMCONFIG_PATH);
-  // Make it hidden
-  f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
   // Proceed to create the file
   FIL fd;
