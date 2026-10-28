@@ -511,7 +511,7 @@ int serialize_patch(const t_patch *patch, uint8_t *buffer) {
 
 // Loads a patch from a buffer.
 bool unserialize_patch(const uint8_t *buffer, unsigned size, t_patch *patch) {
-  // Check header anf size
+  // Check header and size
   if (size != 32 + sizeof(patch->op) + sizeof(patch->prgs))
     return false;
   if (memcmp(&buffer[0], "SUPERFWPATCHV01", 16))
@@ -530,7 +530,7 @@ bool unserialize_patch(const uint8_t *buffer, unsigned size, t_patch *patch) {
   buffer += sizeof(patch->prgs);
   memcpy(patch->op, buffer, sizeof(patch->op));
 
-  return true;
+  return patch->wcnt_ops + patch->save_ops + patch->irqh_ops + patch->rtc_ops <= MAX_PATCH_OPS;
 }
 
 bool load_rom_patches(const char *romfn, t_patch *patches) {

@@ -270,7 +270,7 @@ unsigned flush_pending_sram() {
   for (unsigned i = strlen(content) + 1; i < l + 1; ) {
     if (!strncmp(&content[i], "backup_count=", 13))
       bkpn = &content[i + 13];
-    i += strlen(content) + 1;
+    i += strlen(&content[i]) + 1;
   }
 
   // Parse options.
@@ -313,10 +313,8 @@ bool program_sram_dump(const char *save_filename, unsigned backup_cnt) {
         return false;
     }
   } else {
-    // Create the directory (just in case it doesn't exist
+    // Create the directory (just in case it doesn't exist)
     f_mkdir(SUPERFW_DIR);
-    // Make it hidden
-    f_chmod(SUPERFW_DIR, AM_HID, AM_HID);
 
     // Write filename along with backup count.
     char content[512];

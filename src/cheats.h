@@ -19,8 +19,8 @@
 #include <stdint.h>
 
 typedef struct {
-  uint8_t slen;        // String length (bytes)
-  uint8_t codelen;     // Data payload length (bytes)
+  uint8_t slen;        // String length (words)
+  uint8_t codelen;     // Data payload length (double words)
   uint8_t enabled;
   uint8_t _pad;        // Helps with 16 bit writes when updating enabled.
   uint8_t data[];
