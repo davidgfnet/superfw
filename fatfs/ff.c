@@ -2508,18 +2508,6 @@ static FRESULT dir_register (	/* FR_OK:succeeded, FR_DENIED:no free entry or too
 	}
 #endif
 	/* On the FAT/FAT32 volume */
-#if FF_CODE_PAGE != 0 && FF_CODE_PAGE < 900
-	/* SuperFW (issue #84): create_name() kept the SFN's extended characters
-	   as they are; upper-case them here like stock FatFS does. If that changed
-	   the name, use a numbered SFN, so it cannot collide with an existing SFN
-	   that only differs in case (which the lookup no longer matches). */
-	for (n = 0; n < 11; n++) {
-		if (dp->fn[n] >= 0x80 && ExCvt[dp->fn[n] & 0x7F] != dp->fn[n]) {
-			dp->fn[n] = ExCvt[dp->fn[n] & 0x7F];
-			dp->fn[NSFLAG] |= NS_LOSS | NS_LFN;
-		}
-	}
-#endif
 	memcpy(sn, dp->fn, 12);
 	if (sn[NSFLAG] & NS_LOSS) {			/* When LFN is out of 8.3 format, generate a numbered name */
 		dp->fn[NSFLAG] = NS_NOLFN;		/* Find only SFN */
@@ -2946,12 +2934,8 @@ static FRESULT create_name (	/* FR_OK: successful, FR_INVALID_NAME: could not cr
 				wc = ff_uni2oem(ff_wtoupper(wc), CODEPAGE);	/* Unicode ==> Up-convert ==> ANSI/OEM code */
 			}
 #elif FF_CODE_PAGE < 900	/* In SBCS cfg */
-			/* SuperFW (issue #84): the extended characters are kept as they are,
-			   not upper-cased with ExCvt, so a name listed from the card matches
-			   its own SFN even when another code page wrote it (ie. a Chinese
-			   Windows stores short GBK names as SFN only). dir_register()
-			   upper-cases them when it writes a new SFN. */
 			wc = ff_uni2oem(wc, CODEPAGE);			/* Unicode ==> ANSI/OEM code */
+			if (wc & 0x80) wc = ExCvt[wc & 0x7F];	/* Convert extended character to upper (SBCS) */
 #else						/* In DBCS cfg */
 			wc = ff_uni2oem(ff_wtoupper(wc), CODEPAGE);	/* Unicode ==> Up-convert ==> ANSI/OEM code */
 #endif

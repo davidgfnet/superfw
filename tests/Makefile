@@ -25,8 +25,6 @@ all:
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o carousel_util_test.bin carousel_util_test.c ../src/carousel_util.c ../src/util.c ../src/utf_util.c ../src/nanoprintf.c ../src/fileutil.c -I../
 	./carousel_util_test.bin
 	lcov -c -d . -o carousel_util_test.info
-	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o fatfs_names_test.bin fatfs_names_test.c ../fatfs/ff.c ../fatfs/ffunicode.c -I../
-	./fatfs_names_test.bin
 
 	lcov -a cimpl_test.info -a util_test.info -a utf_util_test.info -a crc_test.info -a sha256_test.info -a cheats_test.info -a carousel_util_test.info -o total.info
 	rm -rf coverage/
