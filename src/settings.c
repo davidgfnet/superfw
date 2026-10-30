@@ -87,7 +87,7 @@ uint8_t anim_speed = animspd_cnt / 2;
 uint8_t start_tab = 0;          // 0: Recent/SD browser, 1: Carousel
 uint8_t show_ext = 1;           // Show file extensions in the lists
 uint8_t car_view = 0;           // Carousel: games shown (all, favourites, a system)
-uint8_t car_sort = 0;           // Carousel: order (name, recently played, most played)
+uint8_t car_sort = 0;           // Carousel: order (name, system, recently played)
 
 // Default settings
 t_patch_policy patcher_default = PatchAuto;

@@ -791,9 +791,10 @@ bool action_reset_fw() {
 }
 bool action_reset_fw_nosave() {
   // Skip saving on reboot!
-  program_sram_dump(NULL, 0, 0);
-  // Go ahead and reboot to flash.
-  reset_fw();
+  if (program_sram_dump(NULL, 0, 0))
+    reset_fw();    // Go ahead and reboot to flash.
+
+  popup.msg = msgs[ingame_menu_lang][IMENU_MSG_SAVEC];
   return false;
 }
 
