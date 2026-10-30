@@ -152,6 +152,7 @@ void load_ingame_menu(
   igm->scratch_space_size = total_size - (menu_size + fontsz + cheats);
   igm->menu_has_rtc_support = rtc_patches;    // Using RTC patches
   igm->savefile_backups = backup_sram_default;// Backup count
+  igm->savefile_size = sram_save_size;        // .sav size (0: whole SRAM)
   for (unsigned i = 0; i < sizeof(igm->menu_palette) / sizeof(igm->menu_palette[0]); i++)
     igm->menu_palette[i] = MEM_PALETTE[ING_PALETTE_BASE + i];
 
@@ -553,7 +554,9 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
       uint32_t tmp[LOAD_BS/4];
       if (FR_OK != f_read(&fd, tmp, LOAD_BS, &rdbytes)) {
         f_close(&fd);
-        return ERR_LOAD_NOEMU;
+        // Part of the emulator may already be in SDRAM: not a "no emulator"
+        // error (that one means nothing was written, the menu relies on it).
+        return ERR_LOAD_BADROM;
       }
       if (!rdbytes)
         break;

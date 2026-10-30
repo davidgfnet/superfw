@@ -19,6 +19,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "config.h"
+
 #ifndef _UTIL_H_
 #define _UTIL_H_
 
@@ -35,7 +37,7 @@ void heapsort4(
 // String misc routines
 const char *file_basename(const char *fullpath);
 void file_dirname(const char *fullpath, char *dirname);
-void replace_extension(char *fn, const char *newext);
+bool replace_extension(char *fn, const char *newext);
 const char *find_extension(const char *s);
 
 unsigned parseuint(const char *s);
@@ -50,11 +52,29 @@ uint32_t date2timestamp(const t_dec_date *d);
 void timestamp2date(uint32_t ts, t_dec_date *out);
 void fixdate(t_dec_date *d);
 
+// Builds dir + name + suffix into out (MAX_FN_LEN). False if it does not fit.
+bool path_join(char *out, const char *dir, const char *name, const char *suffix);
+// Same, but name loses its extension and ext is appended (dir + base + ext).
+bool path_join_ext(char *out, const char *dir, const char *name, const char *ext);
+
+// Longest ROM paths accepted. Save, backup, savestate, config and patch file
+// names are derived from them (adding a dir prefix and/or a suffix) using
+// MAX_FN_LEN buffers, so leave room for those.
+#define MAX_ROM_PATH_LEN       (MAX_FN_LEN - 16)
+#define MAX_ROM_BASENAME_LEN   (MAX_FN_LEN - 32)
+bool rom_path_ok(const char *fn);
+
 // Just checks that a file exists.
 bool check_file_exists(const char *fn);
 
 // Creates a path to a file (recursively if needed)
 void create_basepath(const char *fn);
+
+// Calls cb for each line of a text file, without the line break ("\n" or
+// "\r\n"). Lines longer than FILE_LINE_MAX bytes are skipped. False if the
+// file cannot be opened.
+#define FILE_LINE_MAX  (2 * MAX_FN_LEN)
+bool file_read_lines(const char *fn, void (*cb)(char *line, void *usr), void *usr);
 
 // Parses a LE 32 bit unsigned int
 static inline uint32_t parse32le(const uint8_t *d) {

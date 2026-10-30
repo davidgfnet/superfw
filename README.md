@@ -48,6 +48,143 @@ the SD card (and supported by SuperFW).
 
 Check https://superfw.davidgf.net/docs/usermanual/emulators/ for details.
 
+Carousel (cover art) tab
+------------------------
+
+The carousel tab (the icon after the SD/NOR browsers) shows the games in the
+folder currently open in the SD browser, and in all its subfolders, as a row
+of box art covers sorted by name:
+
+ - Left/Right: previous/next game (covers slide and zoom in/out).
+ - Up/Down: jump to the previous/next letter (shown big for a moment). When
+   sorted by system they jump between systems, when sorted by recently played
+   they move 5 games.
+ - A: open the game (same load options as the browser). If the game was
+   written to the flash (SuperChis) from this SD file, it starts from flash.
+ - Select: file menu, the same as in the SD browser (delete, hide, write to
+   flash). For games already in flash it offers "Remove from flash" (same as
+   the flash tab) and "Load from SD card" instead, and shows the flash usage.
+   "Add to favourites" / "Remove from favourites" is there too.
+ - Start: the view, which games are shown and in which order (see below).
+ - L/R switch tabs.
+
+![The carousel tab](docs/images/carousel.png)
+
+| Letter jump (Up/Down) | Another color theme |
+|---|---|
+| ![Letter jump](docs/images/carousel-letter.png) | ![Another theme](docs/images/carousel-theme.png) |
+
+![Scrolling through the games](docs/images/carousel.gif)
+
+The games and covers in these pictures are made up (drawn by
+`docs/images/make-examples.py`, so no real box art is in the repository); the
+screens are rendered by `tools/carousel-preview.py` with the firmware's layout
+and assets.
+
+### View: which games, in which order (Start)
+
+Start opens the view. Up/Down picks the row, Left/Right changes it, A or Start
+closes it. It is remembered (in `ui-settings.txt`).
+
+ - Show: all games, the favourites, or one system. The systems come from the
+   file types, not the folder names, and only the ones there are games for
+   are offered: GBA (`.gba`), GB/GBC (`.gb`, `.gbc`: one emulator), NES
+   (`.nes`), SMS (`.sms`), GG (`.gg`), SG (`.sg`), SV (`.sv`), NGC (`.ngc`)
+   and PCE (`.pce`).
+ - Sort by: name, system (the games grouped by emulator; Up/Down then jump
+   from one system to the next) or recently played (Up/Down move 5 games).
+
+When not all games are shown, the top bar shows the view next to the position
+(ie. "GB/GBC 1/2"), if it fits.
+
+| The view (Start) | Only the GB/GBC games |
+|---|---|
+| ![The view pop up](docs/images/carousel-view.png) | ![GB/GBC view](docs/images/carousel-gbc.png) |
+
+The carousel lists the folder open in the SD browser and its subfolders. To
+have every game on the card in it (and filter them with Show), open the root
+of the card (`/`) in the SD browser before switching to the carousel.
+
+### Favourites
+
+Select > "Add to favourites" (or "Remove from favourites") in the carousel.
+Favourites show "Favourite" in the info line and have their own view (Show >
+Favourites). They are kept in `/.superfw/favorites.txt`, one full path per
+line, so they can also be edited on a PC. A game that is renamed or moved is
+no longer a favourite (the recent list works the same way).
+
+The background takes the color of the selected cover. Below the title it shows
+the system, the size, whether there is a save file, whether it is the last
+played game and whether it is in flash, plus a bar with the position in the
+list. The bottom bar shows the game's folder. Set UI settings, "Start tab" to
+start SuperFW on the carousel (it opens at the last played game).
+
+The game list is kept in `/.superfw/carousel.cache`, so it shows up at once.
+It is then checked against the card in the background, and rescanned if games
+were added, removed or renamed.
+
+Covers are read from `/.superfw/covers/<rom file name>.cov` (for example
+`Metroid Fusion (USA).gba.cov`) or, for GBA games, from
+`/.superfw/covers/<game code>.cov` (for example `AMTE.cov`), which keeps
+working after renaming the ROM. Games without a cover show a plain card. To
+create the covers, run the PC tool with the SD card inserted (needs Python 3
+and Pillow, `pip install pillow`):
+
+    python tools/make-covers.py E:\
+
+It scans the whole card and identifies each ROM exactly by its checksum (or
+GBA game code) using the No-Intro game lists, then downloads the box art for
+that official name from the libretro thumbnails collection. ROMs it cannot
+identify (hacks, homebrew, bad dumps) are matched by file name instead. Use
+`--images <folder>` to provide your own images (named like the ROM, ie.
+`Metroid Fusion (USA).png`), `--dry-run` to see the matches first,
+`--force` to regenerate covers and `--no-checksum` to skip reading the ROMs.
+
+`--gui` opens a window instead: pick the SD card, then it shows the progress,
+the box art picked for every game and a preview of each cover as the cart
+shows it.
+
+It also adds the cheats of the GBA games on the card: it downloads the
+SuperFW cheat database (https://github.com/davidgfnet/superfw-cheats, kept in
+its cache for when there is no internet) and copies the files for those games
+to `/.superfw/cheats/` (named `<game code>-<version>.cht`, as SuperFW looks for
+them). Games that database does not have (Pokemon Emerald, for one) get
+libretro's Code Breaker cheats instead
+(https://github.com/libretro/libretro-database), converted with the database's
+own rules: only plain Code Breaker codes that write to RAM and no master
+codes. Only cheats for the same game, region and revision are used: other
+versions have their data at other addresses. File names are compared without
+case, punctuation or "The", and a libretro file that names no region is only
+used for games with a single release. A ROM that only matches a game by its
+game code, but is bigger and named otherwise, is taken for a hack (ie. Pokemon
+Unbound, a FireRed hack) and gets no cheats.
+
+`--cheats <folder>` (the window's "Own cheats") adds your own cheat files,
+before the downloaded ones: RetroArch `.cht` files or SuperFW ones, named like
+the ROM (`Metroid Fusion.cht`), like the game (`Metroid Fusion (USA).cht`) or
+`<game code>-<version>.cht`. They go through the same checks.
+
+For every GBA game the tool says where its cheats came from or why it has none
+(not recognised, only for other versions, looks like a hack, not in any
+database): in the window's Cheats column (select a game to see the reason),
+or on the command line. Cheat files already on the card are never
+overwritten, so edited ones are kept; `--no-cheats` skips all this.
+
+With `--firmware chis` (or `sd`, `lite`) it also copies the latest SuperFW
+firmware for that board to the card root, ready to be flashed from the SD
+browser. The window has these options too.
+
+The tool can also be packaged as a program that needs no Python
+(PyInstaller, works on Windows, macOS and Linux); started without arguments
+it opens the window (the Windows .exe on the SD card root picks that card):
+
+    pip install pyinstaller pillow
+    pyinstaller --onefile --console --name make-covers tools/make-covers.py
+
+`tools/carousel-preview.py` renders a PC preview of the tab. The carousel
+helpers (`src/carousel_util.c`) and both tools have tests: `make` in `tests/`
+and `python3 tests/make_covers_test.py`.
+
 ROM patching
 ------------
 
@@ -127,6 +264,9 @@ The following files are usually created:
  - .superfw/recent.txt: Recently played ROMs, in order.
  - .superfw/pending-save.txt: SRAM save information (temp file).
  - .superfw/pending-sram-test.txt: SRAM test flag (temp file).
+ - .superfw/carousel.cache: Game list of the carousel tab (rebuilt when needed).
+ - .superfw/favorites.txt: Favourite games of the carousel (full paths, one per line).
+ - .superfw/lang.cache: Menu strings of the chosen language (rebuilt when needed).
 
 Other noteworthy paths:
 
@@ -134,6 +274,7 @@ Other noteworthy paths:
  - .superfw/patches/: Patch cache (created by PatchEngine).
  - .superfw/cheats/: Cheat database, contains .cht files.
  - .superfw/emulators/: Emulator ROMs, used to play other device's ROMs.
+ - .superfw/covers/: Cover art for the carousel tab (made by tools/make-covers.py).
 
 Limits
 ------
@@ -142,8 +283,57 @@ The following restrictions apply to the firmware due to memory/storage/cpu
 constraints:
 
  - Maximum ROM size: 32MiB (Supercard's memory size)
- - File path and name limit: 255 utf-8 bytes (not exactly characters!)
+ - File path and name limit: 255 utf-8 bytes (not exactly characters!).
+   ROMs are limited to 240 bytes of path and 224 bytes of file name, so the
+   save, savestate, config and patch file names made from them always fit.
  - Maximum number of files+dirs in a directory: 16384
+ - Cheats: a line (title or codes) longer than 512 bytes makes the whole
+   file fail to load; titles are cut at 255 bytes. Patch codes
+   (`5aaaaaaa cccc`) write `cccc` halfwords, three per following code, as in
+   mGBA and VBA-M.
+ - Carousel: up to 3072 games and 96 KiB of paths (about 2000 games with long
+   names), in the browsed folder and up to 7 levels of subfolders below it.
+
+Development notes
+-----------------
+
+Firmware builds need `gcc-arm-none-eabi` (`make BOARD=sd|lite|chis`), the
+GitHub workflows run the tests on every push and build all three boards for
+master and tags.
+
+ - Tests: `make` in `tests/` (C unit tests, run on the host),
+   `python3 tests/make_covers_test.py` (cover tools, no network needed) and
+   `make upkr.elf && python3 tests/messages_test.py` (language pack).
+ - Menu strings: `res/messages.py` (English) and `res/lang/*.json`. They are
+   not compiled into the firmware: `res/messages.py pack` builds `lang.pack`
+   (all languages, compressed together with upkr), bundled as the `LANG`
+   virtual file. `lang_load()` (src/menu.c) unpacks it to the SDRAM scratch
+   area and copies only the chosen language into EWRAM. That language is
+   also saved unpacked to `/.superfw/lang.cache` (tagged with the pack's
+   CRC32), so normal boots just read that file; it is rebuilt after a
+   language change or a firmware update. Anything else using
+   `sdr_state->scratch` must call `lang_scratch_used()`. Missing
+   translations fall back to English.
+ - Carousel: drawing, the game list scanner and the list cache are in
+   src/menu.c (`render_carousel()`, `cscan_*`, `carousel_cache_*`); the
+   hardware independent helpers (cover header, sorting, titles, sizes,
+   colors) are in src/carousel_util.c and are unit tested. Game list, path
+   pool and cover slots live in SDRAM (`t_sdram_state`). Cover files: 16
+   byte header (`t_cover_header`, magic "SFCV"), then an 80x80 and a 48x48
+   8bpp image using a fixed 6x6x6 color cube at BG palette entries 20..235;
+   entry 236 is the (tinted) carousel background. `tools/make-covers.py`
+   writes them and `tools/carousel-preview.py` renders a PC preview using
+   the same layout code.
+ - Files read from the SD card (cheats, patches, settings, the pending save
+   and the NOR metadata) can be damaged or edited by hand: their parsers
+   check sizes and counts before using them as lengths or indexes.
+   `tests/fuzz/` fuzzes them (libFuzzer with address and undefined behaviour
+   sanitizers, needs clang): `make run` there, CI runs each for 45 seconds.
+ - Paths are built with `path_join()` / `path_join_ext()` (src/util.c),
+   which refuse results longer than `MAX_FN_LEN` instead of overflowing.
+ - `make BOARD=... stack-check` adds up the worst case stack depth from
+   GCC's call graph info (`tools/stack-check.py`) and fails if it is over the
+   16 KB stack. CI runs it, and cppcheck on `src/`.
 
 Licenses
 --------

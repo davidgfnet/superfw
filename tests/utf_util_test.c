@@ -44,6 +44,16 @@ int main() {
   assert(0x3400 == utf8_decode("㐀"));
   assert(0x1f600 == utf8_decode("😀"));
 
+  // Malformed/cut sequences count as one byte and never skip the NUL.
+  assert(1 == utf8_chlen("\xC3"));
+  assert(1 == utf8_chlen("\xE2\x82"));
+  assert(1 == utf8_chlen("\xF0\x9F\x98"));
+  assert(1 == utf8_chlen("\xC3" "A"));
+  assert(0xFFFD == utf8_decode("\xC3"));
+  assert(0xFFFD == utf8_decode("\xF0\x9F"));
+  assert(3 == utf8_strlen("a\xE2\x82"));
+  assert(2 == utf8_strlen("\xFF\xFF"));
+
   uint16_t out[4];
 
   sortable_utf8_u16("f", out);
