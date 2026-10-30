@@ -103,8 +103,9 @@ enum {
   UiSetRect  = 2,
   UiSetASpd  = 3,
   UiSetHid   = 4,
-  UiSetSave  = 5,
-  UiSetMAX   = 5,
+  UiSetExt   = 5,
+  UiSetSave  = 6,
+  UiSetMAX   = 6,
 };
 
 enum {
@@ -1324,6 +1325,19 @@ static void draw_central_text_wrapped(const char *t, volatile uint8_t *frame, un
   }
 }
 
+// A file name as the lists show it: without its extension when "Show
+// extensions" is off (names starting with a dot keep theirs). out is a
+// MAX_FN_LEN buffer, used only when the name changes.
+static const char *list_name(const char *fn, char *out) {
+  const char *ext = show_ext ? NULL : find_extension(fn);
+  if (!ext || ext == fn + 1)
+    return fn;
+  unsigned l = ext - fn - 1;
+  memcpy(out, fn, l);
+  out[l] = 0;
+  return out;
+}
+
 void render_recent(volatile uint8_t *frame) {
   // Render the list from memory.
   for (unsigned i = 0; i < RECENT_ROWS; i++) {
@@ -1333,13 +1347,15 @@ void render_recent(volatile uint8_t *frame) {
     t_rentry *e = &sdr_state->rentries[smenu.recent.seloff + i];
     char *fn = &e->fpath[e->fname_offset];
     render_icon(2, (i+1)*16, guessicon(fn));
+    char nbuf[MAX_FN_LEN];
+    const char *name = list_name(fn, nbuf);
 
     // Animate the row entries if they are too long!
     if (i == smenu.recent.selector - smenu.recent.seloff)
-      draw_text_ovf_rotate(fn, frame, 20, (1 + i) * 16,
+      draw_text_ovf_rotate(name, frame, 20, (1 + i) * 16,
                            SCREEN_WIDTH - 24, &smenu.anim_state);
     else
-      draw_text_ovf(fn, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 24);
+      draw_text_ovf(name, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 24);
   }
 
   for (unsigned i = 0; i < 240; i += 16)
@@ -1368,7 +1384,8 @@ void render_flashbrowser(volatile uint8_t *frame) {
       draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
 
       // Animate the row entries if they are too long!
-      const char *romname = &e->game_name[e->bnoffset];
+      char nbuf[MAX_FN_LEN];
+      const char *romname = list_name(&e->game_name[e->bnoffset], nbuf);
       if (i == smenu.fbrowser.selector - smenu.fbrowser.seloff)
         draw_text_ovf_rotate(romname, frame, 20, (1 + i) * 16,
                              SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
@@ -1416,12 +1433,16 @@ void render_browser(volatile uint8_t *frame) {
         draw_rightj_text(szstr, frame, SCREEN_WIDTH - 2, (1 + i) * 16);
       }
 
+      // Folders keep their whole name.
+      char nbuf[MAX_FN_LEN];
+      const char *name = (e->attr & AM_DIR) ? e->fname : list_name(e->fname, nbuf);
+
       // Animate the row entries if they are too long!
       if (i == smenu.browser.selector - smenu.browser.seloff)
-        draw_text_ovf_rotate(e->fname, frame, 20, (1 + i) * 16,
+        draw_text_ovf_rotate(name, frame, 20, (1 + i) * 16,
                              SCREEN_WIDTH - 26 - font_width(szstr), &smenu.anim_state);
       else
-        draw_text_ovf(e->fname, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
+        draw_text_ovf(name, frame, 20, (1 + i) * 16, SCREEN_WIDTH - 26 - font_width(szstr));
     }
 
     for (unsigned i = 0; i < 240; i += 16)
@@ -1931,28 +1952,32 @@ void render_settings(volatile uint8_t *frame) {
 
 void render_ui_settings(volatile uint8_t *frame) {
   const unsigned colx = 170;
+  const unsigned rowh = 18;     // Six rows above the Save button
   char tmpbuf[64];
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %u >", menu_theme + 1U);
   draw_text_ovf(msgs[lang_id][MSG_UIS_THEME], frame, 8, 22, 224);
   draw_central_text(tmpbuf, frame, colx, 22 );
 
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %s >", msgs[lang_id][MSG_LANG_NAME]);
-  draw_text_ovf(msgs[lang_id][MSG_UIS_LANG], frame, 8, 22 + 20, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 + 20 );
+  draw_text_ovf(msgs[lang_id][MSG_UIS_LANG], frame, 8, 22 + rowh * 1, 224);
+  draw_central_text(tmpbuf, frame, colx, 22 + rowh * 1 );
 
-  draw_text_ovf(msgs[lang_id][MSG_UIS_RECNT], frame, 8, 22 + 40, 224);
-  draw_central_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + 40 );
+  draw_text_ovf(msgs[lang_id][MSG_UIS_RECNT], frame, 8, 22 + rowh * 2, 224);
+  draw_central_text(msgs[lang_id][recent_menu ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + rowh * 2 );
 
   npf_snprintf(tmpbuf, sizeof(tmpbuf), "< %s >", msgs[lang_id][MSG_UIS_SPD0 + anim_speed]);
-  draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + 60, 224);
-  draw_central_text(tmpbuf, frame, colx, 22 + 60 );
+  draw_text_ovf(msgs[lang_id][MSG_UIS_ANSPD], frame, 8, 22 + rowh * 3, 224);
+  draw_central_text(tmpbuf, frame, colx, 22 + rowh * 3 );
 
-  draw_text_ovf(msgs[lang_id][MSG_UIS_BHID], frame, 8, 22 + 80, 224);
-  draw_central_text(msgs[lang_id][hide_hidden ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, 22 + 80 );
+  draw_text_ovf(msgs[lang_id][MSG_UIS_BHID], frame, 8, 22 + rowh * 4, 224);
+  draw_central_text(msgs[lang_id][hide_hidden ? MSG_KNOB_DISABLED : MSG_KNOB_ENABLED], frame, colx, 22 + rowh * 4 );
+
+  draw_text_ovf(msgs[lang_id][MSG_UIS_EXT], frame, 8, 22 + rowh * 5, 224);
+  draw_central_text(msgs[lang_id][show_ext ? MSG_KNOB_ENABLED : MSG_KNOB_DISABLED], frame, colx, 22 + rowh * 5 );
 
   if (smenu.uiset.selector != UiSetSave)
     for (unsigned i = 0; i < 240; i += 16)
-      render_icon_trans(i, 22 + smenu.uiset.selector * 20, 63);
+      render_icon_trans(i, 22 + smenu.uiset.selector * rowh, 63);
 
   draw_button_box(frame, 20, 220, 132, 152, smenu.uiset.selector == UiSetSave);
   draw_central_text(msgs[lang_id][MSG_UIS_SAVE], frame, 120, 134);
@@ -3085,6 +3110,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       hide_hidden ^= 1;
     else if (smenu.uiset.selector == UiSetRect)
       recent_menu ^= 1;
+    else if (smenu.uiset.selector == UiSetExt)
+      show_ext = !show_ext;
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + LANG_COUNT - 1) % LANG_COUNT;
   }
@@ -3097,6 +3124,8 @@ static void keypress_menu_uisettings(unsigned newkeys) {
       hide_hidden ^= 1;
     else if (smenu.uiset.selector == UiSetRect)
       recent_menu ^= 1;
+    else if (smenu.uiset.selector == UiSetExt)
+      show_ext = !show_ext;
     else if (smenu.uiset.selector == UiSetLang)
       lang_id = (lang_id + 1) % LANG_COUNT;
   }
