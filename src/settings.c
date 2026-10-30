@@ -240,8 +240,8 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
       unsigned maxval;
     } uintset[] = {
       { "theme",       &menu_theme,  THEME_COUNT },
-      { "recent_menu", &recent_menu, 1 },
-      { "hide_hidden", &hide_hidden, 1 },
+      { "recent_menu", &recent_menu, 2 },
+      { "hide_hidden", &hide_hidden, 2 },
       { "anim_speed",  &anim_speed,  animspd_cnt },
     };
     unsigned valu = parseuint(value);
