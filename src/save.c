@@ -262,10 +262,10 @@ unsigned flush_pending_sram() {
   // The file contains the save filename template, plus options.
   UINT rdbytes = 0;
   char content[512];
-  res = f_read(&fd, content, sizeof(content) - 1, &rdbytes);
-  f_close(&fd);
-  if (res != FR_OK)
+  if (FR_OK != f_read(&fd, content, sizeof(content) - 1, &rdbytes)) {
+    f_close(&fd);
     return ERR_SAVE_FLUSH_NOSENTINEL;
+  }
   content[rdbytes] = 0;
 
   // Separate options using NULL.

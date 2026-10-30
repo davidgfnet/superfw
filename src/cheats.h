@@ -31,10 +31,6 @@ typedef struct {
   char title[256];
 } t_cheathdr_ext;
 
-// Longest cheat title: slen is 8 bits and the title is NUL terminated and
-// padded to a word boundary (251 + 1 -> 252).
-#define MAX_CHEAT_TITLE  251
-
 typedef struct {
   uint8_t opcode;            // The codebreaker opcode (0 to 15)
   uint8_t blen;              // Number of bytes used by this cheat (usually 8, this struct)

@@ -561,18 +561,13 @@ static void draw_text_ovf_rotate(const char *t, volatile uint8_t *frame, unsigne
     unsigned anim = franim > ANIM_INITIAL_WAIT ? (franim - ANIM_INITIAL_WAIT) >> 4 : 0;
 
     // Wrap around once the text end reaches the mid point aprox.
-    // Text + 6 spaces + text again (long texts are cut, it's just a marquee).
     char tmpbuf[540];
-    unsigned tl = strlen(t);
-    if (tl > (sizeof(tmpbuf) - 7) / 2)
-      tl = (sizeof(tmpbuf) - 7) / 2;
-    memcpy(tmpbuf, t, tl);
-    memcpy(&tmpbuf[tl], "      ", 7);
+    strcpy(tmpbuf, t);
+    strcat(tmpbuf, "      ");
     unsigned pixw = font_width(tmpbuf);
     if (anim > pixw)
       franim = ANIM_INITIAL_WAIT + ((anim - pixw) << 4);
-    memcpy(&tmpbuf[tl + 6], t, tl);
-    tmpbuf[tl * 2 + 6] = 0;
+    strcat(tmpbuf, t);
 
     draw_text_idx8_bus16_range(tmpbuf, basept, anim, maxw, SCREEN_WIDTH, color);
   }

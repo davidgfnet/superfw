@@ -1490,18 +1490,13 @@ static void draw_text_ovf_rotate(const char *t, volatile uint8_t *frame, unsigne
     unsigned anim = *franim > ANIM_INITIAL_WAIT ? (*franim - ANIM_INITIAL_WAIT) >> 4 : 0;
 
     // Wrap around once the text end reaches the mid point aprox.
-    // Text + 6 spaces + text again (long texts are cut, it's just a marquee).
     char tmpbuf[540];
-    unsigned tl = strlen(t);
-    if (tl > (sizeof(tmpbuf) - 7) / 2)
-      tl = (sizeof(tmpbuf) - 7) / 2;
-    memcpy(tmpbuf, t, tl);
-    memcpy(&tmpbuf[tl], "      ", 7);
+    strcpy(tmpbuf, t);
+    strcat(tmpbuf, "      ");
     unsigned pixw = font_width(tmpbuf);
     if (anim > pixw)
       *franim = ANIM_INITIAL_WAIT + ((anim - pixw) << 4);
-    memcpy(&tmpbuf[tl + 6], t, tl);
-    tmpbuf[tl * 2 + 6] = 0;
+    strcat(tmpbuf, t);
 
     draw_text_idx8_bus16_range(tmpbuf, basept, anim, maxw, SCREEN_WIDTH, FT_COLOR);
   }
@@ -3262,13 +3257,6 @@ void menu_flip() {
 }
 
 void menu_init(int sram_testres) {
-  // ui-settings.txt values are used as table indexes but are not range
-  // checked when parsed (the file could be damaged or edited by hand).
-  if (menu_theme >= THEME_COUNT)
-    menu_theme = 0;
-  if (anim_speed >= animspd_cnt)
-    anim_speed = animspd_cnt / 2;
-
   // Unpack the strings of the language in use (loaded from the settings).
   lang_load(lang_id);
 
@@ -4353,10 +4341,6 @@ static void keypress_menu_uisettings(unsigned newkeys) {
 
   if ((newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) && smenu.uiset.selector == UiSetLang)
     lang_load(lang_id);
-
-  // Apply the hidden files filter now (not only after changing folders).
-  if ((newkeys & (KEY_BUTTLEFT | KEY_BUTTRIGHT)) && smenu.uiset.selector == UiSetHid)
-    browser_reload_filter();
 
   if (newkeys & KEY_BUTTA && smenu.uiset.selector == UiSetSave) {
     smenu.uiset.selector = 0;

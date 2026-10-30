@@ -37,13 +37,8 @@ const char *file_basename(const char *fullpath) {
   return &ret[1];
 }
 
-// dirname is a MAX_FN_LEN buffer.
 void file_dirname(const char *fullpath, char *dirname) {
-  size_t l = strlen(fullpath);
-  if (l >= MAX_FN_LEN)
-    l = MAX_FN_LEN - 1;
-  memcpy(dirname, fullpath, l);
-  dirname[l] = 0;
+  strcpy(dirname, fullpath);
   char *p = strrchr(dirname, '/');
   if (p)
     *p = 0;
