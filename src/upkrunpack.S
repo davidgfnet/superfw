@@ -12,10 +12,12 @@
 // r5 .. context index
 // r6 .. decode_length temp
 // r8-r9 .. decode_bit temp
+// r11 .. hardcoded to zero
 // r12 .. decode_length return address
 upkr_unpack:
     push { r0, r3-r12, lr }
 
+    mov r11, $0
     sub sp, $384
     mov r2, $384
     mov r3, $128
@@ -82,23 +84,24 @@ upkr_decode_bit_inc:
     add r5, r5, #1
 upkr_decode_bit:
     cmp r2, #4096
-    ldrltb r8, [r1], #1
-    orrlt r2, r8, r2, lsl#8
-    blt upkr_decode_bit
+    blt .refill              // refill happens rarely (~8%), thus branch
 
     ldrb r8, [sp, r5]
-    and r9, r2, #255
-    add r9, r9, #1
-    cmp r8, r9
+    mvn r9, r2, lsl #24      // prov > (state & 255) can be also expressed as:
+    cmn r9, r8, lsl #24      // 0xFFFFFFFF + ((prob - state) << 24)
     rsbcs r8, r8, #256
-    mvn r9, r2, lsr#8
-    addcs r9, r9, #1
-    mla r2, r8, r9, r2
+    sbc r9, r11, r2, lsr #8
+    mla r2, r9, r8, r2       // mul order matters (can shave a cycle or two)
     add r9, r8, #8
     sub r8, r8, r9, lsr#4
     rsbcs r8, r8, #256
     strb r8, [sp, r5]
     bx lr
+
+.refill:
+    ldrb r8, [r1], #1
+    orr r2, r8, r2, lsl#8
+    b upkr_decode_bit
 
 .retfn:
     add sp, $384
