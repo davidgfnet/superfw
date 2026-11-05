@@ -2,6 +2,30 @@
 
 .section .text
 
+// Bit decoding function, inline it for speed (those extra cycles pile up)
+.macro DECODE_BIT refill_fn
+    cmp r2, #4096
+    blt \refill_fn           // refill happens rarely (~8%), thus branch
+
+    ldrb r8, [sp, r5]
+    mvn r9, r2, lsl #24      // prov > (state & 255) can be also expressed as:
+    cmn r9, r8, lsl #24      // 0xFFFFFFFF + ((prob - state) << 24)
+    rsbcs r8, r8, #256
+    sbc r9, r11, r2, lsr #8
+    mla r2, r9, r8, r2       // mul order matters (can shave a cycle or two)
+    add r9, r8, #8
+    sub r8, r8, r9, lsr#4
+    rsbcs r8, r8, #256
+    strb r8, [sp, r5]
+.endm
+
+.macro REFILL_BIT lbl
+\lbl\()_refill:
+    ldrb r8, [r1], #1
+    orr r2, r8, r2, lsl #8
+    b \lbl
+.endm
+
 .global upkr_unpack
 .type upkr_unpack, %function
 // r0 .. out_ptr (returned)
@@ -18,14 +42,11 @@ upkr_unpack:
     push { r0, r3-r12, lr }
 
     mov r11, $0
-    sub sp, $384
-    mov r2, $384
-    mov r3, $128
-    orr r3, r3, r3, lsl #8
-    orr r3, r3, r3, lsl #16
+    mov r2, $96
+    ldr r3, =0x80808080
 .Lclear:
-    subs r2, r2, #4
-    str r3, [sp, r2]
+    push {r3}
+    subs r2, r2, #1
     bne .Lclear
 
 .Lloop:
@@ -57,31 +78,37 @@ upkr_unpack:
     mov r5, #1
 
 .Ldata_loop:
-    bl upkr_decode_bit
+    DECODE_BIT .Ldata_loop_refill
     adc r5, r5, r5
     movs r4, r5, lsr #8
     beq .Ldata_loop
     b .Lstore
 
+REFILL_BIT .Ldata_loop
+
 .type upkr_decode_length, %function
 upkr_decode_length:
-    mov r12, lr
-
     mov r4, #0
     mvn r6, #0
-.Lbit_loop:
-    bl upkr_decode_bit_inc
-    addcc r4, r4, r6
-    bxcc r12
 
-    bl upkr_decode_bit_inc
+.Lbit_loop:
+    add r5, r5, #1
+.Lbit_loop_1:
+    DECODE_BIT .Lbit_loop_1_refill
+    addcc r4, r4, r6
+    bxcc lr
+
+    add r5, r5, #1
+.Lbit_loop_2:
+    DECODE_BIT .Lbit_loop_2_refill
     addcs r4, r4, r6
     mov r6, r6, lsl #1
     b .Lbit_loop
 
+REFILL_BIT .Lbit_loop_1
+REFILL_BIT .Lbit_loop_2
+
 .type upkr_decode_bit, %function
-upkr_decode_bit_inc:
-    add r5, r5, #1
 upkr_decode_bit:
     cmp r2, #4096
     blt .refill              // refill happens rarely (~8%), thus branch
