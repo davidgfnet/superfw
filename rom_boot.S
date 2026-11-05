@@ -57,6 +57,7 @@
 #define PATCH_DB_ADDR    0x09D00000     @ Where patch db lives
 #define ASSETS_ADDR      0x09E00000     @ Where assets (emu/menu) live
 
+#define REG_IO_BASE      0x04000000
 #define REG_DISPCNT      0x04000000
 #define REG_BG2CNT       0x0400000C
 #define REG_BG2PA        0x04000020
@@ -313,12 +314,13 @@ _main_end:
   @ Setup bitmap offset regs
   mov r1, $0
   mov r2, $0x0100
-  ldr r0, =REG_BG2PA; strh r2, [r0]
-  ldr r0, =REG_BG2PB; strh r1, [r0]
-  ldr r0, =REG_BG2PC; strh r1, [r0]
-  ldr r0, =REG_BG2PD; strh r2, [r0]
-  ldr r0, =REG_BG2X ; str r1, [r0]
-  ldr r0, =REG_BG2Y ; str r1, [r0]
+  mov r0, $REG_IO_BASE
+  strh r2, [r0, #(REG_BG2PA - REG_IO_BASE)]
+  strh r1, [r0, #(REG_BG2PB - REG_IO_BASE)]
+  strh r1, [r0, #(REG_BG2PC - REG_IO_BASE)]
+  strh r2, [r0, #(REG_BG2PD - REG_IO_BASE)]
+  str  r1, [r0, #(REG_BG2X  - REG_IO_BASE)]
+  str  r1, [r0, #(REG_BG2Y  - REG_IO_BASE)]
 
   @ Enable screen again. Bitmap 8bit mode
   ldr r1, =0x0404    // Mode 4, BG2 enabled
@@ -594,12 +596,13 @@ arm9_bootaddr_itcm:
   @ Setup bitmap offset regs
   mov r1, $0
   mov r2, $0x0100
-  ldr r0, =REG_BG2PA; strh r2, [r0]
-  ldr r0, =REG_BG2PB; strh r1, [r0]
-  ldr r0, =REG_BG2PC; strh r1, [r0]
-  ldr r0, =REG_BG2PD; strh r2, [r0]
-  ldr r0, =REG_BG2X ; str r1, [r0]
-  ldr r0, =REG_BG2Y ; str r1, [r0]
+  mov r0, $REG_IO_BASE
+  strh r2, [r0, #(REG_BG2PA - REG_IO_BASE)]
+  strh r1, [r0, #(REG_BG2PB - REG_IO_BASE)]
+  strh r1, [r0, #(REG_BG2PC - REG_IO_BASE)]
+  strh r2, [r0, #(REG_BG2PD - REG_IO_BASE)]
+  str  r1, [r0, #(REG_BG2X  - REG_IO_BASE)]
+  str  r1, [r0, #(REG_BG2Y  - REG_IO_BASE)]
 
   @ Enable VRAM-A and allow CPU access
   @ Enable VRAM-D and map it to the ARM9
