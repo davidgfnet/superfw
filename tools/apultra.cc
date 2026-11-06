@@ -1,4 +1,7 @@
-// apultra.cc - aPLib-compatible compressor, single translation unit
+// apultra.cc - aPLib-derived compressor, single translation unit
+//
+// This is a similar bitstream format to aplib, but with minor changes.
+// See farOffsetSize to see how it's tuned for 16 bit data.
 //
 // A modern C++ reimplementation of the apultra compressor by Emmanuel Marty
 // (https://github.com/emmanuel-marty/apultra). Mostly LLM generated.
@@ -64,6 +67,7 @@ inline constexpr int kCodeLargeMatch = 2;  // 10
 inline constexpr int kSizeLargeMatch = 2;
 inline constexpr int kCode7BitMatch = 6;  // 110
 inline constexpr int kSize7BitMatch = 3;
+inline constexpr int kFarRawBits = 2;      // Raw offset bits between gamma and LSB byte
 inline constexpr int kCode4BitMatch = 7;  // 111
 inline constexpr int kSize4BitMatch = 3;
 
@@ -116,11 +120,31 @@ struct Arrival {
     return value < 2 ? 0 : 2 * (std::bit_width(static_cast<uint32_t>(value)) - 1);
 }
 
+/// Far match offsets are always even and are encoded as halfword distances:
+///   gamma2((offset >> 11) + 2 + followsLiteral), bits [10:9], byte with bits [8:1]
+[[nodiscard]] constexpr int farOffsetGamma(int matchOffset, int followsLiteral) noexcept {
+    return (matchOffset >> (9 + kFarRawBits)) + 2 + followsLiteral;
+}
+
+/// Bits for the token plus offset of a far match.
+[[nodiscard]] constexpr int farOffsetSize(int matchOffset, int followsLiteral) noexcept {
+    return 8 + kFarRawBits + kSizeLargeMatch + gamma2Size(farOffsetGamma(matchOffset, followsLiteral));
+}
+
+/// Odd offsets can only be encoded by the 7 bit match (or a rep-match following it).
+[[nodiscard]] constexpr bool offsetEncodable(int matchOffset) noexcept {
+    return !(matchOffset & 1) || matchOffset < 128;
+}
+
+/// Prevents the optimizer from turning a match into an unencodable far match.
+inline constexpr int kUnencodablePenalty = 1 << 24;
+
 /// Bits for the token plus offset of a match.
 [[nodiscard]] constexpr int offsetVarLenSize(int length, int matchOffset,
                                              int followsLiteral) noexcept {
     if (length <= 3 && matchOffset < 128) return 8 + kSize7BitMatch;
-    return 8 + kSizeLargeMatch + gamma2Size((matchOffset >> 8) + 2 + (followsLiteral ? 1 : 0));
+    return farOffsetSize(matchOffset, followsLiteral ? 1 : 0) +
+           ((matchOffset & 1) ? kUnencodablePenalty : 0);
 }
 
 /// Bits for the length of a match.
@@ -506,6 +530,9 @@ int Compressor::findMatchesAt(int offset, Match* matches, uint16_t* matchDepth, 
 
     // Record a candidate, collapsing runs of (offset-1, length-1) into a depth.
     const auto record = [&](int matchOffset, int matchLen, bool tagged) {
+        if (!offsetEncodable(matchOffset))
+            return;
+
         if (prevOffset && prevLen > 2 && matchOffset == prevOffset - 1 &&
             matchLen == prevLen - 1 && curDepthPtr && curDepth < kLcpMax) {
             *curDepthPtr = static_cast<uint16_t>((++curDepth) | (tagged ? 0x8000 : 0));
@@ -524,7 +551,7 @@ int Compressor::findMatchesAt(int offset, Match* matches, uint16_t* matchDepth, 
     if (selfContained && (matchPtr - matches) < maxMatches) {
         const auto matchOffset = static_cast<int>(offset - matchPos);
         const auto matchLen = static_cast<int>(ref >> (kLcpShift + kTagBits));
-        if (matchOffset <= max_offset_) {
+        if (matchOffset <= max_offset_ && offsetEncodable(matchOffset)) {
             matchPtr->length = static_cast<uint32_t>(matchLen);
             matchPtr->offset = static_cast<uint32_t>(matchOffset);
             ++matchPtr;
@@ -902,10 +929,8 @@ void Compressor::optimizeForward(const uint8_t* window, int startOffset, int end
                     if (startingMatchLen <= 3 && nMatchOffset < 128) {
                         noRepOffsetCostForLit[0] = noRepOffsetCostForLit[1] = 8 + kSize7BitMatch;
                     } else {
-                        noRepOffsetCostForLit[0] =
-                            8 + kSizeLargeMatch + gamma2Size((nMatchOffset >> 8) + 2);
-                        noRepOffsetCostForLit[1] =
-                            8 + kSizeLargeMatch + gamma2Size((nMatchOffset >> 8) + 3);
+                        noRepOffsetCostForLit[0] = farOffsetSize(nMatchOffset, 0);
+                        noRepOffsetCostForLit[1] = farOffsetSize(nMatchOffset, 1);
                     }
                     const int noRepOffsetCostDelta =
                         noRepOffsetCostForLit[1] - noRepOffsetCostForLit[0];
@@ -915,7 +940,9 @@ void Compressor::optimizeForward(const uint8_t* window, int startOffset, int end
                         Arrival* dest = &cur_arrival[static_cast<std::size_t>(k) * arrivals_];
 
                         // --- non-rep match candidate
-                        if (k >= minMatchLenForOffset) {
+                        // (odd offsets can only use the 7 bit match encoding)
+                        if (k >= minMatchLenForOffset &&
+                            (!(nMatchOffset & 1) || (k <= 3 && nMatchOffset < 128))) {
                             int noRepMatchLenCost;
                             if (k <= 3 && nMatchOffset < 128)
                                 noRepMatchLenCost = 0;
@@ -1008,7 +1035,7 @@ void Compressor::optimizeForward(const uint8_t* window, int startOffset, int end
 
                         if (k == 3 && nMatchOffset < 128)
                             noRepOffsetCostForLit[0] = noRepOffsetCostForLit[1] =
-                                8 + kSizeLargeMatch + 2;
+                                8 + kFarRawBits + kSizeLargeMatch + 2;
 
                         // --- rep-match candidate
                         if (k > overallMinRepLen && k <= overallMaxRepLen) {
@@ -1378,11 +1405,20 @@ bool Compressor::writeBlock(const uint8_t* window, int startOffset, int endOffse
                 writer.writeByte(static_cast<uint8_t>(((offset & 0x7f) << 1) | (len - 2)));
                 curFollowsLiteral = 0;
                 rep = offset;
+            } else if (offset & 1) {
+                // This offset cannot be encoded, emit literals instead.
+                for (int l = 0; l < len; ++l) {
+                    writer.writeBits(0, 1);
+                    writer.writeByte(window[i + l]);
+                }
+                curFollowsLiteral = 1;
             } else {
-                // 8+n bits offset, length as a gamma2 value
+                // Even offset: gamma2 high bits, raw bits, LSB byte (in halfwords).
+                // Followed by the length as a gamma2 value
                 writer.writeBits(kCodeLargeMatch, kSizeLargeMatch);
-                writer.writeGamma2((offset >> 8) + 2 + (curFollowsLiteral & 1));
-                writer.writeByte(static_cast<uint8_t>(offset & 0xff));
+                writer.writeGamma2(farOffsetGamma(offset, curFollowsLiteral & 1));
+                writer.writeBits((offset >> 9) & ((1 << kFarRawBits) - 1), kFarRawBits);
+                writer.writeByte(static_cast<uint8_t>((offset >> 1) & 0xff));
 
                 if (offset < 128 || offset >= kMinMatch4Offset)
                     writer.writeGamma2(len - 2);
@@ -1463,7 +1499,7 @@ void Compressor::supplementMatches(const uint8_t* window, int prevBlockSize, int
                     break;
                 }
             }
-            if (exists) continue;
+            if (exists || !offsetEncodable(offset)) continue;
 
             match[m].length =
                 (pos < (endOffset - 2) && window[matchPos + 2] == window[pos + 2]) ? 3 : 2;
@@ -1531,7 +1567,7 @@ void Compressor::supplementMatchesFurther(const uint8_t* window, int prevBlockSi
                     break;
                 }
             }
-            if (!gotMatch) continue;
+            if (!gotMatch || !offsetEncodable(offset)) continue;
 
             match[m].length = static_cast<uint32_t>(lenAt(matchPos));
             match[m].offset = static_cast<uint32_t>(offset);

@@ -28,8 +28,10 @@
 @ POSSIBILITY OF SUCH DAMAGE.
 
 
-@ aplib unpacker for ARM7TDMI
+@ aplib-derived unpacker for ARM7TDMI
 @ Version based on different depackers and some "new" ideas.
+@ This is a format similar to aplib but not compatible anymore.
+@ Use tools/apultra.cc to generate streams.
 @ There are two versions of the depacking routine: regular byte-access routine
 @ that works at a byte level, and a 16 bit bus friendly version that uses
 @ 16 bit accesses and takes care of alignment problems, so it can be used with
@@ -55,12 +57,17 @@
   ldrcsb r10, [r0], #1;      /* Load next byte if we consumed the byte */     \
   tst r10, r11;              /* Check current bit */
 
+@ Reads a far match offset into r5, r2 is the gamma value and r6 the pair flag.
 #define readfaroffset                                                         \
   sub r3, r2, $2;            /* high bits = value - 2 - pair */               \
   sub r3, r3, r6;                                                             \
+  lsl r3, r3, $1;            /* Two extra raw offset bits */                  \
+  nextbitzf; orrne r3, r3, $1;                                                \
+  lsl r3, r3, $1;                                                             \
+  nextbitzf; orrne r3, r3, $1;                                                \
   ldrb r5, [r0], #1;         /* read one byte to use as LSB */                \
-  orr r5, r5, r3, lsl #8;    /* join bytes  */
-
+  orr r5, r5, r3, lsl #8;    /* join bytes  */                                \
+  lsl r5, r5, $1;            /* offset is encoded in halfwords */
 
 #ifdef _APPACK_BYTE_VERSION
 
