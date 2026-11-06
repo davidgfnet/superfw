@@ -207,16 +207,16 @@ main:
   mov r0, $GAMEPAK_BASEADDR
   mov r1, $(32 / 4 - 1)  @ Number of blocks to check
   mov r12, $0x4          @ Assume booting from flash
-  ldmia r0, {r4-r7}
+  ldmia r0, {r2-r5}
 
   1:
     add r0, $(4*1024*1024)   @ Use 4MiB blocks (compatible with bigger flash)
-    ldmia r0, {r8-r11}   @ Compare the first 16 bytes of each block block.
-    cmp   r4, r8
+    ldmia r0, {r6-r9}        @ Compare the first 16 bytes of each block block.
+    cmp   r2, r6
+    cmpeq r3, r7
+    cmpeq r4, r8
     cmpeq r5, r9
-    cmpeq r6, r10
-    cmpeq r7, r11
-    movne r12, $0x5      @ Running from SDRAM, set flag, break loop.
+    movne r12, $0x5          @ Running from SDRAM, set flag, break loop.
     bne 2f
 
     subs r1, $1
@@ -509,12 +509,12 @@ arm7_bootaddr:
   cmp r2, $3                   @ Check if it's in WRAM
   bne 1f
 
-    ldr r2, [r0, #60]            @ Load size
-    ldr r3, =NDS_WRAM_MIRROR     @ ARM9 placed the data here!
+    ldr r0, [r0, #60]            @ Load size
+    ldr r2, =NDS_WRAM_MIRROR     @ ARM9 placed the data here!
     2:
-      ldm r3!, {r4-r11}
-      stm r1!, {r4-r11}          @ Copy the data into the final addr
-      subs r2, $32
+      ldm r2!, {r3-r10}
+      stm r1!, {r3-r10}          @ Copy the data into the final addr
+      subs r0, $32
       bgt 2b
   1:
 

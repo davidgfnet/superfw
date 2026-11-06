@@ -41,6 +41,7 @@
 upkr_unpack:
     push { r0, r3-r12, lr }
 
+    // Setup initial state including table on stack
     mov r11, $0
     mov r2, $96
     ldr r3, =0x80808080
@@ -76,7 +77,6 @@ upkr_unpack:
 
 .Ldata:
     mov r5, #1
-
 .Ldata_loop:
     DECODE_BIT .Ldata_loop_refill
     adc r5, r5, r5
@@ -86,11 +86,10 @@ upkr_unpack:
 
 REFILL_BIT .Ldata_loop
 
-.type upkr_decode_length, %function
+// decodes a length field
 upkr_decode_length:
     mov r4, #0
     mvn r6, #0
-
 .Lbit_loop:
     add r5, r5, #1
 .Lbit_loop_1:
@@ -108,27 +107,13 @@ upkr_decode_length:
 REFILL_BIT .Lbit_loop_1
 REFILL_BIT .Lbit_loop_2
 
-.type upkr_decode_bit, %function
-upkr_decode_bit:
-    cmp r2, #4096
-    blt .refill              // refill happens rarely (~8%), thus branch
-
-    ldrb r8, [sp, r5]
-    mvn r9, r2, lsl #24      // prov > (state & 255) can be also expressed as:
-    cmn r9, r8, lsl #24      // 0xFFFFFFFF + ((prob - state) << 24)
-    rsbcs r8, r8, #256
-    sbc r9, r11, r2, lsr #8
-    mla r2, r9, r8, r2       // mul order matters (can shave a cycle or two)
-    add r9, r8, #8
-    sub r8, r8, r9, lsr#4
-    rsbcs r8, r8, #256
-    strb r8, [sp, r5]
-    bx lr
-
+// bit decoding function
 .refill:
     ldrb r8, [r1], #1
     orr r2, r8, r2, lsl#8
-    b upkr_decode_bit
+upkr_decode_bit:
+    DECODE_BIT .refill
+    bx lr
 
 .retfn:
     add sp, $384
