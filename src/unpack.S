@@ -55,6 +55,13 @@
   ldrcsb r10, [r0], #1;      /* Load next byte if we consumed the byte */     \
   tst r10, r11;              /* Check current bit */
 
+#define readfaroffset                                                         \
+  sub r3, r2, $2;            /* high bits = value - 2 - pair */               \
+  sub r3, r3, r6;                                                             \
+  ldrb r5, [r0], #1;         /* read one byte to use as LSB */                \
+  orr r5, r5, r3, lsl #8;    /* join bytes  */
+
+
 #ifdef _APPACK_BYTE_VERSION
 
 .global apunpack8
@@ -124,10 +131,7 @@ _token_10:
   b 1f                                 @ Jump to copying loop
 
 _long_off:
-  sub r3, r2, $2                       @ high bits = value - 2 - pair
-  sub r3, r3, r6
-  ldrb r5, [r0], #1                    @ read one byte to use as LSB
-  orr r5, r5, r3, lsl #8               @ join bytes
+  readfaroffset
 
   bl _decode_gamma                     @ read length to copy
   cmp r5, $0x80                        @ Add some +1 or +2 depending on offset
@@ -251,10 +255,7 @@ _token_10_unal:
   b 1f                                 @ Jump to copying loop
 
 _long_off_unal:
-  sub r3, r2, $2                       @ high bits = value - 2 - pair
-  sub r3, r3, r6
-  ldrb r5, [r0], #1                    @ read one byte to use as LSB
-  orr r5, r5, r3, lsl #8               @ join bytes
+  readfaroffset
   mov r6, $0                           @ set: Not a literal
 
   bl _decode_gamma                     @ read length to copy
@@ -345,10 +346,7 @@ _token_10_al:
   b 1f                                 @ Jump to copying loop
 
 _long_off_al:
-  sub r3, r2, $2                       @ high bits = value - 2 - pair
-  sub r3, r3, r6
-  ldrb r5, [r0], #1                    @ read one byte to use as LSB
-  orr r5, r5, r3, lsl #8               @ join bytes
+  readfaroffset
   mov r6, $0                           @ set: Not a literal
 
   bl _decode_gamma                     @ read length to copy
