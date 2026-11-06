@@ -429,17 +429,21 @@ unsigned sdcard_init(t_card_info *info) {
 #endif
 
 unsigned sdcard_read_blocks(uint8_t *buffer, uint32_t blocknum, unsigned blkcnt) {
-  uint8_t resp[4];
-  if (!send_sdcard_command_noclock(SD_CMD18, sc_issdhc() ? blocknum : blocknum * 512, resp, sizeof(resp)))
-    return SD_ERR_BADREAD;
+  unsigned ret = 0;
 
-  // Read all data using the asm routine for speed.
-  if (sc_read_sectors[SC_FAST_ROM_MIRROR ? 1 : 0](buffer, blkcnt, WAIT_DATA_TIMEOUT))
-    return SD_ERR_BADREAD;
+  // Send the command but don't read the response, wait for data directly.
+  if (!send_sdcard_command_raw(SD_CMD18, sc_issdhc() ? blocknum : blocknum * 512))
+    ret = SD_ERR_BADREAD;
+  else {
+    // Read all data using the asm routine for speed.
+    if (sc_read_sectors[SC_FAST_ROM_MIRROR ? 1 : 0](buffer, blkcnt, WAIT_DATA_TIMEOUT))
+      ret = SD_ERR_BADREAD;
+  }
 
   if (!send_sdcard_command(SD_CMD12, 0, NULL, SD_MAX_RESP))
-    return SD_ERR_BADREAD;
-  return 0;
+    ret = SD_ERR_BADREAD;
+
+  return ret;
 }
 
 unsigned sdcard_write_blocks(const uint8_t *buffer, uint32_t blocknum, unsigned blkcnt) {
