@@ -84,6 +84,10 @@ uint8_t lang_id = 0;
 uint8_t recent_menu = 1;
 uint8_t hide_hidden = 0;
 uint8_t anim_speed = animspd_cnt / 2;
+uint8_t start_tab = 0;          // 0: Recent/SD browser, 1: Carousel
+uint8_t show_ext = 1;           // Show file extensions in the lists
+uint8_t car_view = 0;           // Carousel: games shown (all, favourites, a system)
+uint8_t car_sort = 0;           // Carousel: order (name, system, recently played)
 
 // Default settings
 t_patch_policy patcher_default = PatchAuto;
@@ -129,8 +133,13 @@ bool save_ui_settings() {
     "langcode=%c%c\n"
     "recent_menu=%u\n"
     "anim_speed=%u\n"
-    "hide_hidden=%u\n",
-    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden);
+    "hide_hidden=%u\n"
+    "start_tab=%u\n"
+    "show_ext=%u\n"
+    "car_view=%u\n"
+    "car_sort=%u\n",
+    menu_theme, (lc & 0xFF), (lc >> 8), recent_menu, anim_speed, hide_hidden, start_tab, show_ext,
+    car_view, car_sort);
 
   UINT wrbytes;
   FRESULT res = f_write(&fd, buf, strlen(buf), &wrbytes);
@@ -231,6 +240,8 @@ static void parse_settings(void *usr, const char *var, const char *value) {
 
 static void parse_ui_settings(void *usr, const char *var, const char *value) {
   if (!strcmp(var, "langcode")) {
+    if (!value[0] || !value[1])
+      return;     // Language codes are two letters
     uint16_t code = ((uint8_t)value[0]) | (((uint8_t)value[1]) << 8);
     lang_id = lang_lookup(code);
   } else {
@@ -239,10 +250,15 @@ static void parse_ui_settings(void *usr, const char *var, const char *value) {
       uint8_t * const var;
       unsigned maxval;
     } uintset[] = {
+      // Bounds (exclusive): out of range values read as 0. Booleans are 2.
       { "theme",       &menu_theme,  THEME_COUNT },
       { "recent_menu", &recent_menu, 2 },
       { "hide_hidden", &hide_hidden, 2 },
       { "anim_speed",  &anim_speed,  animspd_cnt },
+      { "start_tab",   &start_tab,   2 },
+      { "show_ext",    &show_ext,    2 },
+      { "car_view",    &car_view,    2 + 16 },    // All, favourites, or one of 16 systems (menu.c)
+      { "car_sort",    &car_sort,    3 },         // CarSortCNT (menu.c)
     };
     unsigned valu = parseuint(value);
     for (unsigned i = 0; i < sizeof(uintset)/sizeof(uintset[0]); i++)
@@ -298,25 +314,21 @@ void load_settings() {
   }
 }
 
+// ROM paths are checked before (see rom_path_ok) so these fit. If they did not,
+// the name is left empty and opening it fails.
 void sram_filename_calc(const char *rom, char *savefn, unsigned save_path) {
-  if (save_path == SaveRomName) {
-    strcpy(savefn, rom);   // Use the full ROM path
-  }
-  else {
-    const char *p = file_basename(rom);
-    const char *path = save_paths[save_path];
-    strcpy(savefn, path);   // Add the base path
-    strcat(savefn, p);      // Append just the basename
-  }
-
-  replace_extension(savefn, ".sav");
+  bool ok;
+  if (save_path == SaveRomName)    // Use the full ROM path
+    ok = path_join_ext(savefn, "", rom, ".sav");
+  else                             // Base path + just the basename
+    ok = path_join_ext(savefn, save_paths[save_path], file_basename(rom), ".sav");
+  if (!ok)
+    savefn[0] = 0;
 }
 
 void savestate_filename_calc(const char *rom, char *statefn) {
-  const char *p = file_basename(rom);
-  strcpy(statefn, savestates_paths[state_path_default]);   // Add the base path
-  strcat(statefn, p);               // Append just the basename
-  replace_extension(statefn, "");
+  if (!path_join_ext(statefn, savestates_paths[state_path_default], file_basename(rom), ""))
+    statefn[0] = 0;
 }
 
 static void parse_rom_load_settings(void *usr, const char *var, const char *value) {
@@ -345,12 +357,10 @@ bool load_rom_settings(const char *fn, t_rom_load_settings *rld, t_rom_launch_se
   FIL fd;
   {
     char path[MAX_FN_LEN];
-    strcpy(path, ROMCONFIG_PATH);
-    strcat(path, file_basename(fn));
-    replace_extension(path, ".config");
 
     // Attempt to open and read the file.
-    if (FR_OK != f_open(&fd, path, FA_READ))
+    if (!path_join_ext(path, ROMCONFIG_PATH, file_basename(fn), ".config") ||
+        FR_OK != f_open(&fd, path, FA_READ))
       return false;
   }
 
@@ -379,11 +389,8 @@ bool save_rom_settings(const char *fn, const t_rom_load_settings *rld, const t_r
   FIL fd;
   {
     char path[MAX_FN_LEN];
-    strcpy(path, ROMCONFIG_PATH);
-    strcat(path, file_basename(fn));
-    replace_extension(path, ".config");
-
-    if (FR_OK != f_open(&fd, path, FA_WRITE | FA_CREATE_ALWAYS))
+    if (!path_join_ext(path, ROMCONFIG_PATH, file_basename(fn), ".config") ||
+        FR_OK != f_open(&fd, path, FA_WRITE | FA_CREATE_ALWAYS))
       return false;
   }
 

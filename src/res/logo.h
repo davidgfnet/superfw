@@ -12,7 +12,7 @@ const uint16_t logo_pal[3] = {
   0x7fff,0x0013,0x0000
 };
 
-static void init_logo_palette(volatile uint16_t *pal) {
+static inline void init_logo_palette(volatile uint16_t *pal) {
   for (unsigned i = 0; i < 3; i++)
     pal[i] = logo_pal[i];
 }

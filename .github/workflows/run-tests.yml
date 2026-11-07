@@ -8,9 +8,9 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Install dependencies
-        run: sudo apt-get install gcc lcov
+        run: sudo apt-get install gcc g++ lcov python3-pil
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: 'true'
       - name: Get short SHA
@@ -18,9 +18,74 @@ jobs:
         run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
       - name: Build and run tests
         run: cd tests && make
+      - name: Run cover tool tests
+        run: python3 tests/make_covers_test.py
+      - name: Run language pack tests
+        run: make upkr.elf && python3 tests/messages_test.py
       - name: Upload coverage report
         if: ${{ success() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-coverage-${{ steps.slug.outputs.sha8 }}
           path: tests/coverage/*
+
+  # Throws random/damaged inputs at the parsers of files read from the SD card
+  # (cheats, recent list, patches, NOR metadata, settings, utf-8 names), with
+  # address/undefined behaviour sanitizers. Any crash fails the run and the
+  # input that caused it is uploaded.
+  fuzz-parsers:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get install clang
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Build and run the fuzzers
+        run: cd tests/fuzz && make run FUZZTIME=45
+      - name: Upload crash inputs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crashes-${{ github.sha }}
+          path: |
+            tests/fuzz/crash-*
+            tests/fuzz/leak-*
+            tests/fuzz/timeout-*
+
+  # Worst case stack depth of the menu firmware from GCC's call graph info.
+  # The stack lives in IWRAM next to .bss, so it must stay well under 16 KB.
+  stack-check:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        board: [sd, chis]
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get install gcc-arm-none-eabi python3
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: 'true'
+      - name: Check stack usage
+        run: make BOARD=${{ matrix.board }} stack-check
+
+  # Static analysis of the firmware sources (bugs, not style).
+  cppcheck:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get install cppcheck python3
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          submodules: 'true'
+      - name: Run cppcheck
+        run: |
+          make src/messages_data.h src/menu_messages.h
+          cppcheck --version
+          cppcheck --enable=warning,portability --inline-suppr --error-exitcode=1 \
+                   --std=c11 --platform=unix32 -q -j4 \
+                   -Isrc -I. -DBOARD_CHIS -DSUPPORT_NORGAMES \
+                   --suppress=missingIncludeSystem \
+                   -i src/fatfs -i fatfs \
+                   src

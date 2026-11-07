@@ -1,6 +1,7 @@
 .arm
 
-.section .text
+// Runs from IWRAM: ARM code fetched from EWRAM is several times slower.
+.section .iwram.text, "ax", %progbits
 
 .global upkr_unpack16
 .type upkr_unpack16, %function
