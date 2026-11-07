@@ -91,13 +91,12 @@ _main_loop:              @ Decode prefix code and process each case
   beq _token_110         @ Prefix "110"
 
 
-  @ Prefix "111": Copies a previous byte with 4 bit offset.
+  @ Prefix "111": Copies a previous byte with a 3 bit even offset.
   mov r2, $0
-  nextbitzf; orrne r2, $0x8   @ Extract 4 bits (MSB first)
+  nextbitzf; orrne r2, $0x8   @ Extract 3 bits (MSB first, x2)
   nextbitzf; orrne r2, $0x4
   nextbitzf; orrne r2, $0x2
-  nextbitzf; orrne r2, $0x1
-  @ If the 4 bit field is zero, emit a zero byte instead
+  @ If the 3 bit field is zero, emit a zero byte instead
   cmp r2, $0
   ldrneb r2, [r1, -r2]      @ Load byte from output buffer.
   strb r2, [r1], #1         @ Emit new byte
@@ -203,13 +202,12 @@ _main_loop_unal:         @ Decode prefix code and process each case
   beq _token_110_unal    @ Prefix "110"
 
 
-  @ Prefix "111": Copies a previous byte with 4 bit offset.
+  @ Prefix "111": Copies a previous byte with a 3 bit even offset.
   mov r2, $0
-  nextbitzf; orrne r2, $0x8   @ Extract 4 bits (MSB first)
+  nextbitzf; orrne r2, $0x8   @ Extract 3 bits (MSB first, x2)
   nextbitzf; orrne r2, $0x4
   nextbitzf; orrne r2, $0x2
-  nextbitzf; orrne r2, $0x1
-  @ If the 4 bit field is zero, emit a zero byte instead
+  @ If the 3 bit field is zero, emit a zero byte instead
   cmp r2, $0
   ldrneb r2, [r1, -r2]      @ Load byte from output buffer.
   orr r2, r7, r2, lsl #8    @ Place previous byte in the LSB
@@ -299,13 +297,12 @@ _main_loop_al:           @ Decode prefix code and process each case
   beq _token_110_al      @ Prefix "110"
 
 
-  @ Prefix "111": Copies a previous byte with 4 bit offset.
+  @ Prefix "111": Copies a previous byte with a 3 bit even offset.
   mov r7, $0
-  nextbitzf; orrne r7, $0x8   @ Extract 4 bits (MSB first)
+  nextbitzf; orrne r7, $0x8   @ Extract 3 bits (MSB first, x2)
   nextbitzf; orrne r7, $0x4
   nextbitzf; orrne r7, $0x2
-  nextbitzf; orrne r7, $0x1
-  @ If the 4 bit field is zero, emit a zero byte instead
+  @ If the 3 bit field is zero, emit a zero byte instead
   cmp r7, $0
   ldrneb r7, [r1, -r7]      @ Load byte from output buffer.
   strh r7, [r1], #1         @ Emit byte (write halfword)

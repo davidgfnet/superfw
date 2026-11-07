@@ -1,7 +1,7 @@
 // apultra.cc - aPLib-derived compressor, single translation unit
 //
 // This is a similar bitstream format to aplib, but with minor changes.
-// See farOffsetSize to see how it's tuned for 16 bit data.
+// See farOffsetSize and shortOffsetEncodable to see how it's tuned for 16 bit data.
 //
 // A modern C++ reimplementation of the apultra compressor by Emmanuel Marty
 // (https://github.com/emmanuel-marty/apultra). Mostly LLM generated.
@@ -68,8 +68,9 @@ inline constexpr int kSizeLargeMatch = 2;
 inline constexpr int kCode7BitMatch = 6;  // 110
 inline constexpr int kSize7BitMatch = 3;
 inline constexpr int kFarRawBits = 2;      // Raw offset bits between gamma and LSB byte
-inline constexpr int kCode4BitMatch = 7;  // 111
-inline constexpr int kSize4BitMatch = 3;
+inline constexpr int kCodeShortMatch = 7;  // 111
+inline constexpr int kSizeShortMatch = 3;
+inline constexpr int kShortOffsetBits = 3;  // Offset field, in halfwords
 
 // ------------------------------------------------------ matchfinder / parser
 
@@ -129,6 +130,11 @@ struct Arrival {
 /// Bits for the token plus offset of a far match.
 [[nodiscard]] constexpr int farOffsetSize(int matchOffset, int followsLiteral) noexcept {
     return 8 + kFarRawBits + kSizeLargeMatch + gamma2Size(farOffsetGamma(matchOffset, followsLiteral));
+}
+
+/// Single byte matches use even offsets from 2 to 14 (0 encodes a zero byte).
+[[nodiscard]] constexpr bool shortOffsetEncodable(int matchOffset) noexcept {
+    return !(matchOffset & 1) && matchOffset > 0 && matchOffset < (2 << kShortOffsetBits);
 }
 
 /// Odd offsets can only be encoded by the 7 bit match (or a rep-match following it).
@@ -223,6 +229,7 @@ private:
                       int maxMatches, bool selfContained);
     void skipMatches(int startOffset, int endOffset);
     void findAllMatches(int startOffset, int endOffset, int blockFlags);
+    void findShortMatches(std::span<const uint8_t> window, int startOffset, int endOffset);
 
     // optimal parser
     void insertForwardMatch(const uint8_t* window, int i, int matchOffset, int startOffset,
@@ -600,7 +607,7 @@ int Compressor::findMatchesAt(int offset, Match* matches, uint16_t* matchDepth, 
             mainOffset != prevOffset)
             record(mainOffset, mainLen, false);
 
-        if (mainOffset && mainOffset < 16 && mainLen) match1 = static_cast<uint8_t>(mainOffset);
+        if (shortOffsetEncodable(mainOffset) && mainLen) match1 = static_cast<uint8_t>(mainOffset);
 
         if (superRef == 0) break;
         ref = superRef;
@@ -625,6 +632,15 @@ void Compressor::skipMatches(int startOffset, int endOffset) {
     uint8_t match1 = 0;
     for (int i = startOffset; i < endOffset; ++i)
         findMatchesAt(i, &match, &depth, match1, 0, false);
+}
+
+/// The matchfinder only reports offsets with longer matches, look for any single byte match too.
+void Compressor::findShortMatches(std::span<const uint8_t> window, int startOffset, int endOffset) {
+    for (int i = startOffset; i < endOffset; ++i) {
+        uint8_t& match1 = match1_[i - startOffset];
+        for (int off = 2; !match1 && shortOffsetEncodable(off) && off <= i; off += 2)
+            if (window[i] && window[i - off] == window[i]) match1 = static_cast<uint8_t>(off);
+    }
 }
 
 void Compressor::findAllMatches(int startOffset, int endOffset, int blockFlags) {
@@ -768,7 +784,7 @@ void Compressor::optimizeForward(const uint8_t* window, int startOffset, int end
     for (; i != endOffset; ++i, cur_arrival += arrivals_) {
         int j;
 
-        // Cost of coding position i as a literal or as a 4-bit offset match.
+        // Cost of coding position i as a literal or as a short offset match.
         const uint8_t match1Offs = match1_[i - startOffset];
         int shortOffset, shortLen, literalScore, literalCost;
 
@@ -781,7 +797,7 @@ void Compressor::optimizeForward(const uint8_t* window, int startOffset, int end
             shortOffset = (window[i] != 0) ? match1Offs : 0;
             shortLen = 1;
             literalScore = shortOffset ? 3 : 1;
-            literalCost = 4 + kSize4BitMatch;  // command and offset, no length
+            literalCost = kShortOffsetBits + kSizeShortMatch;  // command and offset, no length
         }
 
         if (cur_arrival[arrivals_].from_slot) {
@@ -1155,7 +1171,7 @@ bool Compressor::reduceCommands(const uint8_t* window, int startOffset, int endO
 
             if (next.offset < kMinMatch4Offset || (next.length + 1) >= 4 ||
                 (next.offset == repMatchOffset && followsLiteral)) {
-                int curSize = (match.length == 1) ? (kSize4BitMatch + 4) : (1 + 8);
+                int curSize = (match.length == 1) ? (kSizeShortMatch + kShortOffsetBits) : (1 + 8);
                 if (next.offset == repMatchOffset)  // always follows the literal at i
                     curSize += kSizeLargeMatch + 2 + gamma2Size(next.length);
                 else
@@ -1224,7 +1240,7 @@ bool Compressor::reduceCommands(const uint8_t* window, int startOffset, int endO
                             after += kSizeLargeMatch + 2 + gamma2Size(next.length);
 
                             for (int j = maxLen; j < match.length; ++j)
-                                after += (window[i + j] == 0 || match1(i + j)) ? (kSize4BitMatch + 4)
+                                after += (window[i + j] == 0 || match1(i + j)) ? (kSizeShortMatch + kShortOffsetBits)
                                                                               : (1 + 8);
 
                             if (after < before) {
@@ -1265,7 +1281,7 @@ bool Compressor::reduceCommands(const uint8_t* window, int startOffset, int endO
                     int reducedSize = 0;
                     for (int j = 0; j < match.length; ++j)
                         reducedSize +=
-                            (window[i + j] == 0 || match1(i + j)) ? (kSize4BitMatch + 4) : (1 + 8);
+                            (window[i + j] == 0 || match1(i + j)) ? (kSizeShortMatch + kShortOffsetBits) : (1 + 8);
 
                     if (next.offset == repMatchOffset && next.length >= 2) {
                         reducedSize += kSizeLargeMatch + 2 + gamma2Size(next.length);
@@ -1361,7 +1377,7 @@ bool Compressor::reduceCommands(const uint8_t* window, int startOffset, int endO
             lastMatchLen = match.length;
             i += match.length;
         } else {
-            // 4-bit offset (1 byte match) or literal
+            // Short offset (1 byte match) or literal
             ++i;
             followsLiteral = true;
             lastMatchLen = 0;
@@ -1433,10 +1449,10 @@ bool Compressor::writeBlock(const uint8_t* window, int startOffset, int endOffse
 
             i += len;
         } else if (match.length == 1) {
-            // 4 bits offset
-            if (match.offset < 0 || match.offset > 15) return false;
-            writer.writeBits(kCode4BitMatch, kSize4BitMatch);
-            writer.writeBits(match.offset, 4);
+            // Short offset, in halfwords
+            if (match.offset != 0 && !shortOffsetEncodable(match.offset)) return false;
+            writer.writeBits(kCodeShortMatch, kSizeShortMatch);
+            writer.writeBits(match.offset >> 1, kShortOffsetBits);
             ++i;
             curFollowsLiteral = 1;
         } else {
@@ -1593,6 +1609,7 @@ bool Compressor::shrinkBlock(std::span<const uint8_t> window, int prevBlockSize,
     buildSuffixArray(window.first(endOffset));
     if (prevBlockSize) skipMatches(0, prevBlockSize);
     findAllMatches(prevBlockSize, endOffset, blockFlags);
+    findShortMatches(window, prevBlockSize, endOffset);
 
     std::fill(best_match_.begin(), best_match_.end(), FinalMatch{0, 0});
 
