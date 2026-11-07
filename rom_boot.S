@@ -185,7 +185,7 @@ main:
   @ Resume execution at IWRAM, do the re-offset trick.
   mov r1, $(GAMEPAK_BASEADDR - WRAM_BOOTM_ADDR)
   sub pc, pc, r1
-  nop; nop;
+  nop
 
   @ When using bigger flashes, map the flash mirrored N times.
   #ifdef SUPERCHIS_IO
@@ -216,12 +216,10 @@ main:
     cmpeq r3, r7
     cmpeq r4, r8
     cmpeq r5, r9
-    movne r12, $0x5          @ Running from SDRAM, set flag, break loop.
-    bne 2f
+    movne r12, $0x5          @ Running from SDRAM, set flag.
 
     subs r1, $1
     bne 1b
-  2:
 
   @ Unconditionally set the guessed mode, to ensure the map is not bonkers
   @ (like in the Flash case when WE=0, I suspect a CPLD bug)
@@ -253,14 +251,12 @@ _main_end:
   @ Check if mem[0x02000000] == mem[0x02040000].
   mov r0, $0x02000000
   add r1, r0, $(256*1024)
-  ldr r2, =0xDEADBEEF
-  ldr r3, =0xBADC0DE1
-  str r2, [r0]           @ these two positions should be the same in GBA
-  str r3, [r1]           @ on NDS these are two different memory positions tho.
+  str r0, [r0]           @ these two positions should be the same in GBA
+  str r1, [r1]           @ on NDS these are two different memory positions tho.
 
-  ldr r2, [r0]
-  ldr r3, [r1]
-  cmp r2, r3
+  ldr r0, [r0]
+  ldr r1, [r1]
+  cmp r0, r1
   bne nds_boot_detected  @ They are different, therefore we have an NDS device
 
 
@@ -276,8 +272,8 @@ _main_end:
   @ Copy palette
   adr r0, boot_logo_pal
   mov r1, $0x05000000
-  ldm r0, {r2-r5}
-  stm r1, {r2-r5}
+  ldm r0, {r2-r3}
+  stm r1, {r2-r3}
   @ Render the logo, scaled by 4 byte-word.
   adr r0, boot_logo
   ldr r1, =(0x06000000 + (GBA_SWIDTH-31*4)/2 + ((GBA_SHEIGHT-7*4)/2) * GBA_SWIDTH)
@@ -311,16 +307,7 @@ _main_end:
   mov r1, $0      @ Base block, palette mode, etc
   strh r1, [r0]
 
-  @ Setup bitmap offset regs
-  mov r1, $0
-  mov r2, $0x0100
-  mov r0, $REG_IO_BASE
-  strh r2, [r0, #(REG_BG2PA - REG_IO_BASE)]
-  strh r1, [r0, #(REG_BG2PB - REG_IO_BASE)]
-  strh r1, [r0, #(REG_BG2PC - REG_IO_BASE)]
-  strh r2, [r0, #(REG_BG2PD - REG_IO_BASE)]
-  str  r1, [r0, #(REG_BG2X  - REG_IO_BASE)]
-  str  r1, [r0, #(REG_BG2Y  - REG_IO_BASE)]
+  bl setup_bg2_regs
 
   @ Enable screen again. Bitmap 8bit mode
   ldr r1, =0x0404    // Mode 4, BG2 enabled
@@ -403,7 +390,7 @@ boot_logo:
   .balign 4
 
 boot_logo_pal:
-  .hword 0xffff,0x7fff,0x0013,0x0000,0x0000,0x0000
+  .hword 0xffff,0x7fff,0x0013,0x0000
   .balign 4
 
 @ Copies data from the SDRAM/Flash to the desired SDRAM address
@@ -594,15 +581,7 @@ arm9_bootaddr_itcm:
   strh r1, [r0]
 
   @ Setup bitmap offset regs
-  mov r1, $0
-  mov r2, $0x0100
-  mov r0, $REG_IO_BASE
-  strh r2, [r0, #(REG_BG2PA - REG_IO_BASE)]
-  strh r1, [r0, #(REG_BG2PB - REG_IO_BASE)]
-  strh r1, [r0, #(REG_BG2PC - REG_IO_BASE)]
-  strh r2, [r0, #(REG_BG2PD - REG_IO_BASE)]
-  str  r1, [r0, #(REG_BG2X  - REG_IO_BASE)]
-  str  r1, [r0, #(REG_BG2Y  - REG_IO_BASE)]
+  bl setup_bg2_regs
 
   @ Enable VRAM-A and allow CPU access
   @ Enable VRAM-D and map it to the ARM9
@@ -623,8 +602,8 @@ arm9_bootaddr_itcm:
   @ Copy palette
   adr r0, boot_logo_pal
   mov r1, $0x05000000
-  ldm r0, {r2-r5}
-  stm r1, {r2-r5}
+  ldm r0, {r2-r3}
+  stm r1, {r2-r3}
   @ Draw logo
   adr r0, boot_logo
   ldr r1, =(0x06000000 + (NDS_SWIDTH-31*4)/2 + ((NDS_SHEIGHT-7*4)/2) * NDS_SWIDTH)
@@ -674,6 +653,19 @@ arm9_bootaddr_itcm:
   str r0, [r1]
   swi 0x0                    @ Reset to RAM (ewram payload)
 
+
+setup_bg2_regs:
+  @ Setup bitmap offset regs
+  mov r1, $0
+  mov r2, $0x0100
+  mov r0, $REG_IO_BASE
+  strh r2, [r0, #(REG_BG2PA - REG_IO_BASE)]
+  strh r1, [r0, #(REG_BG2PB - REG_IO_BASE)]
+  strh r1, [r0, #(REG_BG2PC - REG_IO_BASE)]
+  strh r2, [r0, #(REG_BG2PD - REG_IO_BASE)]
+  str  r1, [r0, #(REG_BG2X  - REG_IO_BASE)]
+  str  r1, [r0, #(REG_BG2Y  - REG_IO_BASE)]
+  bx lr
 
 @ Include decompression routines here
 
