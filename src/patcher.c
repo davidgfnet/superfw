@@ -148,6 +148,9 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
     // Hole/Trailing space information, placed in the last op
     pdata->hole_addr = (p[numops] >> 16) << 10;   // In KiB chunks
     pdata->hole_size = (p[numops] & 0xFFFF) << 10;
+  } else {
+    pdata->hole_addr = 0;
+    pdata->hole_size = 0;
   }
 
   // Copy patch words
