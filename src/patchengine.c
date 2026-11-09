@@ -306,26 +306,29 @@ void patchengine_finalize(t_patch_builder *patchb) {
 // Walks a ROM (or chunk of a ROM) and looks for certain constants to calculate
 // WAITCNT, IRQ and save patches. Generate a patch structure out of it.
 ARM_CODE IWRAM_CODE NOINLINE
-bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_builder *patchb, void(*progresscb)(unsigned)) {
+bool patchengine_process_rom(const uint32_t * restrict rom, unsigned romsize, t_patch_builder * restrict patchb, void(*progresscb)(unsigned)) {
   const uint16_t *rom16 = (uint16_t*)rom;
   t_patch *patch = &patchb->p;
+  uint32_t ldata = patchb->ldata;
+  uint32_t ldatacnt = patchb->ldatacnt;
 
   for (unsigned i = 0; i < romsize / sizeof(uint32_t); i++) {
-    const uint32_t addr = patchb->rom_offset + i * 4;
+    const uint32_t word = rom[i];
 
     // Count the number of identical words
-    if (patchb->ldata == rom[i])
-      patchb->ldatacnt += 4;
+    if (ldata == word)
+      ldatacnt += 4;
     else {
-      patchb->ldata = rom[i];
-      patchb->ldatacnt = 0;
+      ldata = word;
+      ldatacnt = 0;
     }
 
     if (!(i << 17))          // If 15 LSB are zero, callback. The compiler is a bit dumb.
       progresscb(i);
 
     // Identify WAITCNT constants, validate them by finding LDR instructions
-    if (rom[i] == WAITCNT_VALUE_EXACT) {
+    if (word == WAITCNT_VALUE_EXACT) {
+      const uint32_t addr = patchb->rom_offset + i * 4;
       unsigned start_pos_thumb = i < THUMB_LDR_BACKOFF ? 0 : i - THUMB_LDR_BACKOFF;
       unsigned start_pos_arm   = i < ARM_LDR_BACKOFF   ? 0 : i - ARM_LDR_BACKOFF;
       if (find_thumb_ldrpc(rom16, start_pos_thumb * 2, i * 2) ||
@@ -338,7 +341,8 @@ bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_buil
       }
     }
     // Identify IRQ handle address, so we can find IRQ hook set.
-    else if (rom[i] == IRQHADDR_VALUE) {
+    else if (word == IRQHADDR_VALUE) {
+      const uint32_t addr = patchb->rom_offset + i * 4;
       unsigned start_pos_thumb = i < THUMB_LDR_BACKOFF ? 0 : i - THUMB_LDR_BACKOFF;
       unsigned start_pos_arm   = i < ARM_LDR_BACKOFF   ? 0 : i - ARM_LDR_BACKOFF;
       if (find_thumb_ldrpc(rom16, start_pos_thumb * 2, i * 2) ||
@@ -349,99 +353,32 @@ bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_buil
       }
     }
 
-    // Find save strings to narrow down save type.
-    else if (rom[i] == SRAM_V_WORD0) {
-      if (rom[i+1] == SRAM_V_WORD1 || rom[i+1] == SRAM_F_WORD1)
-        patchb->save_type_guess |= GUESS_SRAM;
-    }
-    else if (rom[i] == EEPROM_V_WORD0) {
-      if (rom[i+1] == EEPROM_V_WORD1)
-        patchb->save_type_guess |= GUESS_EEPROM;
-    }
-    else if (rom[i] == FLASH_V_WORD0) {
-      if (rom[i+1] == FLASH_V_WORD1)
-        patchb->save_type_guess |= GUESS_FLASH;
-      else if (rom[i+1] == FLASH512_WORD1)
-        patchb->save_type_guess |= GUESS_FLASH64;
-      else if (rom[i+1] == FLASH1M_WORD1)
-        patchb->save_type_guess |= GUESS_FLASH128;
-    }
-    else if (rom[i] == RTC_V_WORD0) {
-      if (rom[i+1] == RTC_V_WORD1)
-        patchb->rtc_guess = true;
-    }
-
-    // Save function prefix matching.
-    else if (rom[i] == eeprom_v1_read_word0) {
-      if (match_sig_prefix(&rom[i], eeprom_v1_read_sig, sizeof(eeprom_v1_read_sig)))
-        push_save_handler(patch, OPC_EEPROM_HD, EEPROM_RD_HNDLR, addr);
-    }
-    else if (rom[i] == eeprom_v2_read_word0) {
-      if (match_sig_prefix(&rom[i], eeprom_v2_read_sig, sizeof(eeprom_v2_read_sig)))
-        push_save_handler(patch, OPC_EEPROM_HD, EEPROM_RD_HNDLR, addr);
-    }
-    else if (rom[i] == eeprom_v1_write_word0) {
-      if (match_sig_prefix(&rom[i], eeprom_v1_write_sig, sizeof(eeprom_v1_write_sig)))
-        push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
-    }
-    else if (rom[i] == eeprom_v2_write_word0) {
-      if (match_sig_prefix(&rom[i], eeprom_v2_write_sig, sizeof(eeprom_v2_write_sig)))
-        push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
-    }
-    else if (rom[i] == eeprom_v3_write_word0) {
-      if (match_sig_prefix(&rom[i], eeprom_v3_write_sig, sizeof(eeprom_v3_write_sig)))
-        push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
-    }
-    else if (rom[i] == eeprom_v4_write_word0) {
-      if (match_sig_prefix(&rom[i], eeprom_v4_write_sig, sizeof(eeprom_v4_write_sig)))
-        push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
+    // Find save strings to narrow down save type (all strings have 4th char 'M'..'S', i.e. 0x4D..0x53).
+    else if (((word >> 24) - 0x4D) <= (0x53 - 0x4D)) {
+      if (word == SRAM_V_WORD0) {
+        if (rom[i+1] == SRAM_V_WORD1 || rom[i+1] == SRAM_F_WORD1)
+          patchb->save_type_guess |= GUESS_SRAM;
+      }
+      else if (word == EEPROM_V_WORD0) {
+        if (rom[i+1] == EEPROM_V_WORD1)
+          patchb->save_type_guess |= GUESS_EEPROM;
+      }
+      else if (word == FLASH_V_WORD0) {
+        if (rom[i+1] == FLASH_V_WORD1)
+          patchb->save_type_guess |= GUESS_FLASH;
+        else if (rom[i+1] == FLASH512_WORD1)
+          patchb->save_type_guess |= GUESS_FLASH64;
+        else if (rom[i+1] == FLASH1M_WORD1)
+          patchb->save_type_guess |= GUESS_FLASH128;
+      }
+      else if (word == RTC_V_WORD0) {
+        if (rom[i+1] == RTC_V_WORD1)
+          patchb->rtc_guess = true;
+      }
     }
 
-    else if (rom[i] == flash_v1_read_word0) {
-      if (match_sig_prefix(&rom[i], flash_v1_read_sig, sizeof(flash_v1_read_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_READ_HNDLR, addr);
-    }
-    else if (rom[i] == flash_v23_read_word0) {
-      if (match_sig_prefix(&rom[i], flash_v2_read_sig, sizeof(flash_v2_read_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_READ_HNDLR, addr);
-      if (match_sig_prefix(&rom[i], flash_v3_read_sig, sizeof(flash_v3_read_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_READ_HNDLR, addr);
-    }
-    else if (rom[i] == flash_v1_ident_word0) {
-      if (match_sig_prefix(&rom[i], flash_v1_ident_sig, sizeof(flash_v1_ident_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_IDEN_HNDLR, addr);
-    }
-    else if (rom[i] == flash_v2_ident_word0) {
-      if (match_sig_prefix(&rom[i], flash_v2_ident_sig, sizeof(flash_v2_ident_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_IDEN_HNDLR, addr);
-    }
-    else if (rom[i] == flash_v1_verify_word0) {
-      if (match_sig_prefix(&rom[i], flash_v1_verify_sig, sizeof(flash_v1_verify_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_VERF_HNDLR, addr);
-    }
-    else if (rom[i] == flash_v23_verify_word0) {
-      if (match_sig_prefix(&rom[i], flash_v2_verify_sig, sizeof(flash_v2_verify_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_VERF_HNDLR, addr);
-      if (match_sig_prefix(&rom[i], flash_v3_verify_sig, sizeof(flash_v3_verify_sig)))
-        push_save_handler(patch, OPC_FLASH_HD, FLASH_VERF_HNDLR, addr);
-    }
-
-    else if (rom[i] == siirtc_probe_reset_sig_word0) {
-      if (match_sig_prefix(&rom[i], siirtc_probe_sig, sizeof(siirtc_probe_sig)))
-        push_rtc_handler(patch, RTC_PROBE_HNDLR, addr);
-      if (match_sig_prefix(&rom[i], siirtc_reset_sync, sizeof(siirtc_reset_sync)))
-        push_rtc_handler(patch, RTC_RESET_HNDLR, addr);
-    }
-    else if (rom[i] == siirtc_getstatus_sig_word0) {
-      if (match_sig_prefix(&rom[i], siirtc_getstatus_sig, sizeof(siirtc_getstatus_sig)))
-        push_rtc_handler(patch, RTC_STSRD_HNDLR, addr);
-    }
-    else if (rom[i] == siirtc_getdatetime_sig_word0) {
-      if (match_sig_prefix(&rom[i], siirtc_getdatetime_sig, sizeof(siirtc_getdatetime_sig)))
-        push_rtc_handler(patch, RTC_GETTD_HNDLR, addr);
-    }
-
-    else {
+    // Flash setup info data structures (first field is always a function pointer in ROM).
+    else if (isromaddr(word)) {
       // Try to match FLASH setup info data structure (word aligned)
       const t_flash_setup_info_v1 *info1 = (t_flash_setup_info_v1*)&rom[i];
       const t_flash_setup_info_v2 *info2 = (t_flash_setup_info_v2*)&rom[i];
@@ -477,8 +414,83 @@ bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_buil
         i += 8;
       }
     }
+
+    // Save/RTC function prefix matching (all start with Thumb push {..., lr}: 0xB5xx).
+    else if ((word & 0xFF00) == 0xB500) {
+      const uint32_t addr = patchb->rom_offset + i * 4;
+      if (word == eeprom_v1_read_word0) {
+        if (match_sig_prefix(&rom[i], eeprom_v1_read_sig, sizeof(eeprom_v1_read_sig)))
+          push_save_handler(patch, OPC_EEPROM_HD, EEPROM_RD_HNDLR, addr);
+      }
+      else if (word == eeprom_v2_read_word0) {
+        if (match_sig_prefix(&rom[i], eeprom_v2_read_sig, sizeof(eeprom_v2_read_sig)))
+          push_save_handler(patch, OPC_EEPROM_HD, EEPROM_RD_HNDLR, addr);
+      }
+      else if (word == eeprom_v1_write_word0) {
+        if (match_sig_prefix(&rom[i], eeprom_v1_write_sig, sizeof(eeprom_v1_write_sig)))
+          push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
+      }
+      else if (word == eeprom_v2_write_word0) {
+        if (match_sig_prefix(&rom[i], eeprom_v2_write_sig, sizeof(eeprom_v2_write_sig)))
+          push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
+      }
+      else if (word == eeprom_v3_write_word0) {
+        if (match_sig_prefix(&rom[i], eeprom_v3_write_sig, sizeof(eeprom_v3_write_sig)))
+          push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
+      }
+      else if (word == eeprom_v4_write_word0) {
+        if (match_sig_prefix(&rom[i], eeprom_v4_write_sig, sizeof(eeprom_v4_write_sig)))
+          push_save_handler(patch, OPC_EEPROM_HD, EEPROM_WR_HNDLR, addr);
+      }
+
+      else if (word == flash_v1_read_word0) {
+        if (match_sig_prefix(&rom[i], flash_v1_read_sig, sizeof(flash_v1_read_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_READ_HNDLR, addr);
+      }
+      else if (word == flash_v23_read_word0) {
+        if (match_sig_prefix(&rom[i], flash_v2_read_sig, sizeof(flash_v2_read_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_READ_HNDLR, addr);
+        if (match_sig_prefix(&rom[i], flash_v3_read_sig, sizeof(flash_v3_read_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_READ_HNDLR, addr);
+      }
+      else if (word == flash_v1_ident_word0) {
+        if (match_sig_prefix(&rom[i], flash_v1_ident_sig, sizeof(flash_v1_ident_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_IDEN_HNDLR, addr);
+      }
+      else if (word == flash_v2_ident_word0) {
+        if (match_sig_prefix(&rom[i], flash_v2_ident_sig, sizeof(flash_v2_ident_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_IDEN_HNDLR, addr);
+      }
+      else if (word == flash_v1_verify_word0) {
+        if (match_sig_prefix(&rom[i], flash_v1_verify_sig, sizeof(flash_v1_verify_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_VERF_HNDLR, addr);
+      }
+      else if (word == flash_v23_verify_word0) {
+        if (match_sig_prefix(&rom[i], flash_v2_verify_sig, sizeof(flash_v2_verify_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_VERF_HNDLR, addr);
+        if (match_sig_prefix(&rom[i], flash_v3_verify_sig, sizeof(flash_v3_verify_sig)))
+          push_save_handler(patch, OPC_FLASH_HD, FLASH_VERF_HNDLR, addr);
+      }
+
+      else if (word == siirtc_probe_reset_sig_word0) {
+        if (match_sig_prefix(&rom[i], siirtc_probe_sig, sizeof(siirtc_probe_sig)))
+          push_rtc_handler(patch, RTC_PROBE_HNDLR, addr);
+        if (match_sig_prefix(&rom[i], siirtc_reset_sync, sizeof(siirtc_reset_sync)))
+          push_rtc_handler(patch, RTC_RESET_HNDLR, addr);
+      }
+      else if (word == siirtc_getstatus_sig_word0) {
+        if (match_sig_prefix(&rom[i], siirtc_getstatus_sig, sizeof(siirtc_getstatus_sig)))
+          push_rtc_handler(patch, RTC_STSRD_HNDLR, addr);
+      }
+      else if (word == siirtc_getdatetime_sig_word0) {
+        if (match_sig_prefix(&rom[i], siirtc_getdatetime_sig, sizeof(siirtc_getdatetime_sig)))
+          push_rtc_handler(patch, RTC_GETTD_HNDLR, addr);
+      }
+    }
   }
 
+  patchb->ldata = ldata;
+  patchb->ldatacnt = ldatacnt;
   patchb->rom_offset += romsize;
   return true;
 }

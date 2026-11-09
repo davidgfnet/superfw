@@ -72,7 +72,7 @@ void payload_apply_rom(uint8_t *buffer, unsigned bufsize, uint32_t baseaddr,
 void patchengine_init(t_patch_builder *patch, unsigned filesize);
 void patchengine_finalize(t_patch_builder *patch);
 // Generates a patch set from a given ROM.
-bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_builder *patch, void(*progresscb)(unsigned));
+bool patchengine_process_rom(const uint32_t * restrict rom, unsigned romsize, t_patch_builder * restrict patch, void(*progresscb)(unsigned));
 
 // Tries to load patches from disk
 bool load_cached_patches(const char *romfn, t_patch *patches);
