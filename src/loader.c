@@ -296,10 +296,24 @@ unsigned load_gba_rom(
     }
 
     set_supercard_mode(MAPPED_SDRAM, true, false);
+#ifdef SUPERCHIS_IO
+    // SuperChis Prime's SDRAM/NOR write bus has a hardware write-combining
+    // bug: writing an even-offset byte immediately followed by the next
+    // (odd-offset) byte silently applies the ODD byte's value to BOTH
+    // bytes, regardless of whether the write is a byte loop, a 32-bit DMA
+    // transfer, or anything else that isn't a single natural halfword
+    // store. rom_copy_write16() avoids this by combining each pair of
+    // source bytes in a register first and issuing one aligned 16-bit
+    // store, so always use it here, independent of the user's "slow
+    // loading" preference (this is a correctness requirement on this
+    // hardware, not a performance knob).
+    rom_copy_write16(&ptr[offset], tmp, toread);
+#else
     if (use_slowld)
       rom_copy_write16(&ptr[offset], tmp, toread);
     else
       dma_memcpy32(&ptr[offset], tmp, toread/4);
+#endif
     set_supercard_mode(MAPPED_SDRAM, true, true);
   }
   // Skip over the gap
@@ -322,10 +336,24 @@ unsigned load_gba_rom(
     }
 
     set_supercard_mode(MAPPED_SDRAM, true, false);
+#ifdef SUPERCHIS_IO
+    // SuperChis Prime's SDRAM/NOR write bus has a hardware write-combining
+    // bug: writing an even-offset byte immediately followed by the next
+    // (odd-offset) byte silently applies the ODD byte's value to BOTH
+    // bytes, regardless of whether the write is a byte loop, a 32-bit DMA
+    // transfer, or anything else that isn't a single natural halfword
+    // store. rom_copy_write16() avoids this by combining each pair of
+    // source bytes in a register first and issuing one aligned 16-bit
+    // store, so always use it here, independent of the user's "slow
+    // loading" preference (this is a correctness requirement on this
+    // hardware, not a performance knob).
+    rom_copy_write16(&ptr[offset], tmp, toread);
+#else
     if (use_slowld)
       rom_copy_write16(&ptr[offset], tmp, toread);
     else
       dma_memcpy32(&ptr[offset], tmp, toread/4);
+#endif
     set_supercard_mode(MAPPED_SDRAM, true, true);
   }
   progress(1, 1);  // Mark as complete
@@ -423,7 +451,15 @@ unsigned flash_gba_nor(
         return ERR_LOAD_BADROM;
       }
 
+#ifdef SUPERCHIS_IO
+      // Same SuperChis Prime write-combining hardware bug as described
+      // above (see the ROM-loading loop): this scratch buffer is also
+      // SDRAM/GamePak-bus mapped, so it needs the same halfword-safe
+      // write here before it gets flashed to NOR.
+      rom_copy_write16(&scratch[offset], tmp, toread);
+#else
       dma_memcpy32(&scratch[offset], tmp, toread/4);
+#endif
     }
 
     // Patch ROM, don't need WAITCNT patches
@@ -560,10 +596,15 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
 
       // Copy data into the ROM (disable SD interface to avoid collisions!)
       set_supercard_mode(MAPPED_SDRAM, true, false);
+#ifdef SUPERCHIS_IO
+      // See the SuperChis Prime write-combining note above.
+      rom_copy_write16(ptr, tmp, rdbytes);
+#else
       if (use_slowld)
         rom_copy_write16(ptr, tmp, rdbytes);
       else
         dma_memcpy32(ptr, tmp, rdbytes/4);
+#endif
       set_supercard_mode(MAPPED_SDRAM, true, true);
       ptr += rdbytes;
     }
@@ -591,10 +632,15 @@ unsigned load_extemu_rom(const char *fn, uint32_t fs, const t_emu_loader *ldinfo
 
     // Copy data into the ROM (disable SD interface to avoid collisions!)
     set_supercard_mode(MAPPED_SDRAM, true, false);
+#ifdef SUPERCHIS_IO
+    // See the SuperChis Prime write-combining note above.
+    rom_copy_write16(ptr, tmp, LOAD_BS);
+#else
     if (use_slowld)
       rom_copy_write16(ptr, tmp, LOAD_BS);
     else
       dma_memcpy32(ptr, tmp, LOAD_BS/4);
+#endif
     set_supercard_mode(MAPPED_SDRAM, true, true);
     ptr += LOAD_BS;
   }
