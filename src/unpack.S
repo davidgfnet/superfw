@@ -28,8 +28,10 @@
 @ POSSIBILITY OF SUCH DAMAGE.
 
 
-@ aplib unpacker for ARM7TDMI
+@ aplib-derived unpacker for ARM7TDMI
 @ Version based on different depackers and some "new" ideas.
+@ This is a format similar to aplib but not compatible anymore.
+@ Use tools/apultra.cc to generate streams.
 @ There are two versions of the depacking routine: regular byte-access routine
 @ that works at a byte level, and a 16 bit bus friendly version that uses
 @ 16 bit accesses and takes care of alignment problems, so it can be used with
@@ -55,6 +57,18 @@
   ldrcsb r10, [r0], #1;      /* Load next byte if we consumed the byte */     \
   tst r10, r11;              /* Check current bit */
 
+@ Reads a far match offset into r5, r2 is the gamma value and r6 the pair flag.
+#define readfaroffset                                                         \
+  sub r3, r2, $2;            /* high bits = value - 2 - pair */               \
+  sub r3, r3, r6;                                                             \
+  lsl r3, r3, $1;            /* Two extra raw offset bits */                  \
+  nextbitzf; orrne r3, r3, $1;                                                \
+  lsl r3, r3, $1;                                                             \
+  nextbitzf; orrne r3, r3, $1;                                                \
+  ldrb r5, [r0], #1;         /* read one byte to use as LSB */                \
+  orr r5, r5, r3, lsl #8;    /* join bytes  */                                \
+  lsl r5, r5, $1;            /* offset is encoded in halfwords */
+
 #ifdef _APPACK_BYTE_VERSION
 
 .global apunpack8
@@ -77,13 +91,12 @@ _main_loop:              @ Decode prefix code and process each case
   beq _token_110         @ Prefix "110"
 
 
-  @ Prefix "111": Copies a previous byte with 4 bit offset.
+  @ Prefix "111": Copies a previous byte with a 3 bit even offset.
   mov r2, $0
-  nextbitzf; orrne r2, $0x8   @ Extract 4 bits (MSB first)
+  nextbitzf; orrne r2, $0x8   @ Extract 3 bits (MSB first, x2)
   nextbitzf; orrne r2, $0x4
   nextbitzf; orrne r2, $0x2
-  nextbitzf; orrne r2, $0x1
-  @ If the 4 bit field is zero, emit a zero byte instead
+  @ If the 3 bit field is zero, emit a zero byte instead
   cmp r2, $0
   ldrneb r2, [r1, -r2]      @ Load byte from output buffer.
   strb r2, [r1], #1         @ Emit new byte
@@ -124,10 +137,7 @@ _token_10:
   b 1f                                 @ Jump to copying loop
 
 _long_off:
-  sub r3, r2, $2                       @ high bits = value - 2 - pair
-  sub r3, r3, r6
-  ldrb r5, [r0], #1                    @ read one byte to use as LSB
-  orr r5, r5, r3, lsl #8               @ join bytes
+  readfaroffset
 
   bl _decode_gamma                     @ read length to copy
   cmp r5, $0x80                        @ Add some +1 or +2 depending on offset
@@ -192,13 +202,12 @@ _main_loop_unal:         @ Decode prefix code and process each case
   beq _token_110_unal    @ Prefix "110"
 
 
-  @ Prefix "111": Copies a previous byte with 4 bit offset.
+  @ Prefix "111": Copies a previous byte with a 3 bit even offset.
   mov r2, $0
-  nextbitzf; orrne r2, $0x8   @ Extract 4 bits (MSB first)
+  nextbitzf; orrne r2, $0x8   @ Extract 3 bits (MSB first, x2)
   nextbitzf; orrne r2, $0x4
   nextbitzf; orrne r2, $0x2
-  nextbitzf; orrne r2, $0x1
-  @ If the 4 bit field is zero, emit a zero byte instead
+  @ If the 3 bit field is zero, emit a zero byte instead
   cmp r2, $0
   ldrneb r2, [r1, -r2]      @ Load byte from output buffer.
   orr r2, r7, r2, lsl #8    @ Place previous byte in the LSB
@@ -251,10 +260,7 @@ _token_10_unal:
   b 1f                                 @ Jump to copying loop
 
 _long_off_unal:
-  sub r3, r2, $2                       @ high bits = value - 2 - pair
-  sub r3, r3, r6
-  ldrb r5, [r0], #1                    @ read one byte to use as LSB
-  orr r5, r5, r3, lsl #8               @ join bytes
+  readfaroffset
   mov r6, $0                           @ set: Not a literal
 
   bl _decode_gamma                     @ read length to copy
@@ -291,13 +297,12 @@ _main_loop_al:           @ Decode prefix code and process each case
   beq _token_110_al      @ Prefix "110"
 
 
-  @ Prefix "111": Copies a previous byte with 4 bit offset.
+  @ Prefix "111": Copies a previous byte with a 3 bit even offset.
   mov r7, $0
-  nextbitzf; orrne r7, $0x8   @ Extract 4 bits (MSB first)
+  nextbitzf; orrne r7, $0x8   @ Extract 3 bits (MSB first, x2)
   nextbitzf; orrne r7, $0x4
   nextbitzf; orrne r7, $0x2
-  nextbitzf; orrne r7, $0x1
-  @ If the 4 bit field is zero, emit a zero byte instead
+  @ If the 3 bit field is zero, emit a zero byte instead
   cmp r7, $0
   ldrneb r7, [r1, -r7]      @ Load byte from output buffer.
   strh r7, [r1], #1         @ Emit byte (write halfword)
@@ -345,10 +350,7 @@ _token_10_al:
   b 1f                                 @ Jump to copying loop
 
 _long_off_al:
-  sub r3, r2, $2                       @ high bits = value - 2 - pair
-  sub r3, r3, r6
-  ldrb r5, [r0], #1                    @ read one byte to use as LSB
-  orr r5, r5, r3, lsl #8               @ join bytes
+  readfaroffset
   mov r6, $0                           @ set: Not a literal
 
   bl _decode_gamma                     @ read length to copy

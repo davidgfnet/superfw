@@ -47,6 +47,7 @@ typedef struct struct_t_patch t_patch;
 
 typedef struct {
   unsigned filesize;
+  unsigned rom_offset;
   // Save type related info
   unsigned save_type_guess;
   unsigned flash64cnt, flash128cnt;
