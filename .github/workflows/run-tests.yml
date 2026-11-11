@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Install dependencies
-        run: sudo apt-get install gcc g++ lcov python3-pil
+        run: sudo apt-get update && sudo apt-get install gcc g++ lcov python3-pil
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Install dependencies
-        run: sudo apt-get install clang
+        run: sudo apt-get update && sudo apt-get install clang
       - name: Checkout repository
         uses: actions/checkout@v7
       - name: Build and run the fuzzers
@@ -61,7 +61,7 @@ jobs:
         board: [sd, chis]
     steps:
       - name: Install dependencies
-        run: sudo apt-get install gcc-arm-none-eabi python3
+        run: sudo apt-get update && sudo apt-get install gcc-arm-none-eabi python3
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Install dependencies
-        run: sudo apt-get install cppcheck python3
+        run: sudo apt-get update && sudo apt-get install cppcheck python3
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
