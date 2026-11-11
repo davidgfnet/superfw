@@ -30,3 +30,6 @@ uint32_t utf8_decode(const char *s);
 // Convert string to searchable structures
 void sortable_utf8_u16(const char *s8, uint16_t *s16);
 
+// Maps a code point to its sorting order (transliterated, case insensitive)
+unsigned unicodeorder(unsigned cp);
+

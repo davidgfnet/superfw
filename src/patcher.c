@@ -97,12 +97,26 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
       dbh->dbversion != 0x00020000)        // Version check
     return false;
 
+  // The database can be loaded from the SD card: keep every access inside its
+  // area (PATCHDB_MAX_SIZE), whatever the counts say.
+  if (dbh->idxcnt > PATCHDB_MAX_SIZE / 4 || dbh->patchcnt > PATCHDB_MAX_SIZE / 2 ||
+      1024 + dbh->idxcnt * 4 + dbh->patchcnt * 2 + 8 > PATCHDB_MAX_SIZE)
+    return false;
+  const uint32_t *pend = (uint32_t*)&dbptr[PATCHDB_MAX_SIZE];
+
   // Skip header and program block, the index follows.
   const t_db_idx1 *idx1 = (t_db_idx1*)&dbptr[1024];
   const t_db_idx2 *idx2 = (t_db_idx2*)&idx1[dbh->idxcnt];
   // Patch blocks follow the index (word aligned).
   const uintptr_t pbase = (uintptr_t)&idx2[dbh->patchcnt];
   const uint32_t *p = (uint32_t*)((pbase + 3) & ~(uintptr_t)3);
+
+  // The groups cannot hold more games than the second index has.
+  unsigned gcount = 0;
+  for (unsigned g = 0; g < dbh->idxcnt; g++)
+    gcount += idx1[g].count;
+  if (gcount > dbh->patchcnt)
+    return false;
 
   // Load programs as well
   int pgn = 0;
@@ -128,8 +142,13 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
     return false;
 
   // Walk the data blocks until we reach the patch data.
-  while (pos--)
+  while (pos--) {
     p += pheader_blocksize(*p);
+    if (p >= pend)
+      return false;
+  }
+  if (p + pheader_blocksize(*p) > pend)
+    return false;
 
   const uint32_t pheader = *p++;
 

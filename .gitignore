@@ -7,3 +7,8 @@
 *.gcno
 *.info
 *.i
+__pycache__/
+tests/fuzz/fuzz_*
+!tests/fuzz/fuzz_*.c
+tests/fuzz/corpus/
+stackcheck/

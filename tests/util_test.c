@@ -41,8 +41,68 @@ FRESULT f_stat (const TCHAR* path, FILINFO* fno) {
   return FR_OK;
 }
 
+// In memory file for file_read_lines() (NULL: the file does not exist).
+static const char *memfile;
+static size_t memfile_pos;
+FRESULT f_open (FIL* fp, const TCHAR* path, BYTE mode) {
+  memfile_pos = 0;
+  return memfile ? FR_OK : FR_NO_FILE;
+}
+FRESULT f_read (FIL* fp, void* buff, UINT btr, UINT* br) {
+  size_t left = strlen(memfile) - memfile_pos;
+  size_t n = btr < left ? btr : left;
+  memcpy(buff, &memfile[memfile_pos], n);
+  memfile_pos += n;
+  *br = n;
+  return FR_OK;
+}
+FRESULT f_close (FIL* fp) {
+  return FR_OK;
+}
+
+static char lines_out[4096];
+static void collect_line(char *line, void *usr) {
+  strcat(lines_out, line);
+  strcat(lines_out, "|");
+  (*(unsigned*)usr)++;
+}
+
+static void check_lines(const char *content, const char *expected, unsigned count) {
+  unsigned n = 0;
+  memfile = content;
+  lines_out[0] = 0;
+  assert(file_read_lines("x", collect_line, &n));
+  assert(!strcmp(lines_out, expected));
+  assert(n == count);
+}
+
 int main() {
   char tmp[1024];
+
+  // file_read_lines(): \n and \r\n, empty lines, no final line break.
+  check_lines("", "", 0);
+  check_lines("a\nbb\r\n\nccc", "a|bb||ccc|", 4);
+  check_lines("one\r\n", "one|", 1);
+  {
+    // Lines longer than FILE_LINE_MAX are skipped, the next ones still read.
+    static char big[3 * FILE_LINE_MAX];
+    memset(big, 'x', 2 * FILE_LINE_MAX);
+    strcpy(&big[2 * FILE_LINE_MAX], "\nok\nfine");
+    check_lines(big, "ok|fine|", 2);
+    // Exactly the buffer size, then a line break: also too long.
+    memset(big, 'y', FILE_LINE_MAX);
+    strcpy(&big[FILE_LINE_MAX], "\nnext\n");
+    check_lines(big, "next|", 1);
+    // One byte less fits.
+    memset(big, 'z', FILE_LINE_MAX - 1);
+    strcpy(&big[FILE_LINE_MAX - 1], "\n");
+    unsigned n = 0;
+    lines_out[0] = 0;
+    memfile = big;
+    assert(file_read_lines("x", collect_line, &n) && n == 1 && strlen(lines_out) == FILE_LINE_MAX);
+  }
+  memfile = NULL;
+  assert(!file_read_lines("missing", collect_line, NULL));
 
   assert(0 == parseuint("0"));
   assert(1 == parseuint("1"));
@@ -82,6 +142,29 @@ int main() {
   strcpy(tmp, "/foo/bar/lol");
   replace_extension(tmp, ".doc");
   assert(!strcmp(tmp, "/foo/bar/lol.doc"));
+
+  // Results that would not fit in MAX_FN_LEN are refused.
+  {
+    char big[MAX_FN_LEN], out[MAX_FN_LEN];
+    memset(big, 'a', MAX_FN_LEN - 5);
+    strcpy(&big[MAX_FN_LEN - 5], ".gb");      // 254 chars
+    assert(replace_extension(big, ".gba"));   // 255 chars, fits
+    assert(strlen(big) == MAX_FN_LEN - 1);
+    assert(!replace_extension(big, ".sav0")); // 256 chars, too long
+    assert(!strcmp(&big[MAX_FN_LEN - 5], ".gba"));   // Left as it was
+    assert(!path_join_ext(out, "/", big, ".gba"));
+    assert(path_join_ext(out, "", big, ".sav"));
+    assert(!strcmp(&out[MAX_FN_LEN - 5], ".sav"));
+  }
+  {
+    char out[MAX_FN_LEN];
+    assert(path_join_ext(out, "/SAVES/", "game.gba", ".sav"));
+    assert(!strcmp(out, "/SAVES/game.sav"));
+    assert(path_join_ext(out, "", "/a.b/game", ".sav"));
+    assert(!strcmp(out, "/a.b/game.sav"));
+    assert(path_join_ext(out, "/x/", "game.gba", ""));
+    assert(!strcmp(out, "/x/game"));
+  }
 
   assert(!strcmp(find_extension("/foo/bar.lol"), "lol"));
   assert(find_extension("/foo/barlol") == NULL);

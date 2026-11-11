@@ -19,17 +19,18 @@
 #include "utf_util.h"
 
 // Decodes the pointed string and returns the number of bytes it takes.
+// A malformed sequence (ie. cut short by the string end) counts as one byte,
+// so walking a string never skips its NUL terminator.
 unsigned utf8_chlen(const char *s) {
-  uint8_t fchar = (uint8_t)*s;
+  const uint8_t *u = (const uint8_t*)s;
+  unsigned n = ((u[0] & 0x80) == 0x00) ? 1 :
+               ((u[0] & 0xE0) == 0xC0) ? 2 :
+               ((u[0] & 0xF0) == 0xE0) ? 3 : 4;
 
-  if ((fchar & 0x80) == 0x00)
-    return 1;
-  else if ((fchar & 0xE0) == 0xC0)
-    return 2;
-  else if ((fchar & 0xF0) == 0xE0)
-    return 3;
-
-  return 4;
+  for (unsigned i = 1; i < n; i++)
+    if ((u[i] & 0xC0) != 0x80)
+      return 1;
+  return n;
 }
 
 // Returns the number of unicode characters in an encoded utf-8 buffer.
@@ -48,6 +49,8 @@ uint32_t utf8_decode(const char *s) {
 
   if ((*uchar & 0x80) == 0x00)
     return *uchar;
+  else if (utf8_chlen(s) == 1)
+    return 0xFFFD;         // Malformed: never read past the string end
   else if ((*uchar & 0xE0) == 0xC0)
     return ((uchar[0] & 0x1F) << 6) |
            ((uchar[1] & 0x3F));

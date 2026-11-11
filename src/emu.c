@@ -251,6 +251,33 @@ const t_emu_platform emu_platforms[] = {
   {NULL, NULL},        // End marker!
 };
 
+int emu_group(const char *ext) {
+  int g = -1;
+  for (unsigned i = 0; emu_platforms[i].extension; i++) {
+    if (!i || emu_platforms[i].loaders != emu_platforms[i - 1].loaders)
+      g++;
+    if (!strcasecmp(ext, emu_platforms[i].extension))
+      return g;
+  }
+  return -1;
+}
+
+void emu_group_name(int group, char *out, unsigned size) {
+  unsigned o = 0;
+  int g = -1;
+  for (unsigned i = 0; emu_platforms[i].extension; i++) {
+    if (!i || emu_platforms[i].loaders != emu_platforms[i - 1].loaders)
+      g++;
+    if (g != group)
+      continue;
+    if (o && o + 1 < size)
+      out[o++] = '/';
+    for (const char *e = emu_platforms[i].extension; *e && o + 1 < size; e++)
+      out[o++] = (*e >= 'a' && *e <= 'z') ? *e - 'a' + 'A' : *e;
+  }
+  out[o] = 0;
+}
+
 const t_emu_loader * get_emu_info(const char *ext) {
   for (unsigned i = 0; emu_platforms[i].extension; i++)
     if (!strcasecmp(ext, emu_platforms[i].extension))

@@ -71,6 +71,7 @@ extern const uint32_t ingame_trampoline_payload_size;
 #define ROM_OFF_USRPATCH_DB       0x01C00000     // At 0x09C00000
 #define ROM_OFF_PATCH_DB          0x01D00000     // At 0x09D00000
 #define ROM_OFF_ASSETS_BASE       0x01E00000     // At 0x09E00000
+#define PATCHDB_MAX_SIZE          (ROM_OFF_ASSETS_BASE - ROM_OFF_PATCH_DB)   // 1 MiB
 
 #define ROM_SCRATCH_U8          ((volatile uint8_t*)(0x08000000 + ROM_OFF_SCRATCH))
 #define ROM_FONTBASE_U8         ((volatile uint8_t*)(0x08000000 + ROM_OFF_FONTS_BASE))
@@ -262,7 +263,7 @@ struct struct_t_patch;
 // Prepares the save game files, readin and writing files in some cases.
 unsigned prepare_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, EnumSavetype stype, t_dirsave_info *dsinfo, const char *savefn);
 // Other variants, to use for GB/GBC and to reuse some code
-unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, const char *savefn);
+unsigned prepare_sram_based_savegame(t_sram_load_policy loadp, t_sram_save_policy savep, unsigned save_size, const char *savefn);
 // Loads ROM header
 unsigned preload_gba_rom(const char *fn, uint32_t fs, t_rom_header *romh);
 // Loads a ROM file and launches it.

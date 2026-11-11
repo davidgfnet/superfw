@@ -22,8 +22,11 @@ all:
 	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o crc_test.bin crc_test.c ../src/crc.c
 	./crc_test.bin
 	lcov -c -d . -o crc_test.info
+	$(CC) $(CFLAGS) $(MEMCHK_FLAGS) -o carousel_util_test.bin carousel_util_test.c ../src/carousel_util.c ../src/util.c ../src/utf_util.c ../src/nanoprintf.c ../src/fileutil.c -I../
+	./carousel_util_test.bin
+	lcov -c -d . -o carousel_util_test.info
 
-	lcov -a cimpl_test.info -a util_test.info -a utf_util_test.info -a crc_test.info -a sha256_test.info -a cheats_test.info -o total.info
+	lcov -a cimpl_test.info -a util_test.info -a utf_util_test.info -a crc_test.info -a sha256_test.info -a cheats_test.info -a carousel_util_test.info -o total.info
 	rm -rf coverage/
 	genhtml -o coverage/ total.info
 
