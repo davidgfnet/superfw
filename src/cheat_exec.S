@@ -106,62 +106,47 @@ cheat_cc_opcE:               // Address increment value
 cheat_cc_opc7:               // Compare EQ mem value or skip cheat
   ldrh r3, [r1]
   cmp r3, r2
-  beq 1f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-1:
-  b cheat_exec
+  beq cheat_exec
+  b cheat_skip
 
 cheat_cc_opcA:               // Compare NE mem value or skip cheat
   ldrh r3, [r1]
   cmp r3, r2
-  bne 1f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-1:
-  b cheat_exec
+  bne cheat_exec
+  b cheat_skip
 
 cheat_cc_opcB:               // Compare GT(signed) mem value or skip cheat
   ldrh r3, [r1]
-  cmp r2, r3                 // Compare LT (reversed operands)
-  blt 1f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-1:
-  b cheat_exec
+  cmp r3, r2
+  bhi cheat_exec
+  b cheat_skip
 
 cheat_cc_opcC:               // Compare LT(signed) mem value or skip cheat
   ldrh r3, [r1]
-  cmp r3, r2                 // Compare LT
-  blt 1f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-1:
-  b cheat_exec
+  cmp r3, r2
+  bcc cheat_exec
+  b cheat_skip
 
 cheat_cc_opcF:               // Compare and immediate with zero or skip cheat
   ldrh r3, [r1]
   and r3, r2
-  bne 1f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-1:
-  b cheat_exec
+  bne cheat_exec
+  b cheat_skip
 
 cheat_cc_opc4:               // Slide code, fills a buffer with some data pattern
-  push {r4-r6}
-  ldrh r4, [r0, #0]          // Read iteration count
-  ldrh r5, [r0, #2]          // Read value increment
-  ldrh r6, [r0, #4]          // Read address increment
+  push {r4-r5}
+  ldrh r3, [r0, #0]          // Read iteration count
+  ldrh r4, [r0, #2]          // Read value increment
+  ldrh r5, [r0, #4]          // Read address increment
   add r0, #8                 // Skip the extra args
 1:
   strh r2, [r1]              // Actual memory write
-  add r1, r6
-  add r2, r5
-  sub r4, $1
+  add r1, r5
+  add r2, r4
+  sub r3, $1
   bne 1b
 
-  pop {r4-r6}
+  pop {r4-r5}
   b cheat_exec
 
 cheat_cc_opc5:               // Super code
@@ -197,38 +182,34 @@ cheat_cc_opcD:
 
   lsl r1, #26
   lsr r1, #30
-  lsl r1, #4      // Each block is 8 insts (16 bytes)
+  lsl r1, #3      // Each block is 4 insts (8 bytes)
   add pc, r1
   nop
 
-  // case 0: pad == value, skip code
+  // case 0: P1 == value -> skip code
   cmp r3, r2
-  bne 3f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-  b cheat_exec
-  nop; nop; nop;
-
-  // case 1: ~pad & value == value, skip code
-  eor r3, r3
-  and r3, r2
-  cmp r3, r2
-  bne 3f
-  ldrb r3, [r0, #1]          // Read next cheat size.
-  add r0, r3                 // Skips the next cheat
-  b cheat_exec
+  bne cheat_exec
+  b cheat_skip
   nop
 
-  // case 2: ~pad & value == 0, skip code
-  eor r3, r3
+  // case 1: ~P1 & value == value (equivalent to P1 & value == 0)
   and r3, r2
-  cmp r3, $0
-  bne 3f
+  bne cheat_exec
+  b cheat_skip
+  nop
+
+  // case 2: P1 & value != 0 -> skip code
+  and r3, r2
+  beq cheat_exec
+  b cheat_skip
+  nop
+
+  // case 3, not speced
+  b cheat_exec
+
+cheat_skip:
   ldrb r3, [r0, #1]          // Read next cheat size.
   add r0, r3                 // Skips the next cheat
-  nop; nop;
-
-3:
   b cheat_exec
 
 .pool
