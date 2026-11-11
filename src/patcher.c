@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "compiler.h"
 #include "gbahw.h"
 #include "fatfs/ff.h"
 #include "common.h"
@@ -32,26 +33,53 @@ typedef struct {
   uint32_t signature;    // "PTDB" in ASCII
   uint32_t dbversion;    // Format version
   uint32_t patchcnt;     // Patch count
-  uint32_t idxcnt;       // Number of IDX blocks
+  uint32_t idxcnt;       // Number of main index entries
   char date[8];          // Creating date (ASCII encoded)
   char version[8];       // DB version (ASCII encoded)
   char creator[32];      // DB author/creator (ASCII encoded)
 } t_db_header;
 
-typedef struct {
-  uint8_t gcode[4];
-  uint32_t offset;       // LSB is game version (8 bits), MSB is byte offset
-} t_db_idx;
+// The index contains an array of t_db_idx1. Once a matching one is found, we
+// iterate over t_db_idx2, find the second part of the match. We keep a count
+// which is the patch "offset" in the data blob.
 
-// Game code is 4 bytes long (ascii chars in theory) + 1 byte for versioning
-static int gcodecmp(const uint8_t *g1, const uint8_t *g2) {
-  for (unsigned i = 0; i < 5; i++) {
-    if (g1[i] < g2[i])
-      return -1;
-    if (g1[i] > g2[i])
-      return 1;
+typedef struct {
+  uint8_t code0, code1;   // First two game code chars
+  uint8_t version;        // Game version
+  uint8_t count;          // Number of games in this group
+} t_db_idx1;
+
+typedef struct {
+  uint8_t code2, code3;  // Last two game code chars
+} t_db_idx2;
+
+// Finds the game's position number, returns -1 if not found.
+static int lookup_pos(const uint8_t *gcode, const t_db_idx1 *idx1,
+                      unsigned numindx, const t_db_idx2 *idx2) {
+  unsigned pos = 0;
+  for (unsigned g = 0; g < numindx; g++) {
+    const t_db_idx1 *grp = &idx1[g];
+    if (grp->code0 == gcode[0] && grp->code1 == gcode[1] && grp->version == gcode[4]) {
+      for (unsigned i = pos; i < pos + grp->count; i++)
+        if (idx2[i].code2 == gcode[2] && idx2[i].code3 == gcode[3])
+          return i;
+    }
+    pos += grp->count;
   }
-  return 0;
+  return -1;
+}
+
+// Number of opcodes in patch, encoded in the header.
+static inline unsigned pheader_numops(uint32_t pheader) {
+  return ((pheader >>  0) & 0xFF) +
+         ((pheader >>  8) & 0x1F) +
+         ((pheader >> 16) & 0xFF) +
+         ((pheader >> 24) & 0x0F);
+}
+
+// Same as above but we account for header size and hole words.
+static inline unsigned pheader_blocksize(uint32_t pheader) {
+  return 1 + pheader_numops(pheader) + ((pheader >> 28) & 0x1);
 }
 
 void patchmem_dbinfo(const uint8_t *dbptr, uint32_t *pcnt, char *version, char *date, char *creator) {
@@ -66,20 +94,29 @@ void patchmem_dbinfo(const uint8_t *dbptr, uint32_t *pcnt, char *version, char *
 bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pdata) {
   const t_db_header *dbh = (t_db_header*)dbptr;
   if (dbh->signature != 0x31424450 ||      // PTDB signature mismatch
-      dbh->dbversion != 0x00010000)        // Version check
+      dbh->dbversion != 0x00020000)        // Version check
     return false;
 
   // The database can be loaded from the SD card: keep every access inside its
-  // area (PATCHDB_MAX_SIZE), whatever the counts and offsets say.
-  if (dbh->idxcnt > (PATCHDB_MAX_SIZE - 1024) / 512 ||
-      dbh->patchcnt > dbh->idxcnt * 512 / sizeof(t_db_idx))
+  // area (PATCHDB_MAX_SIZE), whatever the counts say.
+  if (dbh->idxcnt > PATCHDB_MAX_SIZE / 4 || dbh->patchcnt > PATCHDB_MAX_SIZE / 2 ||
+      1024 + dbh->idxcnt * 4 + dbh->patchcnt * 2 + 8 > PATCHDB_MAX_SIZE)
     return false;
-  const uint32_t entries_off = 1024 + 512 * dbh->idxcnt;
+  const uint32_t *pend = (uint32_t*)&dbptr[PATCHDB_MAX_SIZE];
 
-  // Skip header and program block.
-  const t_db_idx *dbidx = (t_db_idx*)&dbptr[1024];
-  // Skip the index block to address data entries.
-  const uint32_t *entries = (uint32_t*)&dbptr[1024 + 512 * dbh->idxcnt];
+  // Skip header and program block, the index follows.
+  const t_db_idx1 *idx1 = (t_db_idx1*)&dbptr[1024];
+  const t_db_idx2 *idx2 = (t_db_idx2*)&idx1[dbh->idxcnt];
+  // Patch blocks follow the index (word aligned).
+  const uintptr_t pbase = (uintptr_t)&idx2[dbh->patchcnt];
+  const uint32_t *p = (uint32_t*)((pbase + 3) & ~(uintptr_t)3);
+
+  // The groups cannot hold more games than the second index has.
+  unsigned gcount = 0;
+  for (unsigned g = 0; g < dbh->idxcnt; g++)
+    gcount += idx1[g].count;
+  if (gcount > dbh->patchcnt)
+    return false;
 
   // Load programs as well
   int pgn = 0;
@@ -99,40 +136,46 @@ bool patchmem_lookup(const uint8_t *gamecode, const uint8_t *dbptr, t_patch *pda
     i += cnt;
   }
 
-  for (unsigned i = 0; i < dbh->patchcnt; i++) {
-    if (!gcodecmp(dbidx[i].gcode, gamecode)) {
-      uint32_t offset = dbidx[i].offset >> 8;
-      // Header + up to MAX_PATCH_OPS ops + hole word must be inside the area.
-      if (entries_off + (offset + 2 + MAX_PATCH_OPS) * 4 > PATCHDB_MAX_SIZE)
-        return false;
-      const uint32_t *p = &entries[offset];
-      const uint32_t pheader = *p++;
+  // Look up in index and get the position.
+  int pos = lookup_pos(gamecode, idx1, dbh->idxcnt, idx2);
+  if (pos < 0)
+    return false;
 
-      pdata->wcnt_ops = (pheader >>  0) & 0xFF;
-      pdata->save_ops = (pheader >>  8) & 0x1F;    // Only 5 bits
-      pdata->irqh_ops = (pheader >> 16) & 0xFF;
-      pdata->rtc_ops =  (pheader >> 24) & 0x0F;    // Only 4 bits
+  // Walk the data blocks until we reach the patch data.
+  while (pos--) {
+    p += pheader_blocksize(*p);
+    if (p >= pend)
+      return false;
+  }
+  if (p + pheader_blocksize(*p) > pend)
+    return false;
 
-      pdata->save_mode = (pheader >> 13) & 0x7;    // 3 bits
+  const uint32_t pheader = *p++;
 
-      const unsigned numops = pdata->wcnt_ops + pdata->save_ops + pdata->irqh_ops + pdata->rtc_ops;
-      if (numops > MAX_PATCH_OPS)
-        return false;
+  pdata->wcnt_ops = (pheader >>  0) & 0xFF;
+  pdata->save_ops = (pheader >>  8) & 0x1F;    // Only 5 bits
+  pdata->irqh_ops = (pheader >> 16) & 0xFF;
+  pdata->rtc_ops =  (pheader >> 24) & 0x0F;    // Only 4 bits
 
-      if ((pheader >> 28) & 0x1) {
-        // Hole/Trailing space information, placed in the last op
-        pdata->hole_addr = (p[numops] >> 16) << 10;   // In KiB chunks
-        pdata->hole_size = (p[numops] & 0xFFFF) << 10;
-      }
+  pdata->save_mode = (pheader >> 13) & 0x7;    // 3 bits
 
-      // Copy patch words
-      memcpy(&pdata->op[0], p, numops * sizeof(uint32_t));
+  const unsigned numops = pheader_numops(pheader);
+  if (numops > MAX_PATCH_OPS)
+    return false;
 
-      return true;
-    }
+  if ((pheader >> 28) & 0x1) {
+    // Hole/Trailing space information, placed in the last op
+    pdata->hole_addr = (p[numops] >> 16) << 10;   // In KiB chunks
+    pdata->hole_size = (p[numops] & 0xFFFF) << 10;
+  } else {
+    pdata->hole_addr = 0;
+    pdata->hole_size = 0;
   }
 
-  return false;
+  // Copy patch words
+  memcpy(&pdata->op[0], p, numops * sizeof(uint32_t));
+
+  return true;
 }
 
 // Write a byte to a buffer ensuring that only 16 bit accesses are performed.

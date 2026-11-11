@@ -60,7 +60,7 @@ void sha256_init(SHA256_State *state) {
 }
 
 // Perform a single step (consuming 64 bytes of input)
-NOINLINE
+ARM_CODE IWRAM_CODE NOINLINE
 static void sha256_transform_step(SHA256_State *state, const void *data) {
   uint32_t w[16];
   const uint32_t * dui = (uint32_t*)data;
