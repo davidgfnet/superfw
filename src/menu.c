@@ -510,7 +510,7 @@ bool generate_patches_progress(const char *fn, unsigned fs) {
       set_supercard_mode(MAPPED_SDRAM, true, false);
       dma_memcpy32(&hiscratch[j], tmp, sizeof(tmp)/4);
       set_supercard_mode(MAPPED_SDRAM, true, true);
-      if (j & ~0xFFFF)
+      if (j & ~0x1FFFF)
         loadrom_progress((i*2 + j) >> 8, fs >> 7);
     }
     // Amount to process.

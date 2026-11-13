@@ -242,7 +242,7 @@ const uint16_t siirtc_probe_sig[] = {
   0x2000,       // movs    r0, #0
 };
 
-const uint16_t siirtc_reset_sync[] = {
+const uint16_t siirtc_reset_sig[] = {
   0xb580,       // push {r7, lr}
   0xb084,       // sub sp, #16
   0x466f,       // mov r7, sp
@@ -331,22 +331,7 @@ typedef struct {
 
 typedef struct {
   uint32_t program_byte_fnptr;
-  uint32_t program_sector_fnptr;
-  uint32_t erase_chip_fnptr;
-  uint32_t erase_sector_fnptr;
-  uint32_t wait_flash_write_fnptr;
-  uint32_t timeout_lut_ptr;
-
-  uint32_t flash_size;     // Should be 65536, 131072
-  uint32_t sector_size;    // Should be 128 / 4096
-  uint8_t  shift_amount;   // Should be 7 or 12 (for 2^7 or 2^12)
-  uint8_t  zero_pad1;
-  uint16_t sector_count;
-  uint16_t top_value;
-  uint16_t zero_pad2;
-
-  uint16_t ws[2];
-  uint16_t device_id;
+  t_flash_setup_info_v1 v1;
 } t_flash_setup_info_v2;
 
 
