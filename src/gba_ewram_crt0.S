@@ -64,32 +64,63 @@ entrypoint:
 // r0 = Base address
 // r1 = Size
 mem_zero:
-    tst     r1, r1
-    beq     2f // Return if size is 0
+    subs    r1, r1, #32
+    bcc     2f
 
+    push    {r4-r9}
     mov     r2, #0
+    mov     r3, #0
+    mov     r4, #0
+    mov     r5, #0
+    mov     r6, #0
+    mov     r7, #0
+    mov     r8, #0
+    mov     r9, #0
 1:
-    stmia   r0!, {r2}
-    subs    r1, #4
-    bne     1b
+    stmia   r0!, {r2-r9}
+    subs    r1, r1, #32
+    bcs     1b
+    pop     {r4-r9}
 
 2:
+    adds    r1, r1, #32
+    beq     4f
+
+    mov     r2, #0
+3:
+    stmia   r0!, {r2}
+    subs    r1, r1, #4
+    bne     3b
+
+4:
     bx      lr
 
 // r0 = Source address
 // r1 = Destination address
 // r2 = Size
 mem_copy:
-    tst     r2, r2
-    beq     2f // Return if size is 0
+    subs    r2, r2, #32
+    bcc     2f
 
+    push    {r4-r10}
 1:
-    ldmia   r0!, {r3}
-    stmia   r1!, {r3}
-    subs    r2, #4
-    bne     1b
+    ldmia   r0!, {r3-r10}
+    stmia   r1!, {r3-r10}
+    subs    r2, r2, #32
+    bcs     1b
+    pop     {r4-r10}
 
 2:
+    adds    r2, r2, #32
+    beq     4f
+
+3:
+    ldmia   r0!, {r3}
+    stmia   r1!, {r3}
+    subs    r2, r2, #4
+    bne     3b
+
+4:
     bx      lr
 
     .align

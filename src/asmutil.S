@@ -73,30 +73,29 @@ START_THUMB_FUNC(set_abort_lr)
 
 #ifdef SUPPORT_NORGAMES
 // Performs a quick check on a buffer for 0xFF values (aligned in 32 byte blocks)
-START_THUMB_FUNC(check_erased_32xff)
-  push {r4, r5, r6}
+START_ARM_FUNC(check_erased_32xff)
+  push {r4-r9}
 
 1:
-  ldmia r0!, {r2, r3, r4, r5}
-  and r2, r3
-  and r4, r5
-  and r2, r4
-  ldmia r0!, {r3, r4, r5, r6}
-  and r3, r4
-  and r5, r6
-  and r3, r5
-  and r2, r3
-  add r2, $1
+  ldmia r0!, {r2-r9}
+  and r2, r2, r3
+  and r4, r4, r5
+  and r6, r6, r7
+  and r8, r8, r9
+  and r2, r2, r4
+  and r6, r6, r8
+  and r2, r2, r6
+  adds r2, r2, #1
   bne 2f
-  sub r1, $1
+  subs r1, r1, #1
   bne 1b
 
-  pop {r4, r5, r6}
-  mov r0, $1
+  mov r0, #1
+  pop {r4-r9}
   bx lr
 2:
-  pop {r4, r5, r6}
-  mov r0, $0
+  mov r0, #0
+  pop {r4-r9}
   bx lr
 #endif
 
