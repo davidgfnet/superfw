@@ -332,10 +332,10 @@ ARM_CODE IWRAM_CODE NOINLINE
 bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_builder *patchb, void(*progresscb)(unsigned)) {
   const unsigned nwords = romsize / sizeof(uint32_t);
   t_patch *patch = &patchb->p;
-  uint32_t ldata = 0, ldatacnt = 0;
+  uint32_t ldata = patchb->ldata, ldatacnt = patchb->ldatacnt;
 
   for (unsigned blk = 0; blk < nwords; blk += 32*1024) {
-    unsigned blksize = MIN(nwords - blk, 32*1024);
+    const unsigned blksize = MIN(nwords - blk, 32*1024);
     progresscb(blk);
 
     for (unsigned off = 0; off < blksize; off++) {
@@ -490,6 +490,7 @@ bool patchengine_process_rom(const uint32_t *rom, unsigned romsize, t_patch_buil
                 patchb->flash64cnt++;
             }
           }
+          off++;   // Ensure we do not match v1 as well
         }
         else if (seems_flashinfo(info1)) {
           if (flashinfo_validsize(info1) && valid_flashid(info1->device_id)) {
