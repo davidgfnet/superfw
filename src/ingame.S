@@ -213,7 +213,11 @@ ingame_menu_entrypoint_cheats:
 
   // Process cheat code, this is V-Blank!
   push {r5-r6, lr}
+  mov r0, $0x5       // Temporarily enable SDRAM write access for ROM-patch cheats (0x88xxxxxx)
+  bl set_cpld_mode
   bl cheat_process_arm
+  mov r0, $0x1       // Restore SDRAM read-only mode and SRAM bank 0
+  bl set_cpld_mode
   pop {r5-r6, lr}
 
   mov r0, $0x04000000
