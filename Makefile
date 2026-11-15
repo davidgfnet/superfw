@@ -171,7 +171,7 @@ all:	$(FWBINFILES) $(BIEMUFILES) directsave.payload ingame_trampoline.payload
 	# Fix the header/checksum.
 	./tools/fw-fixer.py superfw.gba
 
-firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload ingame_trampoline.payload src/sighash.h src/messages_data.h ldscripts/gba_ewram.ld.i
+firmware.ewram.gba: $(INFILES) ingamemenu.payload superfw.dldi.payload directsave.payload ingame_trampoline.payload src/autogen/sighash.h src/autogen/messages_data.h ldscripts/gba_ewram.ld.i
 	# Build the actual firmware image
 	$(CC) $(CFLAGS) -o firmware.ewram.elf $(INFILES) -T ldscripts/gba_ewram.ld.i -nostartfiles -Wl,-Map=firmware.ewram.map -Wl,--print-memory-usage -fno-builtin
 	$(OBJCOPY) --output-target=binary firmware.ewram.elf firmware.ewram.gba
@@ -187,7 +187,7 @@ directsave.payload:	$(DIRECTSAVEFILES)
 			-nostartfiles -fno-builtin -Wl,-Map=directsave.map -Wl,--print-memory-usage
 	$(OBJCOPY) --output-target=binary directsave.elf directsave.payload
 
-ingamemenu.payload:	$(MENUFILES) src/menu_messages.h
+ingamemenu.payload:	$(MENUFILES) src/autogen/menu_messages.h
 	# Build in-game menu
 	$(CC) $(INGAME_CFLAGS) -o ingamemenu.elf $(MENUFILES) -T ldscripts/gba_ingame.ld \
 			-nostartfiles -fno-builtin -Wl,-Map=firmware.ingame.map -Wl,--print-memory-usage
@@ -197,14 +197,14 @@ ingame_trampoline.payload:	src/ingame_trampoline.S
 	$(CC) $(BASEFLAGS) -nostartfiles -T ldscripts/gba_ingametramp.ld -o ingame_trampoline.elf src/ingame_trampoline.S
 	$(OBJCOPY) --output-target=binary ingame_trampoline.elf ingame_trampoline.payload
 
-src/messages_data.h:	res/messages.py
-	./res/messages.py h main > src/messages_data.h
+src/autogen/messages_data.h:	res/messages.py
+	mkdir -p src/autogen/ && ./res/messages.py h main > $@
 
-src/sighash.h:	src/save_signatures.h
-	./tools/gensighash.py src/save_signatures.h --max-ops=1 > src/sighash.h
+src/autogen/menu_messages.h:	res/messages.py
+	mkdir -p src/autogen/ && ./res/messages.py h menu > $@
 
-src/menu_messages.h:	res/messages.py
-	./res/messages.py h menu > src/menu_messages.h
+src/autogen/sighash.h:	src/save_signatures.h
+	mkdir -p src/autogen/ && ./tools/gensighash.py $< --max-ops=1 > $@
 
 firmware.ewram.gba.comp:	firmware.ewram.gba ./upkr.elf
 	./upkr.elf -l $(COMPRESSION_RATIO) $< $@
@@ -228,5 +228,5 @@ upkr.elf:	tools/upkr.cc
 	g++ -o $@ $< -O3 -ffast-math
 
 clean:
-	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/menu_messages.h src/messages_data.h src/sighash.h
+	rm -f ldscripts/*.i *.gba *.elf *.payload *.map res/*.comp emu/*.comp *.comp src/autogen/*
 

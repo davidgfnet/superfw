@@ -1,3 +1,4 @@
+src/autogen/*
 *.gba
 *.elf
 *.comp

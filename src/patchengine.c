@@ -37,7 +37,7 @@
 #include "util.h"
 #include "fatfs/ff.h"
 #include "patchengine.h"
-#include "sighash.h"
+#include "autogen/sighash.h"
 
 #define WAITCNT_VALUE_EXACT  0x04000204
 #define IRQHADDR_VALUE       0x03007FFC

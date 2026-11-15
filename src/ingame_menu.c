@@ -24,7 +24,7 @@
 #include "cheats.h"
 #include "nanoprintf.h"
 #include "fonts/font_render.h"
-#include "menu_messages.h"
+#include "autogen/menu_messages.h"
 #include "res/logo.h"
 #include "fatfs/ff.h"
 #include "supercard_driver.h"
