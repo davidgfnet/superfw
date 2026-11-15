@@ -19,11 +19,13 @@
 // On GBA, place this code on the IWRAM in ARM mode for speed.
 // Word-aligned buffers are faster than unaligned ones.
 #ifdef __GBA__
-  #define ARM_CODE   __attribute__((target("arm")))
-  #define IWRAM_CODE __attribute__((section(".iwram_code"), long_call))
+  #define ARM_CODE     __attribute__((target("arm")))
+  #define IWRAM_CODE   __attribute__((section(".iwram_code"), long_call))
+  #define IWRAM_RODATA __attribute__((section(".iwram_rodata")))
 #else
   #define ARM_CODE
   #define IWRAM_CODE
+  #define IWRAM_RODATA
 #endif
 
 #define NOINLINE __attribute__((noinline))

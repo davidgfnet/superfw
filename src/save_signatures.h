@@ -45,8 +45,6 @@ const uint16_t eeprom_v2_read_sig[] = {
   0xd305,   // bcc.n
   0x4801,   // ldr     r0, [pc, #4]
 };
-const uint32_t eeprom_v1_read_word0 = 0xb0aab5b0;
-const uint32_t eeprom_v2_read_word0 = 0xb0a2b570;
 
 const uint16_t eeprom_v1_write_sig[] = {
   0xb580,   // push    {r7, lr}
@@ -99,10 +97,6 @@ const uint16_t eeprom_v4_write_sig[] = {
   0x8880,   // ldrh    r0, [r0, #4]
   0x4285,   // cmp     r5, r0
 };
-const uint32_t eeprom_v1_write_word0 = 0xb0aab580;
-const uint32_t eeprom_v2_write_word0 = 0xb0a9b530;
-const uint32_t eeprom_v3_write_word0 = 0xb0acb5f0;
-const uint32_t eeprom_v4_write_word0 = 0x4647b5f0;
 
 const uint16_t flash_v1_read_sig[] = {
   0xb590,          // push  {r4, r7, lr}
@@ -142,8 +136,6 @@ const uint16_t flash_v3_read_sig[] = {
   0x490f,          // ldr  r1, [pc, #0x3c]
   0x4008,          // ands r0, r1
 };
-const uint32_t flash_v1_read_word0 = 0xb0a9b590;
-const uint32_t flash_v23_read_word0 = 0xb0a0b5f0;
 
 const uint16_t flash_v1_ident_sig[] = {
   0xb590,          // push  {r4, r7, lr}
@@ -163,8 +155,6 @@ const uint16_t flash_v2_ident_sig[] = {
   0x3501,          // adds  r5, #1
   0x4a06,          // ldr   r2, [pc, #24]
 };
-const uint32_t flash_v1_ident_word0 = 0xb093b590;
-const uint32_t flash_v2_ident_word0 = 0xb091b530;
 
 const uint16_t flash_v1_verify_sig[] = {
   0xb590,          // push    {r4, r7, lr}
@@ -225,8 +215,6 @@ const uint16_t flash_v3_verify_sig[] = {
   0x0600,          // lsls r0, r0, #24
   0x0e00,          // lsrs r0, r0, #24
 };
-const uint32_t flash_v1_verify_word0 = 0xb0c9b590;
-const uint32_t flash_v23_verify_word0 = 0xb0c0b530;
 
 const uint16_t siirtc_probe_sig[] = {
   0xb580,       // push {r7, lr}
@@ -252,7 +240,6 @@ const uint16_t siirtc_reset_sig[] = {
   0x0000,       // bne.n off
   0x2000,       // movs r0, #0
 };
-const uint32_t siirtc_probe_reset_sig_word0 = 0xb084b580;
 
 const uint16_t siirtc_getstatus_sig[] = {
   0xb590,       // push {r4, r7, lr}
@@ -279,7 +266,6 @@ const uint16_t siirtc_getstatus_sig[] = {
   0x2107,       // movs r1, #7
   0x8001,       // strh r1, [r0, #0]
 };
-const uint32_t siirtc_getstatus_sig_word0 = 0xb082b590;
 
 const uint16_t siirtc_getdatetime_sig[] = {
   0xb580,       // push {r7, lr}
@@ -307,7 +293,19 @@ const uint16_t siirtc_getdatetime_sig[] = {
   0x8001,       // strh r1, [r0, #0]
   0x2065,       // movs r0, #101   # This distinguishes set/get
 };
-const uint32_t siirtc_getdatetime_sig_word0 = 0xb082b580;
+
+// Single word signatures: constants loaded via LDR rX, [pc, #imm]
+const uint32_t waitcnt_sig[] = { 0x04000204 };     // WAITCNT register address
+const uint32_t irqhaddr_sig[] = { 0x03007FFC };    // IRQ handler pointer address
+
+// Save/RTC library ID strings (word aligned in ROM)
+const char str_sram_v11_sig[]  = "SRAM_V11";
+const char str_sram_fv_sig[]   = "SRAM_F_V";
+const char str_eeprom_v_sig[]  = "EEPROM_V";
+const char str_flash_v1_sig[]  = "FLASH_V1";
+const char str_flash_512_sig[] = "FLASH512";
+const char str_flash_1m_sig[]  = "FLASH1M_";
+const char str_siirtc_v_sig[]  = "SIIRTC_V";
 
 
 typedef struct {
