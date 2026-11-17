@@ -1053,12 +1053,9 @@ void rtckey(uint16_t keyp) {
 
     fixdate(&rtc_date);
   } else if (copt == 5) {
-    if (keyp & KEY_BUTTUP)
-      rtc_speed++;
-    if (keyp & KEY_BUTTDOWN)
-      rtc_speed--;
-
-    rtc_speed = rtc_speed % MAX_SPEED_OPTS;
+    rtc_speed = ((keyp & KEY_BUTTUP)   ? (rtc_speed + 1) :
+                 (keyp & KEY_BUTTDOWN) ? (rtc_speed + MAX_SPEED_OPTS - 1) :
+                                          rtc_speed) % MAX_SPEED_OPTS;
   }
 }
 
