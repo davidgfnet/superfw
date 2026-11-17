@@ -443,6 +443,9 @@ unsigned sdcard_read_blocks(uint8_t *buffer, uint32_t blocknum, unsigned blkcnt)
   if (!send_sdcard_command(SD_CMD12, 0, NULL, SD_MAX_RESP))
     ret = SD_ERR_BADREAD;
 
+  if (!wait_dat0_idle(WAIT_EREADY_TIMEOUT))
+    ret = SD_ERR_BADREAD;
+
   return ret;
 }
 
