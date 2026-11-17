@@ -1004,7 +1004,7 @@ bool state_load() {
 void del_diskstate() {
   set_supercard_mode(MAPPED_SDRAM, true, true);
   char tmp[256];
-  npf_snprintf(tmp, sizeof(tmp), "%s.%d.state", savestate_pattern, -state_slot - 1);
+  npf_snprintf(tmp, sizeof(tmp), "%s.%d.state", savestate_pattern, -state_slot);
   f_unlink(tmp);
   diskslot_valid[-state_slot - 1] = 0;
 }
