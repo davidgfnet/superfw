@@ -246,6 +246,7 @@ const t_emu_platform emu_platforms[] = {
   {"gg",  gg_loaders},
   {"sg",  sg_loaders},
   {"sv",  sv_loaders},
+  {"ngp", ngc_loaders},
   {"ngc", ngc_loaders},
   {"pce", pce_loaders},
   {NULL, NULL},        // End marker!

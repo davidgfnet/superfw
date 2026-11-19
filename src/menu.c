@@ -930,7 +930,10 @@ static void load_patchdb_action(bool confirm) {
 
 unsigned guess_file_type(const uint8_t *header) {
   const t_rom_header *gbah = (t_rom_header*)header;
-  uint32_t sig = *(uint32_t*)header;
+  union {
+    uint32_t sig;
+    uint32_t data[0];
+  } *hdr = (void*)header;
 
   if (gbah->fixed == 0x96 && gbah->unit_code == 0x00 && gbah->devtype == 0x00 &&
       header[3] == 0xEA /* Starts with an unconditional branch */ &&
@@ -938,10 +941,12 @@ unsigned guess_file_type(const uint8_t *header) {
     return FileTypeGBA;
   else if (validate_gb_header(&header[0x100]))
     return FileTypeGB;
-  else if (sig == 0x1A53454E)
+  else if (hdr->sig == 0x1A53454E)
     return FileTypeNES;
-  else if (sig == 0x31424450)
+  else if (hdr->sig == 0x31424450)
     return FileTypePatchDB;
+  else if (hdr->data[3] == 0x4B4E5320 && hdr->data[6] == 0x4E4F4954)
+    return FileTypeNGP;
 
   return FileTypeUnknown;
 }
@@ -1060,6 +1065,12 @@ NOINLINE static void browser_open(const char *fn, uint32_t fs) {
             browser_open_gba(fn, fs, true); break;
           case FileTypeGB:
             start_emu_game(get_emu_info("gbc"), fn, fs);
+            break;
+          case FileTypeNES:
+            start_emu_game(get_emu_info("nes"), fn, fs);
+            break;
+          case FileTypeNGP:
+            start_emu_game(get_emu_info("ngp"), fn, fs);
             break;
           case FileTypePatchDB:
             strbcpy(spop.p.pdb_ld.fn, fn, sizeof(spop.p.pdb_ld.fn));

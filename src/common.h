@@ -96,7 +96,8 @@ typedef enum {
   FileTypeGBA     = 1,
   FileTypeGB      = 2,
   FileTypeNES     = 3,
-  FileTypePatchDB = 4,
+  FileTypeNGP     = 4,
+  FileTypePatchDB = 5,
 } EnumFileType;
 
 typedef struct {
