@@ -754,6 +754,8 @@ def_function(clear_and_reset):
   mov r0, $0x04000000
   mov r1, $0
   strb r1, [r0, #-6]
+  mov r1, $0x4000
+  str r1, [r0, #REG_WAITCNT]   // Restore default timings + prefetch
   swi 0
 clear_and_reset_end:
 
