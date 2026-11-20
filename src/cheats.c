@@ -94,6 +94,14 @@ static bool parse_hex(const char *s, uint32_t *val, unsigned nibcnt) {
   return true;
 }
 
+static inline bool is_space(char c) {
+  return c == ' ' || c == '\t' || c == '\r';
+}
+
+static inline bool is_separator(char c) {
+  return is_space(c) || c == '+';
+}
+
 // Parses RAW codes into a raw cheat buffer
 int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
   // Codes are in the format:
@@ -101,7 +109,7 @@ int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
   // We parse them assuming that the separators are space or plus. We admit multiple separators.
   unsigned cnt = 0;
 
-  while (*s == ' ' || *s == '+') s++;      // Skip initial spaces
+  while (is_separator(*s)) s++;      // Skip initial separators
 
   while (*s) {
     uint32_t addr, val;
@@ -109,7 +117,7 @@ int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
       return -1;
 
     s += 8;  // Consume the hex32
-    while (*s == ' ' || *s == '+') s++;      // Skip separators
+    while (is_separator(*s)) s++;      // Skip separators
     if (!*s)
       return -1;   // The code is truncated, abort.
 
@@ -123,7 +131,7 @@ int parse_cheat_codes(const char *s, t_cheat_raw *codes) {
     codes++;
     cnt++;
 
-    while (*s == ' ' || *s == '+') s++;      // Skip trailing separators
+    while (is_separator(*s)) s++;      // Skip trailing separators
   }
   return cnt;
 }
@@ -168,11 +176,18 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
     if (p - tmp > 512)
       return -1;
 
+    unsigned cnt = p - tmp + 1;
     *p = 0;        // Add the string end char.
+
+    // Strip trailing whitespace from the end of the line.
+    while (p > tmp && is_space(p[-1])) {
+      p--;
+      *p = 0;
+    }
 
     // Skip leading characters.
     char *s = tmp;
-    while (*s == ' ' || *s == '\t')
+    while (is_space(*s))
       s++;
 
     // Skip empty lines!
@@ -191,7 +206,7 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
         // Parse the cheat codes (in hex), and generate the respective code.
         t_cheat_raw codes[42+1];  // Enough codes for a 512 byte cheat line.
         memset(codes, 0, sizeof(codes));
-        int numcodes = parse_cheat_codes(tmp, codes);
+        int numcodes = parse_cheat_codes(s, codes);
         if (numcodes < 0)
           return -1;
         // Process the raw codes and format them into t_cheat_predec (predecoded opcode)
@@ -214,7 +229,6 @@ int open_read_cheats(uint8_t *buffer, unsigned buffsize, const char *fn) {
     }
 
     // Consume bytes
-    unsigned cnt = strlen(tmp) + 1;
     if (bcount < cnt)
       bcount = 0;
     else {
