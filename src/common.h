@@ -213,6 +213,7 @@ typedef struct {
 
 // Menu system
 void menu_init(int);    // Initializes meny system (ie. loading resources)
+void menu_autoboot();   // Launches the last played game (returns if it cannot)
 void menu_render(unsigned fcnt);     // Renders the menu to the backframe
 void menu_keypress(unsigned newkeys);   // Notifies key press
 void menu_flip();       // Swaps front and back buffer to show the last rendered frame.

@@ -41,6 +41,9 @@ t_patchdb_info pdbinfo;
 
 void *font_base_addr = (void*)ROM_FONTBASE_U8;
 
+// Time (ms) to wait for a key press that cancels the autoboot.
+#define AUTOBOOT_GRACE_MS 750
+
 static void wait_for_vblank() {
   while (!(REG_DISPSTAT & DISPSTAT_VBLANK));
 }
@@ -177,6 +180,20 @@ static int main_gba() {
 
   // Initialize menu, start displaying some UI to the user.
   menu_init(sram_tres);
+
+  // Autoboot: launch the last played game unless any button is held down
+  // (or pressed within the grace period). The logo is still on screen here.
+  if (autoboot_enabled) {
+    bool cancelled = false;
+    const uint32_t autoboot_end = systime() + AUTOBOOT_GRACE_MS;
+    while (systime() < autoboot_end)
+      if ((REG_KEYINPUT ^ 0x3FF) & 0x3FF) {
+        cancelled = true;
+        break;
+      }
+    if (!cancelled)
+      menu_autoboot();         // Does not return if the game launches.
+  }
 
   menu_render(1);
   menu_flip();

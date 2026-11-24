@@ -77,6 +77,7 @@ extern uint8_t anim_speed;
 // Defaults/Settings
 extern t_patch_policy patcher_default;
 extern uint8_t boot_bios_splash;
+extern uint8_t autoboot_enabled;
 extern uint8_t use_slowld;
 extern uint8_t use_fastew;
 extern uint8_t use_verify_nor;
