@@ -80,6 +80,7 @@ en_strings = [
   "MSG_UIS_RECNT": "Recent ROMs",
   "MSG_UIS_ANSPD": "Text speed",
   "MSG_UIS_BHID":  "Show hidden files",
+  "MSG_UIS_EXT":   "Show extensions",
   "MSG_UIS_SAVE":  "Save to SD card",
 
   "MSG_UIS_SPD0":  "Very slow",
