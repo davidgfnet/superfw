@@ -69,7 +69,8 @@ void replace_extension(char *fn, const char *newext) {
 
 unsigned parseuint(const char *s) {
   unsigned ret = 0;
-  while (*s)
+  // Stop at the first non-digit (ie. \r from Windows line endings, spaces).
+  while (*s >= '0' && *s <= '9')
     ret = ret * 10 + (*s++ - '0');
 
   return ret;

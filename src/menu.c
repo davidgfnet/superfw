@@ -2177,6 +2177,44 @@ void menu_init(int sram_testres) {
                                     msgs[lang_id][MSG_SRAMTST_OK];
 }
 
+// Launches the most recently played game, as if the user had selected it in
+// the recent tab and accepted the load menu (so per-game config, patches and
+// save handling are all honored). It does not return if the game launches.
+// If anything needs the user (no recent games, a patch prompt, an error) it
+// returns and leaves the menu showing that.
+void menu_autoboot() {
+  if (!recent_menu || !smenu.recent.maxentries || spop.alert_msg)
+    return;
+
+  smenu.menu_tab = MENUTAB_RECENT;
+
+  // Open the load menu for the last played game. SuperFW images (ie. one that
+  // was just chain-loaded or flashed) are skipped, since they would load
+  // themselves again and again: use the most recent actual game instead.
+  const unsigned maxtries = MIN(smenu.recent.maxentries, 5);
+  for (unsigned i = 0; i < maxtries; i++) {
+    smenu.recent.selector = i;
+    smenu.recent.seloff = 0;
+    menu_keypress(KEY_BUTTA);
+
+    if (spop.pop_num == POPUP_GBA_LOAD && is_superfw(&spop.p.load.i.romh))
+      spop.pop_num = 0;       // Close it and try the next entry.
+    else
+      break;
+  }
+
+  bool load_menu_up = (spop.pop_num == POPUP_GBA_LOAD);
+  #ifdef SUPPORT_NORGAMES
+  load_menu_up |= (spop.pop_num == POPUP_GBA_NORLOAD);
+  #endif
+
+  // Only continue if the load menu opened cleanly. Otherwise (missing file,
+  // patch prompt, error) leave the menu up so the user can deal with it.
+  if (load_menu_up && !spop.alert_msg && !spop.qpop.message &&
+      spop.submenu == GbaLoadPopInfo)
+    menu_keypress(KEY_BUTTA);    // Accept: launch the game.
+}
+
 int movedir_up() {
   char *p = smenu.browser.cpath;
   p = &p[strlen(p)-1];

@@ -47,6 +47,8 @@ int main() {
   assert(0 == parseuint("0"));
   assert(1 == parseuint("1"));
   assert(123 == parseuint("123"));
+  assert(1 == parseuint("1\r"));     // Windows line endings
+  assert(12 == parseuint("12 "));     // Trailing garbage is ignored
   assert(4294967295 == parseuint("4294967295"));
 
   assert(!strcmp("", file_basename("")));
